@@ -11,6 +11,8 @@ if (!requireNamespace("remotes")) install.packages("remotes")
 # remotes::install_github("GfellerLab/SuperCell")
 
 install.packages("Seurat")
+install.packages("WGCNA")
+
 install.packages("umap")
 install.packages("RcppTOML")
 install.packages("igraph")
