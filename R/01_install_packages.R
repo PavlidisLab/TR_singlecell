@@ -1,7 +1,18 @@
+## Collecting packages used. Note that most would have been installed individually.
+## -----------------------------------------------------------------------------
+
 if (!require("BiocManager")) install.packages('BiocManager')
-BiocManager::install("tanaylab/metacell")
+
+if (!requireNamespace("remotes")) install.packages("remotes")
 
 
+# BiocManager::install("tanaylab/metacell")
+ 
+# remotes::install_github("GfellerLab/SuperCell")
+
+install.packages("Seurat")
+install.packages("umap")
+install.packages("RcppTOML")
 install.packages("igraph")
 install.packages("RANN")
 install.packages("WeightedCluster")
@@ -12,8 +23,3 @@ install.packages("Matrix")
 install.packages("patchwork")
 install.packages("plyr")
 install.packages("irlba")
-
-
-if (!requireNamespace("remotes")) install.packages("remotes")
-remotes::install_github("GfellerLab/SuperCell")
-
