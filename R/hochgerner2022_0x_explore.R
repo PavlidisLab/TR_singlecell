@@ -10,10 +10,37 @@ source("R/utils/functions.R")
 source("R/00_config.R")
 
 
+# Load Seurat object
 seurat_path <- "/space/scratch/amorin/R_objects/Hochgerner2022_seurat.RDS"
+sdat <- readRDS(seurat_path)
+
+#
+rank_path <- "/space/scratch/amorin/R_objects/ranked_target_list_Apr2022.RDS"
+rank_l <- readRDS(rank_path)
+
+#
 de_top_qntl <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_amygdala_biorvx_TR_DEA_quantile.RDS")
 de_top_ct <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_amygdala_biorvx_TR_DEA_celltype.RDS")
-rank_path <- "/space/scratch/amorin/R_objects/Apr2022_ranked_target_list.RDS"
+
+#
+cor_ct <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_cormat_celltype.RDS")
+# cor_all <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_cormat_all.RDS")
+cor_all <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_amygdala_biorvx_cormat.RDS")
+
+
+# something wonky with table shifts columns over
+ribo_genes <- read.delim("/space/grp/amorin/Metadata/MGI_GO_term_ribosomal_genes_15-03-2023.txt", row.names = NULL, stringsAsFactors = FALSE)
+ribo_genes <- intersect(ribo_genes$MGI.Gene.Marker.ID, rownames(sdat))
+
+
+# Subset of genes to look at
+tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
+
+
+
+#
+# ------------------------------------------------------------------------------
+
 
 # Visualize batch, samples, and provided labels on PC space
 DimPlot(sdat, reduction = "pca", group.by = "Batch")
@@ -104,9 +131,6 @@ px <- plot_grid(pxa, pxb, pxc, nrow = 1)
 #                            logfc.threshold = 0,
 #                            only.pos = FALSE)
 
-
-de_top_qntl <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_amygdala_biorvx_TR_DEA_quantile.RDS")
-de_top_ct <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_amygdala_biorvx_TR_DEA_celltype.RDS")
 
 
 bind_mat <- function(list, col) {
@@ -245,27 +269,39 @@ head(sort(fc_mat_qntl[, "Ascl1"], decreasing = TRUE), 20)
 # ------------------------------------------------------------------------------
 
 
-
-# cor_all <- WGCNA::cor(x = t(mat),
-#                       nThreads = 8,
-#                       use = "pairwise.complete.obs")
-# 
-# 
-# cor_qntl <- WGCNA::cor(x = t(mat[, sdat$Top_expr_quantile, drop = FALSE]),
-#                        nThreads = 8,
-#                        use = "pairwise.complete.obs")
-# 
-# 
-# cor_gene_all <- cor_all[gene, ]
-# cor_gene_qntl <- cor_qntl[gene, ]
+# Cell type specific cor
 
 
 
-cor_all <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_amygdala_biorvx_cormat.RDS")
-ribo_genes <- read.delim("/space/grp/amorin/Metadata/MGI_GO_term_ribosomal_genes_15-03-2023.txt", row.names = NULL, stringsAsFactors = FALSE)
+identical(rownames(cor_ct[[1]]), rownames(cor_ct[[2]]))
 
-# something wonky with table shifts columns over
-ribo_genes <- intersect(ribo_genes$MGI.Gene.Marker.ID, rownames(sdat))
+tf <- "Runx1"
+cor_tf <- do.call(cbind, lapply(cor_ct, function(x) x[tf, ]))
+# cor_tf <- abs(do.call(cbind, lapply(cor_ct, function(x) x[tf, ])))
+
+cor_tf <- cor_tf[rownames(cor_tf) != tf, ]
+
+rank_tf <- apply(-cor_tf, 2, rank, ties.method = "min")
+rank_agg <- rowSums(rank_tf)
+
+rank_order <- data.frame(Cor_rank = sort(rank(rank_agg))) %>% 
+  rownames_to_column(var = "Symbol")
+
+
+target_rank <- left_join(rank_l$Mouse[[tf]], rank_order, by = "Symbol")
+
+boxplot(target_rank$Cor_rank ~ target_rank$Curated_target)
+
+
+# Some NAs refer to genes not expressed in that cell type
+gene_nas <- apply(cor_tf, 1, function(x) sum(is.na(x)))
+ct_nas <- apply(cor_tf, 2, function(x) sum(is.na(x)))
+
+# All NAs correspond to cell types where TF is not expressed
+all_nas <- names(ct_nas[ct_nas == nrow(sdat@assays$RNA)])
+all(sdat@assays$RNA@data[tfs[1], sdat$Cell_type %in% all_nas] == 0)
+
+
 
 
 cor_ribo_in <- cor_all[ribo_genes, ribo_genes]
