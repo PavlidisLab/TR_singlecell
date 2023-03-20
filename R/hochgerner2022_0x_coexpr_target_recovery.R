@@ -1,3 +1,7 @@
+## Exploring TR-gene correlation and ability to recover annotated targets
+## TODO: standardize cmat/cormat naming
+## -----------------------------------------------------------------------------
+
 library(tidyverse)
 library(Seurat)
 library(cowplot)
@@ -19,47 +23,48 @@ rank_l <- readRDS(rank_path)
 
 # Load correlation matrices generated per cell type and across all cells
 cor_ct <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_cormat_celltype.RDS")
-# cor_all <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_cormat_all.RDS")
-cor_all <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_amygdala_biorvx_cormat.RDS")
+cor_all <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_cormat_all.RDS")
 
 # Ribosomal genes as positive control for coexpr.
 # Something wonky with table shifts columns over - just want gene symbols
 ribo_genes <- read.delim("/space/grp/amorin/Metadata/MGI_GO_term_ribosomal_genes_15-03-2023.txt", row.names = NULL, stringsAsFactors = FALSE)
 ribo_genes <- intersect(ribo_genes$MGI.Gene.Marker.ID, rownames(sdat))
 
+tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
+
 
 # 
 # ------------------------------------------------------------------------------
 
 
-# # Given a list of cor matrices per cell type and a specified TF, get that TFs
-# # gene cors in a gene x cell type matrix
-# 
-# tf_by_ct_cmat <- function(cor_list, tf, rm_tf = TRUE) {
-#   
-#   stopifnot(identical(rownames(cor_list[[1]]), rownames(cor_list[[2]])))
-#   
-#   cor_tf <- do.call(cbind, lapply(cor_ct, function(x) x[tf, ]))
-#   
-#   if (rm_tf) {
-#     cor_tf <- cor_tf[rownames(cor_tf) != tf, ]
-#   }
-#   
-#   return(cor_tf)
-# }
-# 
-# 
-# # Convert cor matrix to column-wise (cell-type) ranks such that 1 is best
-# 
-# rank_cormat <- function(cmat) {
-#   
-#   rank_mat <- apply(-cmat, 2, rank, ties.method = "min")
-#   
-#   return(rank_mat)
-# }
-# 
-# 
-# # 
+# Given a list of cor matrices per cell type and a specified TF, get that TFs
+# gene cors in a gene x cell type matrix
+
+tf_by_ct_cmat <- function(cor_list, tf, rm_tf = TRUE) {
+
+  stopifnot(identical(rownames(cor_list[[1]]), rownames(cor_list[[2]])))
+
+  cor_tf <- do.call(cbind, lapply(cor_ct, function(x) x[tf, ]))
+
+  if (rm_tf) {
+    cor_tf <- cor_tf[rownames(cor_tf) != tf, ]
+  }
+
+  return(cor_tf)
+}
+
+
+# Convert cor matrix to column-wise (cell-type) ranks such that 1 is best
+
+rank_cormat <- function(cmat) {
+
+  rank_mat <- apply(-cmat, 2, rank, ties.method = "min")
+
+  return(rank_mat)
+}
+
+
+#
 # 
 # join_evidence <- function(rank_list, cmat, tf) {
 #   
@@ -123,71 +128,33 @@ get_au_perf <- function(rank_df, label_col, measure = NULL) {
 }
 
 
-plot_auc <- function(auc_df_list) {
-  
-  # auc_labels <- c(
-  #   Integrated = paste0("Integrated (AUC=", signif(auc_df[tf, "Integrated"], 3), ")"),
-  #   Perturbation = paste0("Perturbation (AUC=", signif(auc_df[tf, "Perturbation"], 3), ")"),
-  #   Binding = paste0("Binding (AUC=", signif(auc_df[tf, "Binding"], 3), ")"))
+
+plot_auc <- function(roc_df, auc_labels, cols, tf) {
   
   p <- 
-    ggplot() +
-    geom_path(data = auc_df_list[[1]], aes(x = FPR, y = TPR), linewidth = 1) +
-    # geom_path(data = pr_list$Perturbation, aes(x = Recall, y = Precision, col = "Perturbation"), size = 1) +
-    # geom_path(data = pr_list$Binding, aes(x = Recall, y = Precision, col = "Binding"), size = 1) +
-    # ggtitle(tf) +
-    # scale_color_manual(labels = auc_labels, values = colours) +
+    ggplot(roc_df, aes(x = FPR, y = TPR, col = Group, linewidth = lw)) +
+    geom_path() +
+    ggtitle(tf) +
+    scale_color_manual(labels = auc_labels, values = cols) +
+    scale_linewidth_discrete(range = c(1, 2), guide = "none") +
     theme_classic() +
     theme(axis.text = element_text(size = 25),
           axis.title = element_text(size = 30),
           plot.title = element_text(size = 30),
           legend.title = element_blank(),
           legend.text = element_text(size = 25),
-          legend.position = c(0.55, 0.85))
-  
-  if (length(auc_df_list) > 1) {
-    for (i in 2:length(auc_df_list)) {
-      p <- p + geom_path(data = auc_df_list[[i]], 
-                         aes(x = FPR, y = TPR), 
-                         linewidth = 0.5,
-                         colour = "lightgrey")
-    }
-  }
+          legend.position = c(0.8, 0.2))
   
   return(p)
 }
 
 
-plot_auprc <- function(auprc_df) {
-  
-  # auc_labels <- c(
-  #   Integrated = paste0("Integrated (AUC=", signif(auc_df[tf, "Integrated"], 3), ")"),
-  #   Perturbation = paste0("Perturbation (AUC=", signif(auc_df[tf, "Perturbation"], 3), ")"),
-  #   Binding = paste0("Binding (AUC=", signif(auc_df[tf, "Binding"], 3), ")"))
-  
-  ggplot() +
-    geom_path(data = auprc_df, aes(x = Recall, y = Precision), linewidth = 1) +
-    # geom_path(data = pr_list$Perturbation, aes(x = Recall, y = Precision, col = "Perturbation"), size = 1) +
-    # geom_path(data = pr_list$Binding, aes(x = Recall, y = Precision, col = "Binding"), size = 1) +
-    # ggtitle(tf) +
-    # scale_color_manual(labels = auc_labels, values = colours) +
-    theme_classic() +
-    theme(axis.text = element_text(size = 25),
-          axis.title = element_text(size = 30),
-          plot.title = element_text(size = 30),
-          legend.title = element_blank(),
-          legend.text = element_text(size = 25),
-          legend.position = c(0.55, 0.85))
-  
-}
+# Cor across all cell types
+# ------------------------------------------------------------------------------
 
 
+tf <- "Ascl1"
 
-
-tf <- "Mecp2"
-
-
-# All cor
 
 cor_all_tf <- data.frame(Cor_all = cor_all[, tf]) %>% 
   rownames_to_column(var = "Symbol") %>% 
@@ -199,6 +166,11 @@ cor_all_tf <- data.frame(Cor_all = cor_all[, tf]) %>%
   
 
 evidence <- left_join(cor_all_tf, rank_l$Mouse[[tf]], by = "Symbol")
+
+# Inspecting NAs
+# sum(is.na(evidence$Rank_integrated))
+# filter(evidence, is.na(Rank_integrated)) %>% arrange(desc(Cor_all_abs)) %>% head(20)
+# sum(is.na(evidence$Cor_all))
 
 evidence <- filter(evidence, !is.na(Rank_integrated))
 
@@ -277,43 +249,65 @@ cor_all_abs_auc <- get_au_perf(
 
 
 
-plot_auprc(rank_int_pr)
-plot_auprc(cor_all_pr)
-plot_auprc(cor_all_abs_pr)
+# Prepare plot dfs
+
+roc_l <- list(Integrated_rank = rank_int_roc, 
+              Coexpr_all = cor_all_roc, 
+              Coexpr_all_abs = cor_all_abs_roc)
 
 
-# plot_auc(rank_int_roc)
-# plot_auc(cor_all_roc)
-# plot_auc(cor_all_abs_roc)
+roc_df <- 
+  do.call(rbind, roc_l) %>%
+  mutate(
+    Group = factor(rep(names(roc_l), each = nrow(roc_l[[1]])),
+                   levels = names(roc_l), ordered = TRUE),
+    lw = (Group == "Integrated_rank"))
 
 
-plot_auc(list(rank_int_roc, cor_all_roc, cor_all_abs_roc))
+auc_labels <- c(
+  Integrated_rank = paste0("Integrated AUC=", round(rank_int_auc, 3)),
+  Coexpr_all = paste0("Coexpr (all) AUC=", round(cor_all_auc, 3)),
+  Coexpr_all_abs = paste0("Coexpr (abs all) AUC=", round(cor_all_abs_auc, 3)))
 
 
-# Inspecting NAs
-sum(is.na(evidence$Rank_integrated))
-filter(evidence, is.na(Rank_integrated)) %>% arrange(desc(Cor_all_abs)) %>% head(20)
-sum(is.na(evidence$Cor_all))
-
-# Example of high cor that is suspicious
-FeaturePlot(sdat, features = c("Runx1", "Mnd1"))
-
-plot(sdat@assays$RNA@data["Runx1", sdat$Cell_type == "GABA-11-Adora2a-Id4"],
-     sdat@assays$RNA@data["Mnd1", sdat$Cell_type == "GABA-11-Adora2a-Id4"])
-
-sum(sdat$Cell_type == "GABA-11-Adora2a-Id4")
+# cols <- c("Integrated_rank" = "#1b9e77",
+#           "Coexpr_all" = "dodgerblue4",
+#           "Coexpr_all_abs" = "#7570b3")
 
 
-tf <- "Runx1"
-# Cell type cor
-tt <- tf_by_ct_cmat(cor_ct, tf)
-tt2 <- rank_cormat(tt)
-cor_tf <- do.call(cbind, lapply(cor_ct, function(x) x[tf, ]))
-# cor_tf <- abs(do.call(cbind, lapply(cor_ct, function(x) x[tf, ])))
+cols <- c("Integrated_rank" = "black",
+          "Coexpr_all" = "grey67",
+          "Coexpr_all_abs" = "grey77")
+
+
+plot_auc(roc_df, auc_labels, cols, tf)
+
+
+# Cor by cell type
+# ------------------------------------------------------------------------------
+
+
+cor_tf <- tf_by_ct_cmat(cor_ct, tf, rm_tf = TRUE)
+
+rank_tf <- rank_cormat(cor_tf)
+
+# Some NAs refer to genes not expressed in that cell type
+gene_nas <- apply(cor_tf, 1, function(x) sum(is.na(x)))
+ct_nas <- apply(cor_tf, 2, function(x) sum(is.na(x)))
+
+# All NAs correspond to cell types where TF is not expressed
+all_nas <- apply(cor_tf, 2, function(x) all(is.na(x)))
+all_nas <- all_nas[all_nas]
+all(sdat@assays$RNA@data[tfs, sdat$Cell_type %in% all_nas] == 0)
+
+threshold_cormat
+
 
 
 
 rank_tf <- apply(-cor_tf, 2, rank, ties.method = "min")
+
+
 rank_agg <- rowSums(rank_tf)
 
 rank_order <- data.frame(Cor_rank = sort(rank(rank_agg))) %>% 
@@ -325,13 +319,26 @@ target_rank <- left_join(rank_l$Mouse[[tf]], rank_order, by = "Symbol")
 boxplot(target_rank$Cor_rank ~ target_rank$Curated_target)
 
 
-# Some NAs refer to genes not expressed in that cell type
-gene_nas <- apply(cor_tf, 1, function(x) sum(is.na(x)))
-ct_nas <- apply(cor_tf, 2, function(x) sum(is.na(x)))
 
-# All NAs correspond to cell types where TF is not expressed
-all_nas <- names(ct_nas[ct_nas == nrow(sdat@assays$RNA)])
-all(sdat@assays$RNA@data[tfs[1], sdat$Cell_type %in% all_nas] == 0)
+
+
+
+
+# Misc
+# ------------------------------------------------------------------------------
+
+
+
+# Example of high cor that is suspicious
+FeaturePlot(sdat, features = c("Runx1", "Mnd1"))
+
+plot(sdat@assays$RNA@data["Runx1", sdat$Cell_type == "GABA-11-Adora2a-Id4"],
+     sdat@assays$RNA@data["Mnd1", sdat$Cell_type == "GABA-11-Adora2a-Id4"])
+
+sum(sdat$Cell_type == "GABA-11-Adora2a-Id4")
+
+
+
 
 
 
