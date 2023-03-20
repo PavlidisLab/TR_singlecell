@@ -9,7 +9,7 @@ source("R/utils/functions.R")
 source("R/00_config.R")
 
 # Output RDS
-de_ct_path <- "/space/scratch/amorin/R_objects/Hochgerner2022_TR_DEA_quantile.RDS"
+de_quantile_path <- "/space/scratch/amorin/R_objects/Hochgerner2022_TR_DEA_quantile.RDS"
 
 # Load Seurat object
 seurat_path <- "/space/scratch/amorin/R_objects/Hochgerner2022_seurat.RDS"
@@ -49,4 +49,4 @@ tf_de <- lapply(tfs, function(x) {
 names(tf_de) <- tfs
 
 # Save out
-saveRDS(tf_de, outfile)
+saveRDS(tf_de, de_quantile_path)

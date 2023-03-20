@@ -53,4 +53,4 @@ tf_de <- lapply(tfs, function(x) {
 names(tf_de) <- tfs
 
 # Save out
-saveRDS(tf_de, outfile)
+saveRDS(tf_de, de_ct_path)
