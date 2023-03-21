@@ -64,6 +64,36 @@ rank_cormat <- function(cmat) {
 }
 
 
+# TODO
+
+threshold_cormat <- function(mat, top_qtl = 0.95, btm_qtl = NULL) {
+  
+  mat <- apply(mat, 2, function(x) {
+    
+    if (!is.null(btm_qtl)) {
+      
+      top_qtl <- quantile(x, top_qtl, na.rm = TRUE)
+      btm_qtl <- quantile(x, btm_qtl, na.rm = TRUE)
+      x[x >= top_qtl] <- 1
+      x[x <= btm_qtl] <- 1
+      x[x < top_qtl & x > btm_qtl] <- 0
+
+    } else {
+     
+      top_qtl <- quantile(x, top_qtl, na.rm = TRUE)
+      x[x >= top_qtl] <- 1
+      x[x < top_qtl] <- 0
+    }
+    
+    return(x)
+  })
+
+  return(mat)
+}
+
+
+
+
 #
 # 
 # join_evidence <- function(rank_list, cmat, tf) {
@@ -132,11 +162,11 @@ get_au_perf <- function(rank_df, label_col, measure = NULL) {
 plot_auc <- function(roc_df, auc_labels, cols, tf) {
   
   p <- 
-    ggplot(roc_df, aes(x = FPR, y = TPR, col = Group, linewidth = lw)) +
+    ggplot(roc_df, aes(x = FPR, y = TPR, col = Group)) +
     geom_path() +
     ggtitle(tf) +
     scale_color_manual(labels = auc_labels, values = cols) +
-    scale_linewidth_discrete(range = c(1, 2), guide = "none") +
+    # scale_linewidth_discrete(range = c(1, 2), guide = "none") +
     theme_classic() +
     theme(axis.text = element_text(size = 25),
           axis.title = element_text(size = 30),
@@ -153,7 +183,7 @@ plot_auc <- function(roc_df, auc_labels, cols, tf) {
 # ------------------------------------------------------------------------------
 
 
-tf <- "Ascl1"
+tf <- "Runx1"
 
 
 cor_all_tf <- data.frame(Cor_all = cor_all[, tf]) %>% 
@@ -289,38 +319,169 @@ plot_auc(roc_df, auc_labels, cols, tf)
 
 cor_tf <- tf_by_ct_cmat(cor_ct, tf, rm_tf = TRUE)
 
-rank_tf <- rank_cormat(cor_tf)
 
 # Some NAs refer to genes not expressed in that cell type
 gene_nas <- apply(cor_tf, 1, function(x) sum(is.na(x)))
 ct_nas <- apply(cor_tf, 2, function(x) sum(is.na(x)))
 
 # All NAs correspond to cell types where TF is not expressed
-all_nas <- apply(cor_tf, 2, function(x) all(is.na(x)))
-all_nas <- all_nas[all_nas]
-all(sdat@assays$RNA@data[tfs, sdat$Cell_type %in% all_nas] == 0)
-
-threshold_cormat
+all_ct_nas <- apply(cor_tf, 2, function(x) all(is.na(x)))
+all_ct_nas <- names(all_ct_nas[all_ct_nas])
+all(sdat@assays$RNA@data[tf, sdat$Cell_type %in% all_ct_nas] == 0)
 
 
+cor_tf <- cor_tf[, setdiff(colnames(cor_tf), all_ct_nas)]
 
 
-rank_tf <- apply(-cor_tf, 2, rank, ties.method = "min")
+# Accept top 0.5% and bottom 0.5% of cor
+thresh_tf1 <- threshold_cormat(cor_tf, top_qtl = 0.995, btm_qtl = 0.005)
+agg_tf1 <- rowSums(thresh_tf1, na.rm = TRUE)
+
+# Accept only top 0.5% of cor
+thresh_tf2 <- threshold_cormat(cor_tf, top_qtl = 0.995)
+agg_tf2 <- rowSums(thresh_tf2, na.rm = TRUE)
+
+# Accept only top 0.5% of absolute cor
+thresh_tf3 <- threshold_cormat(abs(cor_tf), top_qtl = 0.995)
+agg_tf3 <- rowSums(thresh_tf3, na.rm = TRUE)
+
+# Min rank scheme, where a TF-gene pair is assigned its best rank across all
+# cell types. Break ties using average cor across across cell types.
+rank_tf <- rank_cormat(cor_tf)
+rank_min_tf <- apply(rank_tf, 1, min)
+rank_mean_tf <- rowMeans(rank_tf)
+rank_tiebreak_tf <- data.table::frank(list(rank_min_tf, rank_mean_tf), ties.method = "min")
+
+names(rank_min_tf) <- names(rank_mean_tf) <- names(rank_tiebreak_tf) <- rownames(rank_tf)
 
 
-rank_agg <- rowSums(rank_tf)
-
-rank_order <- data.frame(Cor_rank = sort(rank(rank_agg))) %>% 
-  rownames_to_column(var = "Symbol")
-
-
-target_rank <- left_join(rank_l$Mouse[[tf]], rank_order, by = "Symbol")
-
-boxplot(target_rank$Cor_rank ~ target_rank$Curated_target)
+# view(data.frame(agg_tf1, agg_tf2, agg_tf3))
+# head(sort(agg_tf, decreasing = TRUE), 20)
+# hist(agg_tf, breaks = 100)
 
 
+# view(data.frame(Symbol = rownames(rank_tf), min_rank_tf, mean_rank_tf, tiebreak_min_rank_tf))
+# head(sort(min_rank_tf), 20)
+# sum(min_rank_tf == 1)
+
+evidence2 <- evidence
+
+prep_df <- function(vec, name, add_rank = TRUE) {
+  df <- data.frame(vec)
+  colnames(df) <- name
+  df <- rownames_to_column(df, var = "Symbol")
+  
+  if (add_rank) {
+    df[[paste0("Rank_", name)]] <- rank(-vec, ties.method = "min")
+  }
+  
+  return(df)
+}
+
+# prep_df(agg_tf1, "Agg1") %>% head
 
 
+evidence2 <- left_join(evidence2, prep_df(agg_tf1, "Agg1"), by = "Symbol") %>% 
+  left_join(prep_df(agg_tf2, "Agg2"), by = "Symbol") %>% 
+  left_join(prep_df(agg_tf3, "Agg3"), by = "Symbol") %>% 
+  left_join(prep_df(rank_min_tf, "Rank_min", add_rank = FALSE), by = "Symbol") %>% 
+  left_join(prep_df(rank_mean_tf, "Rank_mean", add_rank = FALSE), by = "Symbol") %>% 
+  left_join(prep_df(rank_tiebreak_tf, "Rank_tiebreak", add_rank = FALSE), by = "Symbol")
+
+
+keep_cols <- c(
+  "Rank_integrated",
+  "Rank_cor_all",
+  "Rank_cor_all_abs",
+  "Rank_Agg1",
+  "Rank_Agg2",
+  "Rank_Agg3",
+  "Rank_min",
+  "Rank_mean",
+  "Rank_tiebreak"
+)
+
+
+roc_l2 <- lapply(keep_cols, function(x) {
+  get_perf_df(
+    rank_df = arrange(evidence2, !!sym(x)),
+    label_col = "Curated_target",
+    measure = "ROC") %>% 
+    mutate(Group = x)
+})
+
+names(roc_l2) <- keep_cols
+
+
+auc_l <- lapply(keep_cols, function(x) {
+  get_au_perf(
+    rank_df = arrange(evidence2, !!sym(x)),
+    label_col = "Curated_target",
+    measure = "AUC")
+})
+
+names(auc_l) <- keep_cols
+
+
+# Prepare plot dfs
+
+
+roc_df2 <- do.call(rbind, roc_l2)
+
+
+
+auc_labels2 <- vapply(keep_cols, function(x) {
+  paste0(x, " AUC=", round(auc_l[[x]], 3))
+}, FUN.VALUE = character(1))
+
+
+cols <- c("Rank_integrated" = "black",
+          "Rank_cor_all" = "dodgerblue1",
+          "Rank_cor_all_abs" = "dodgerblue2",
+          "Rank_Agg1" = "orangered1",
+          "Rank_Agg2" = "orangered2",
+          "Rank_Agg3" = "orangered3",
+          "Rank_min" = "seagreen2",
+          "Rank_mean" = "seagreen3",
+          "Rank_tiebreak" = "seagreen4")
+
+
+plot_auc(roc_df2, auc_labels2, cols, tf)
+
+
+# across all TFs
+# TODO: remove TF but keep consistent dims
+# ------------------------------------------------------------------------------
+
+
+tt <- lapply(tfs, function(x) {
+  
+  cor_tf <- tf_by_ct_cmat(cor_ct, x, rm_tf = FALSE)
+  
+  thresh_tf <- threshold_cormat(cor_tf)
+  
+  agg_tf <- rowSums(thresh_tf, na.rm = TRUE)
+  
+})
+
+tt <- do.call(cbind, tt)
+colnames(tt) <- tfs
+
+
+for (tf in tfs) {
+  tt[tf, tf] <- 0
+}
+
+all_0 <- which(rowSums(tt) == 0)
+
+tt <- tt[-all_0, ]
+
+
+tt_z <- t(scale(t(tt)))
+
+
+view(data.frame(tt))
+view(data.frame(tt_z))
 
 
 
@@ -331,18 +492,13 @@ boxplot(target_rank$Cor_rank ~ target_rank$Curated_target)
 
 # Example of high cor that is suspicious
 FeaturePlot(sdat, features = c("Runx1", "Mnd1"))
-
-plot(sdat@assays$RNA@data["Runx1", sdat$Cell_type == "GABA-11-Adora2a-Id4"],
-     sdat@assays$RNA@data["Mnd1", sdat$Cell_type == "GABA-11-Adora2a-Id4"])
-
-sum(sdat$Cell_type == "GABA-11-Adora2a-Id4")
+plot_scatter(subset(sdat, subset = Cell_type == "GABA-11-Adora2a-Id4"), gene1 = "Runx1", gene2 = "Mnd1")
+plot_scatter(subset(sdat, subset = Cell_type == "microglia"), gene1 = "Ascl1", gene2 = "Gm1992")
 
 
 
 
-
-
-
+# Inspect ribosomal gene cor
 cor_ribo_in <- cor_all[ribo_genes, ribo_genes]
 cor_ribo_out <- cor_all[ribo_genes, setdiff(rownames(cor_all), ribo_genes)]
 
