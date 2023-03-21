@@ -72,3 +72,20 @@ mat_to_df <- function(mat, symmetric = TRUE) {
   }
   return(df)
 }
+
+
+
+# Temp plot functions
+
+
+plot_scatter <- function(sdat, gene1, gene2) {
+  
+  plot_df <- data.frame(gene1 = sdat@assays$RNA@data[gene1, ],
+                        gene2 = sdat@assays$RNA@data[gene2, ])
+  
+  ggplot(plot_df, aes(x = gene1, y = gene2)) +
+    geom_jitter() +
+    xlab(gene1) +
+    ylab(gene2) +
+    theme_classic()
+}
