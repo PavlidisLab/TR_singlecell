@@ -166,7 +166,6 @@ plot_auc <- function(roc_df, auc_labels, cols, tf) {
     geom_path() +
     ggtitle(tf) +
     scale_color_manual(labels = auc_labels, values = cols) +
-    # scale_linewidth_discrete(range = c(1, 2), guide = "none") +
     theme_classic() +
     theme(axis.text = element_text(size = 25),
           axis.title = element_text(size = 30),
@@ -355,6 +354,13 @@ rank_tiebreak_tf <- data.table::frank(list(rank_min_tf, rank_mean_tf), ties.meth
 names(rank_min_tf) <- names(rank_mean_tf) <- names(rank_tiebreak_tf) <- rownames(rank_tf)
 
 
+# Top expression ranking
+
+avg_all <- rowMeans(sdat@assays$RNA@data)
+avg_all <- avg_all[evidence2$Symbol]
+rank_avg_all <- rank(-avg_all, ties.method = "min")
+
+
 # view(data.frame(agg_tf1, agg_tf2, agg_tf3))
 # head(sort(agg_tf, decreasing = TRUE), 20)
 # hist(agg_tf, breaks = 100)
@@ -365,6 +371,7 @@ names(rank_min_tf) <- names(rank_mean_tf) <- names(rank_tiebreak_tf) <- rownames
 # sum(min_rank_tf == 1)
 
 evidence2 <- evidence
+
 
 prep_df <- function(vec, name, add_rank = TRUE) {
   df <- data.frame(vec)
@@ -386,7 +393,8 @@ evidence2 <- left_join(evidence2, prep_df(agg_tf1, "Agg1"), by = "Symbol") %>%
   left_join(prep_df(agg_tf3, "Agg3"), by = "Symbol") %>% 
   left_join(prep_df(rank_min_tf, "Rank_min", add_rank = FALSE), by = "Symbol") %>% 
   left_join(prep_df(rank_mean_tf, "Rank_mean", add_rank = FALSE), by = "Symbol") %>% 
-  left_join(prep_df(rank_tiebreak_tf, "Rank_tiebreak", add_rank = FALSE), by = "Symbol")
+  left_join(prep_df(rank_tiebreak_tf, "Rank_tiebreak", add_rank = FALSE), by = "Symbol") %>% 
+  left_join(prep_df(rank_avg_all, "Rank_expression", add_rank = FALSE), by = "Symbol")
 
 
 keep_cols <- c(
@@ -398,7 +406,8 @@ keep_cols <- c(
   "Rank_Agg3",
   "Rank_min",
   "Rank_mean",
-  "Rank_tiebreak"
+  "Rank_tiebreak",
+  "Rank_expression"
 )
 
 
@@ -443,10 +452,69 @@ cols <- c("Rank_integrated" = "black",
           "Rank_Agg3" = "orangered3",
           "Rank_min" = "seagreen2",
           "Rank_mean" = "seagreen3",
-          "Rank_tiebreak" = "seagreen4")
+          "Rank_tiebreak" = "seagreen4",
+          "Rank_expression" = "lightgrey")
 
 
 plot_auc(roc_df2, auc_labels2, cols, tf)
+
+
+
+# Matched expression level
+
+set.seed(14)
+
+
+sampled_targets <- sample_expression_level(
+  sdat = subset(sdat, features = evidence2$Symbol), 
+  targets = filter(evidence2, Curated_target)$Symbol, 
+  rank_window = 10)
+
+
+evidence3 <- evidence2 %>% 
+  mutate(Curated_target = Symbol %in% sampled_targets)
+
+
+roc_obs <- get_perf_df(
+  rank_df = arrange(evidence2, Rank_integrated),
+  label_col = "Curated_target",
+  measure = "ROC") %>% 
+  mutate(Group = "RI_observed")
+
+
+roc_samp <- get_perf_df(
+  rank_df = arrange(evidence3, Rank_integrated),
+  label_col = "Curated_target",
+  measure = "ROC") %>% 
+  mutate(Group = "RI_sampled")
+
+
+roc_df <- rbind(roc_obs, roc_samp)
+
+
+auc_obs <- get_au_perf(
+  rank_df = arrange(evidence2, Rank_integrated),
+  label_col = "Curated_target",
+  measure = "AUC")
+
+
+auc_samp <- get_au_perf(
+  rank_df = arrange(evidence3, Rank_integrated),
+  label_col = "Curated_target",
+  measure = "AUC")
+
+
+roc_labels <- c("RI_observed" = auc_obs, "RI_sampled" = auc_samp)
+
+
+
+cols <- c("RI_observed" = "black",
+          "RI_sampled" = "lightgrey")
+
+
+plot_auc(roc_df, roc_labels, cols, tf)
+
+
 
 
 # across all TFs
