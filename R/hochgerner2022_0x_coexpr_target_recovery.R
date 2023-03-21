@@ -37,6 +37,23 @@ tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
 # ------------------------------------------------------------------------------
 
 
+# TODO:
+
+get_cor_all_df <- function(cmat, tf) {
+  
+  df <- data.frame(Cor_all = cmat[, tf]) %>%
+    rownames_to_column(var = "Symbol") %>%
+    filter(Symbol != tf) %>%
+    mutate(
+      Cor_all_abs = abs(Cor_all),
+      Rank_cor_all = rank(-Cor_all, ties.method = "min"),
+      Rank_cor_all_abs = rank(-Cor_all_abs, ties.method = "min")
+    )
+  
+  return(df)
+}
+
+
 # Given a list of cor matrices per cell type and a specified TF, get that TFs
 # gene cors in a gene x cell type matrix
 
@@ -92,9 +109,6 @@ threshold_cormat <- function(mat, top_qtl = 0.95, btm_qtl = NULL) {
 }
 
 
-
-
-#
 # 
 # join_evidence <- function(rank_list, cmat, tf) {
 #   
@@ -178,101 +192,138 @@ plot_auc <- function(roc_df, auc_labels, cols, tf) {
 }
 
 
-# Cor across all cell types
+# Cor across all cells
 # ------------------------------------------------------------------------------
 
 
 tf <- "Runx1"
 
 
-cor_all_tf <- data.frame(Cor_all = cor_all[, tf]) %>% 
-  rownames_to_column(var = "Symbol") %>% 
-  filter(Symbol != tf) %>%
-  mutate(
-    Cor_all_abs = abs(Cor_all),
-    Rank_cor_all = rank(-Cor_all, ties.method = "min"),
-    Rank_cor_all_abs = rank(-Cor_all_abs, ties.method = "min"))
-  
+rank_df <- rank_l$Mouse[[tf]]
 
-evidence <- left_join(cor_all_tf, rank_l$Mouse[[tf]], by = "Symbol")
 
-# Inspecting NAs
-# sum(is.na(evidence$Rank_integrated))
-# filter(evidence, is.na(Rank_integrated)) %>% arrange(desc(Cor_all_abs)) %>% head(20)
-# sum(is.na(evidence$Cor_all))
+# Genes that are in the single cell dataset but not in the ranked targets
+missing <- setdiff(rownames(sdat), rank_df$Symbol)
 
-evidence <- filter(evidence, !is.na(Rank_integrated))
+# Dataframe of TF-gene correlation (+/- abs) and their ranking
+cor_all_tf <- get_cor_all_df(cor_all, tf)
+
+# Inspect TF-gene pairs with appreciable cor but are not in the rankings
+top_cor_missing <- filter(cor_all_tf, Symbol %in% missing)
+
+
+# Cor by cell type
+# ------------------------------------------------------------------------------
+
+
+cor_tf <- tf_by_ct_cmat(cor_ct, tf, rm_tf = TRUE)
+
+
+# Some NAs refer to genes not expressed in that cell type
+gene_nas <- apply(cor_tf, 1, function(x) sum(is.na(x)))
+ct_nas <- apply(cor_tf, 2, function(x) sum(is.na(x)))
+
+# All NAs correspond to cell types where TF is not expressed
+all_ct_nas <- apply(cor_tf, 2, function(x) all(is.na(x)))
+all_ct_nas <- names(all_ct_nas[all_ct_nas])
+all(sdat@assays$RNA@data[tf, sdat$Cell_type %in% all_ct_nas] == 0)
+
+
+# Remove cell types with all NAs
+cor_tf <- cor_tf[, setdiff(colnames(cor_tf), all_ct_nas)]
+
+
+# Accept top 0.5% and bottom 0.5% of cor
+thresh_tf1 <- threshold_cormat(cor_tf, top_qtl = 0.995, btm_qtl = 0.005)
+agg_tf1 <- rowSums(thresh_tf1, na.rm = TRUE)
+
+# Accept only top 0.5% of cor
+thresh_tf2 <- threshold_cormat(cor_tf, top_qtl = 0.995)
+agg_tf2 <- rowSums(thresh_tf2, na.rm = TRUE)
+
+# Accept only top 0.5% of absolute cor
+thresh_tf3 <- threshold_cormat(abs(cor_tf), top_qtl = 0.995)
+agg_tf3 <- rowSums(thresh_tf3, na.rm = TRUE)
+
+
+# Min rank scheme, where a TF-gene pair is assigned its best rank across all
+# cell types. Break ties using average cor across across cell types.
+rank_tf <- rank_cormat(cor_tf)
+rank_min_tf <- apply(rank_tf, 1, min)
+rank_mean_tf <- rowMeans(rank_tf)
+rank_tiebreak_tf <- data.table::frank(list(rank_min_tf, rank_mean_tf), ties.method = "min")
+names(rank_min_tf) <- names(rank_mean_tf) <- names(rank_tiebreak_tf) <- rownames(rank_tf)
+
+
+# view(data.frame(agg_tf1, agg_tf2, agg_tf3))
+# head(sort(agg_tf, decreasing = TRUE), 20)
+# hist(agg_tf, breaks = 100)
+
+
+# view(data.frame(Symbol = rownames(rank_tf), min_rank_tf, mean_rank_tf, tiebreak_min_rank_tf))
+# head(sort(min_rank_tf), 20)
+# sum(min_rank_tf == 1)
+
+
+# Null sets
+# ------------------------------------------------------------------------------
+
+
+# Rank genes by their average
+
+avg_all <- rowMeans(sdat@assays$RNA@data)
+avg_all <- avg_all[evidence2$Symbol]
+rank_avg_all <- rank(-avg_all, ties.method = "min")
+
+
+# Sampled targets matched to expression level of observed targets
+
+set.seed(14)
+
+sampled_targets <- sample_expression_level(
+  sdat = subset(sdat, features = evidence2$Symbol), 
+  targets = filter(evidence2, Curated_target)$Symbol, 
+  rank_window = 10)
+
+# Targets from mismatched TRs
+
+mismatched_targets <- lapply(rank_l$Mouse[setdiff(tfs, tf)], function(x) {
+  filter(x, Curated_target)$Symbol
+})
+
+
+# Collect data for joint comparison
+# ------------------------------------------------------------------------------
+
+
+
 
 
 
 # Precision recall dfs
-
 rank_int_pr <- get_perf_df(
   rank_df = arrange(evidence, Rank_integrated),
   label_col = "Curated_target",
   measure = "PR")
 
-cor_all_pr <- get_perf_df(
-  rank_df = arrange(evidence, Rank_cor_all),
-  label_col = "Curated_target",
-  measure = "PR")
-
-cor_all_abs_pr <- get_perf_df(
-  rank_df = arrange(evidence, Rank_cor_all_abs),
-  label_col = "Curated_target",
-  measure = "PR")
-
 
 # ROC dfs
-
 rank_int_roc <- get_perf_df(
   rank_df = arrange(evidence, Rank_integrated),
   label_col = "Curated_target",
   measure = "ROC")
 
-cor_all_roc <- get_perf_df(
-  rank_df = arrange(evidence, Rank_cor_all),
-  label_col = "Curated_target",
-  measure = "ROC")
-
-cor_all_abs_roc <- get_perf_df(
-  rank_df = arrange(evidence, Rank_cor_all_abs),
-  label_col = "Curated_target",
-  measure = "ROC")
-
 
 # Area under the PR curve
-
 rank_int_auprc <- get_au_perf(
   rank_df = arrange(evidence, Rank_integrated),
   label_col = "Curated_target",
   measure = "AUPRC")
 
-cor_all_auprc <- get_au_perf(
-  rank_df = arrange(evidence, Rank_cor_all),
-  label_col = "Curated_target",
-  measure = "AUPRC")
-
-cor_all_abs_auprc <- get_au_perf(
-  rank_df = arrange(evidence, Rank_cor_all_abs),
-  label_col = "Curated_target",
-  measure = "AUPRC")
-
 
 # Area under the ROC
-
 rank_int_auc <- get_au_perf(
   rank_df = arrange(evidence, Rank_integrated),
-  label_col = "Curated_target",
-  measure = "AUC")
-
-cor_all_auc <- get_au_perf(
-  rank_df = arrange(evidence, Rank_cor_all),
-  label_col = "Curated_target",
-  measure = "AUC")
-
-cor_all_abs_auc <- get_au_perf(
-  rank_df = arrange(evidence, Rank_cor_all_abs),
   label_col = "Curated_target",
   measure = "AUC")
 
@@ -312,63 +363,8 @@ cols <- c("Integrated_rank" = "black",
 plot_auc(roc_df, auc_labels, cols, tf)
 
 
-# Cor by cell type
-# ------------------------------------------------------------------------------
 
 
-cor_tf <- tf_by_ct_cmat(cor_ct, tf, rm_tf = TRUE)
-
-
-# Some NAs refer to genes not expressed in that cell type
-gene_nas <- apply(cor_tf, 1, function(x) sum(is.na(x)))
-ct_nas <- apply(cor_tf, 2, function(x) sum(is.na(x)))
-
-# All NAs correspond to cell types where TF is not expressed
-all_ct_nas <- apply(cor_tf, 2, function(x) all(is.na(x)))
-all_ct_nas <- names(all_ct_nas[all_ct_nas])
-all(sdat@assays$RNA@data[tf, sdat$Cell_type %in% all_ct_nas] == 0)
-
-
-cor_tf <- cor_tf[, setdiff(colnames(cor_tf), all_ct_nas)]
-
-
-# Accept top 0.5% and bottom 0.5% of cor
-thresh_tf1 <- threshold_cormat(cor_tf, top_qtl = 0.995, btm_qtl = 0.005)
-agg_tf1 <- rowSums(thresh_tf1, na.rm = TRUE)
-
-# Accept only top 0.5% of cor
-thresh_tf2 <- threshold_cormat(cor_tf, top_qtl = 0.995)
-agg_tf2 <- rowSums(thresh_tf2, na.rm = TRUE)
-
-# Accept only top 0.5% of absolute cor
-thresh_tf3 <- threshold_cormat(abs(cor_tf), top_qtl = 0.995)
-agg_tf3 <- rowSums(thresh_tf3, na.rm = TRUE)
-
-# Min rank scheme, where a TF-gene pair is assigned its best rank across all
-# cell types. Break ties using average cor across across cell types.
-rank_tf <- rank_cormat(cor_tf)
-rank_min_tf <- apply(rank_tf, 1, min)
-rank_mean_tf <- rowMeans(rank_tf)
-rank_tiebreak_tf <- data.table::frank(list(rank_min_tf, rank_mean_tf), ties.method = "min")
-
-names(rank_min_tf) <- names(rank_mean_tf) <- names(rank_tiebreak_tf) <- rownames(rank_tf)
-
-
-# Top expression ranking
-
-avg_all <- rowMeans(sdat@assays$RNA@data)
-avg_all <- avg_all[evidence2$Symbol]
-rank_avg_all <- rank(-avg_all, ties.method = "min")
-
-
-# view(data.frame(agg_tf1, agg_tf2, agg_tf3))
-# head(sort(agg_tf, decreasing = TRUE), 20)
-# hist(agg_tf, breaks = 100)
-
-
-# view(data.frame(Symbol = rownames(rank_tf), min_rank_tf, mean_rank_tf, tiebreak_min_rank_tf))
-# head(sort(min_rank_tf), 20)
-# sum(min_rank_tf == 1)
 
 evidence2 <- evidence
 
@@ -460,15 +456,6 @@ plot_auc(roc_df2, auc_labels2, cols, tf)
 
 
 
-# Matched expression level
-
-set.seed(14)
-
-
-sampled_targets <- sample_expression_level(
-  sdat = subset(sdat, features = evidence2$Symbol), 
-  targets = filter(evidence2, Curated_target)$Symbol, 
-  rank_window = 10)
 
 
 evidence3 <- evidence2 %>% 
