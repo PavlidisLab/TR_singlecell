@@ -5,6 +5,7 @@
 library(parallel)
 
 
+# TODO:
 
 top_expr_quantile <- function(sdat, gene, qtl = 0.9) {
   
@@ -17,6 +18,8 @@ top_expr_quantile <- function(sdat, gene, qtl = 0.9) {
 
 
 
+# TODO:
+
 top_expr_celltype <- function(sdat, avg_mat, gene) {
   
   stopifnot("Cell_type" %in% colnames(sdat@meta.data))
@@ -28,6 +31,8 @@ top_expr_celltype <- function(sdat, avg_mat, gene) {
 }
 
 
+
+# TODO:
 
 get_ct_avg <- function(sdat, assay = "RNA", scale = FALSE, ncores = 8) {
   
@@ -48,10 +53,13 @@ get_ct_avg <- function(sdat, assay = "RNA", scale = FALSE, ncores = 8) {
   ct_avg <- do.call(cbind, ct_avg)
   rownames(ct_avg) <- rownames(mat)
   colnames(ct_avg) <- cts
+  
   return(ct_avg)
 }
 
 
+
+# TODO:
 
 mat_to_df <- function(mat, symmetric = TRUE) {
   
@@ -75,8 +83,40 @@ mat_to_df <- function(mat, symmetric = TRUE) {
 
 
 
+# TODO
+
+
+sample_expression_level <- function(sdat, targets, rank_window = 10) {
+  
+  # get the ordered average expression of genes across all cells
+  avg_all <- sort(rowMeans(sdat@assays$RNA@data))
+  
+  # for each target sample a gene whose average expression is within rank window
+  
+  sample_ix <- vapply(targets, function(x) {
+    
+    ix_orig <- which(names(avg_all) == x)
+    ix_new <- ix_orig
+    
+    while (ix_new == ix_orig) {
+      ix_new <- ix_orig + sample(-rank_window:rank_window, 1) 
+    }
+    
+    return(ix_new)
+    
+  }, FUN.VALUE = integer(1), USE.NAMES = FALSE)
+  
+  return(names(avg_all[sample_ix]))
+}
+
+
+
+
+
 # Temp plot functions
 
+
+# TODO:
 
 plot_scatter <- function(sdat, gene1, gene2) {
   
