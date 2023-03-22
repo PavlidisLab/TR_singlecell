@@ -1,4 +1,5 @@
 ## Project functions
+## TODO: sample_expression_level() impl requires subset (costly) - try pre-format input mat
 ## -----------------------------------------------------------------------------
 
 
@@ -87,6 +88,8 @@ mat_to_df <- function(mat, symmetric = TRUE) {
 
 
 sample_expression_level <- function(sdat, targets, rank_window = 10) {
+  
+  stopifnot(all(targets %in% rownames(sdat)))
   
   # get the ordered average expression of genes across all cells
   avg_all <- sort(rowMeans(sdat@assays$RNA@data))
