@@ -28,6 +28,12 @@ rank_l <- readRDS(rank_path)
 cor_ct <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_cormat_celltype.RDS")
 cor_all <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_cormat_all.RDS")
 
+#
+de_top_qntl <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_TR_DEA_quantile.RDS")
+de_top_ct <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_TR_DEA_celltype.RDS")
+
+
+
 # Ribosomal genes as positive control for coexpr.
 # Something wonky with table shifts columns over - just want gene symbols
 ribo_genes <- read.delim("/space/grp/amorin/Metadata/MGI_GO_term_ribosomal_genes_15-03-2023.txt", row.names = NULL, stringsAsFactors = FALSE)
@@ -169,6 +175,7 @@ get_au_perf <- function(rank_df, label_col, measure = NULL) {
 
 
 # TODO
+# TODO: labels should just be generated inside
 
 plot_auc <- function(roc_df, auc_labels, cols, tf) {
   
@@ -177,12 +184,13 @@ plot_auc <- function(roc_df, auc_labels, cols, tf) {
     geom_path() +
     ggtitle(tf) +
     scale_color_manual(labels = auc_labels, values = cols) +
+    # guides(colour = guide_legend(ncol = 1)) +
     theme_classic() +
     theme(axis.text = element_text(size = 25),
           axis.title = element_text(size = 30),
           plot.title = element_text(size = 30),
           legend.title = element_blank(),
-          legend.text = element_text(size = 25),
+          legend.text = element_text(size = 20),
           legend.position = c(0.8, 0.2))
   
   return(p)
@@ -209,7 +217,7 @@ prep_df <- function(vec, name, add_rank = TRUE) {
 # ------------------------------------------------------------------------------
 
 
-tf <- "Runx1"
+tf <- "Ascl1"
 rank_df <- rank_l$Mouse[[tf]]
 
 # Dataframe of TF-gene correlation (+/- abs) and their ranking
@@ -283,6 +291,29 @@ names(rank_min_tf) <- names(rank_mean_tf) <- names(rank_tiebreak_tf) <- rownames
 # sum(min_rank_tf == 1)
 
 
+# DE genes
+# ------------------------------------------------------------------------------
+
+# TODO: to function
+
+de_ct <- de_top_ct[[tf]] %>% 
+  rownames_to_column(var = "Symbol") %>% 
+  filter(Symbol %in% rank_df$Symbol) %>% 
+  arrange(p_val, -avg_log2FC) %>% 
+  dplyr::select(Symbol, p_val, avg_log2FC) %>% 
+  dplyr::rename(DE_CT_pval = p_val, DE_CT_log2FC = avg_log2FC) %>% 
+  mutate(Rank_DE_CT = 1:nrow(.))
+  
+
+de_qntl <- de_top_qntl[[tf]] %>% 
+  rownames_to_column(var = "Symbol") %>% 
+  filter(Symbol %in% rank_df$Symbol) %>% 
+  arrange(p_val, -avg_log2FC) %>% 
+  dplyr::select(Symbol, p_val, avg_log2FC) %>% 
+  dplyr::rename(DE_qntl_pval = p_val, DE_qntl_log2FC = avg_log2FC) %>% 
+  mutate(Rank_DE_qntl = 1:nrow(.))
+
+
 # Null sets
 # ------------------------------------------------------------------------------
 
@@ -310,6 +341,9 @@ mismatched_targets <- lapply(rank_l$Mouse[setdiff(tfs, tf)], function(x) {
 })
 
 
+mismatched_targets[["Matched_expression"]] <- sampled_targets
+
+
 # Collect data for joint comparison/plotting
 # ------------------------------------------------------------------------------
 
@@ -334,6 +368,8 @@ evidence <-
   left_join(prep_df(rank_min_tf, "Rank_min", add_rank = FALSE), by = "Symbol") %>% 
   left_join(prep_df(rank_mean_tf, "Rank_mean", add_rank = FALSE), by = "Symbol") %>% 
   left_join(prep_df(rank_tiebreak_tf, "Rank_tiebreak", add_rank = FALSE), by = "Symbol") %>% 
+  left_join(de_ct, by = "Symbol") %>% 
+  left_join(de_qntl, by = "Symbol") %>% 
   left_join(prep_df(rank_avg_all, "Rank_expression", add_rank = FALSE), by = "Symbol")
 
 
@@ -349,6 +385,8 @@ keep_cols <- c(
   "Rank_min",
   "Rank_mean",
   "Rank_tiebreak",
+  "Rank_DE_CT",
+  "Rank_DE_qntl",
   "Rank_expression"
 )
 
@@ -429,6 +467,8 @@ cols <- c("Rank_integrated" = "black",
           "Rank_min" = "seagreen2",
           "Rank_mean" = "seagreen3",
           "Rank_tiebreak" = "seagreen4",
+          "Rank_DE_qntl" = "purple",
+          "Rank_DE_CT" = "green",
           "Rank_expression" = "lightgrey")
 
 
@@ -437,50 +477,57 @@ plot_auc(roc_df, auc_labels, cols, tf)
 
 
 
+# Example of comparing observed ranking to null targets
+# Here using integrated rank
+
+roc_null_l <- lapply(names(mismatched_targets), function(x) {
+  
+  null_df <- evidence %>% 
+    mutate(Curated_target = Symbol %in% mismatched_targets[[x]]) %>% 
+    arrange(Rank_integrated)
+  
+  get_perf_df(
+    rank_df = null_df,
+    label_col = "Curated_target",
+    measure = "ROC") %>% 
+    mutate(Group = x)
+})
+names(roc_null_l) <- names(mismatched_targets)
+
+# Add observed integrated rank
+roc_null_l[[tf]] <- mutate(roc_l$Rank_integrated, Group = tf)
+
+# Plot df
+
+roc_null_df <- do.call(rbind, roc_null_l) %>%
+  mutate(Group = factor(Group, levels = names(roc_null_l)))
 
 
-evidence3 <- evidence2 %>% 
-  mutate(Curated_target = Symbol %in% sampled_targets)
+# Null AUCs 
+auc_null_l <- lapply(names(mismatched_targets), function(x) {
+  
+  null_df <- evidence %>% 
+    mutate(Curated_target = Symbol %in% mismatched_targets[[x]]) %>% 
+    arrange(Rank_integrated)
+  
+  get_au_perf(
+    rank_df = null_df,
+    label_col = "Curated_target",
+    measure = "AUC")
+})
+names(auc_null_l) <- names(mismatched_targets)
 
 
-roc_obs <- get_perf_df(
-  rank_df = arrange(evidence2, Rank_integrated),
-  label_col = "Curated_target",
-  measure = "ROC") %>% 
-  mutate(Group = "RI_observed")
+auc_null_l[[tf]] <- auc_l$Rank_integrated
 
 
-roc_samp <- get_perf_df(
-  rank_df = arrange(evidence3, Rank_integrated),
-  label_col = "Curated_target",
-  measure = "ROC") %>% 
-  mutate(Group = "RI_sampled")
+auc_null_labels <- paste0(names(auc_null_l), " AUC=", round(unlist(auc_null_l), 3))
 
 
-roc_df <- rbind(roc_obs, roc_samp)
+cols_null <- c(rep("lightgrey", 7), "red", "blue")
+names(cols_null) <- names(auc_null_l)
 
-
-auc_obs <- get_au_perf(
-  rank_df = arrange(evidence2, Rank_integrated),
-  label_col = "Curated_target",
-  measure = "AUC")
-
-
-auc_samp <- get_au_perf(
-  rank_df = arrange(evidence3, Rank_integrated),
-  label_col = "Curated_target",
-  measure = "AUC")
-
-
-roc_labels <- c("RI_observed" = auc_obs, "RI_sampled" = auc_samp)
-
-
-
-cols <- c("RI_observed" = "black",
-          "RI_sampled" = "lightgrey")
-
-
-plot_auc(roc_df, roc_labels, cols, tf)
+plot_auc(roc_null_df, auc_null_labels, cols_null, tf)
 
 
 
