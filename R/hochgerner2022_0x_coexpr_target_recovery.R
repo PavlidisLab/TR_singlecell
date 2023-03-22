@@ -1,15 +1,18 @@
 ## Exploring TR-gene correlation and ability to recover annotated targets
 ## TODO: standardize cmat/cormat naming
+## TODO: decide if prep df handles ranking
+## TODO: better collection of ranked dfs when finalize which to use
 ## -----------------------------------------------------------------------------
 
+library(plyr)
 library(tidyverse)
 library(Seurat)
 library(cowplot)
 library(parallel)
-library(WGCNA)
-library(ggrepel)
-library(pheatmap)
 library(ROCR)
+# library(WGCNA)
+# library(ggrepel)
+# library(pheatmap)
 source("R/utils/functions.R")
 source("R/00_config.R")
 
@@ -39,11 +42,15 @@ tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
 
 # TODO:
 
-get_cor_all_df <- function(cmat, tf) {
+get_cor_all_df <- function(cmat, tf, rm_tf = TRUE) {
   
-  df <- data.frame(Cor_all = cmat[, tf]) %>%
+  if (rm_tf) {
+    cmat <- cmat[setdiff(rownames(cmat), tf), ]
+  }
+  
+  df <- 
+    data.frame(Cor_all = cmat[, tf]) %>%
     rownames_to_column(var = "Symbol") %>%
-    filter(Symbol != tf) %>%
     mutate(
       Cor_all_abs = abs(Cor_all),
       Rank_cor_all = rank(-Cor_all, ties.method = "min"),
@@ -109,19 +116,7 @@ threshold_cormat <- function(mat, top_qtl = 0.95, btm_qtl = NULL) {
 }
 
 
-# 
-# join_evidence <- function(rank_list, cmat, tf) {
-#   
-#   stopifnot(tf %in% rownames(cmat), tf %in% names(rank_list))
-#   
-#   cor_df <- data.frame(Cor = cmat[tf, ]) %>% rownames_to_column(var = "Symbol")
-#   
-#   target_df <- left_join(target_df, cor_df, by = "Symbol")
-#   
-#   return(target_df)
-# }
-
-
+# TODO:
 
 get_perf_df <- function(rank_df, label_col, measure = NULL) {
   
@@ -149,6 +144,7 @@ get_perf_df <- function(rank_df, label_col, measure = NULL) {
 }
 
 
+# TODO:
 
 get_au_perf <- function(rank_df, label_col, measure = NULL) {
   
@@ -172,6 +168,7 @@ get_au_perf <- function(rank_df, label_col, measure = NULL) {
 }
 
 
+# TODO
 
 plot_auc <- function(roc_df, auc_labels, cols, tf) {
   
@@ -192,32 +189,48 @@ plot_auc <- function(roc_df, auc_labels, cols, tf) {
 }
 
 
+# TODO:
+
+prep_df <- function(vec, name, add_rank = TRUE) {
+  
+  df <- data.frame(vec)
+  colnames(df) <- name
+  df <- rownames_to_column(df, var = "Symbol")
+  
+  if (add_rank) {
+    df[[paste0("Rank_", name)]] <- rank(-vec, ties.method = "min")
+  }
+  
+  return(df)
+}
+
+
 # Cor across all cells
 # ------------------------------------------------------------------------------
 
 
 tf <- "Runx1"
-
-
 rank_df <- rank_l$Mouse[[tf]]
 
-
-# Genes that are in the single cell dataset but not in the ranked targets
-missing <- setdiff(rownames(sdat), rank_df$Symbol)
-
 # Dataframe of TF-gene correlation (+/- abs) and their ranking
-cor_all_tf <- get_cor_all_df(cor_all, tf)
+cor_all_tf <- get_cor_all_df(cor_all, tf, rm_tf = FALSE)
 
 # Inspect TF-gene pairs with appreciable cor but are not in the rankings
-top_cor_missing <- filter(cor_all_tf, Symbol %in% missing)
+top_cor_missing <- filter(cor_all_tf, Symbol %in% setdiff(rownames(sdat), rank_df$Symbol))
+
+# Inspect top ranked genes missing from single cell dataset
+top_ranked_missing <- filter(rank_df, Symbol %in% setdiff(rank_df$Symbol, rownames(sdat)))
+
+# Only keep common genes
+rank_df <- filter(rank_df, Symbol %in% intersect(rank_df$Symbol, rownames(sdat)))
 
 
 # Cor by cell type
 # ------------------------------------------------------------------------------
 
 
-cor_tf <- tf_by_ct_cmat(cor_ct, tf, rm_tf = TRUE)
-
+# Matrix TF-gene cor per cell type for the given TF
+cor_tf <- tf_by_ct_cmat(cor_ct, tf, rm_tf = FALSE)
 
 # Some NAs refer to genes not expressed in that cell type
 gene_nas <- apply(cor_tf, 1, function(x) sum(is.na(x)))
@@ -226,11 +239,14 @@ ct_nas <- apply(cor_tf, 2, function(x) sum(is.na(x)))
 # All NAs correspond to cell types where TF is not expressed
 all_ct_nas <- apply(cor_tf, 2, function(x) all(is.na(x)))
 all_ct_nas <- names(all_ct_nas[all_ct_nas])
-all(sdat@assays$RNA@data[tf, sdat$Cell_type %in% all_ct_nas] == 0)
-
+stopifnot(all(sdat@assays$RNA@data[tf, sdat$Cell_type %in% all_ct_nas] == 0))
 
 # Remove cell types with all NAs
 cor_tf <- cor_tf[, setdiff(colnames(cor_tf), all_ct_nas)]
+
+
+# Threshold aggregate: Binarize the top TF-gene coexpr pairs and then sum 
+# across cell types. Final order is rank of this count.
 
 
 # Accept top 0.5% and bottom 0.5% of cor
@@ -248,6 +264,8 @@ agg_tf3 <- rowSums(thresh_tf3, na.rm = TRUE)
 
 # Min rank scheme, where a TF-gene pair is assigned its best rank across all
 # cell types. Break ties using average cor across across cell types.
+# NOTE: why is frank() removing names from input vectors?
+
 rank_tf <- rank_cormat(cor_tf)
 rank_min_tf <- apply(rank_tf, 1, min)
 rank_mean_tf <- rowMeans(rank_tf)
@@ -269,10 +287,10 @@ names(rank_min_tf) <- names(rank_mean_tf) <- names(rank_tiebreak_tf) <- rownames
 # ------------------------------------------------------------------------------
 
 
-# Rank genes by their average
+# Rank genes by their average expression across all cells
 
 avg_all <- rowMeans(sdat@assays$RNA@data)
-avg_all <- avg_all[evidence2$Symbol]
+avg_all <- avg_all[rank_df$Symbol]
 rank_avg_all <- rank(-avg_all, ties.method = "min")
 
 
@@ -281,110 +299,36 @@ rank_avg_all <- rank(-avg_all, ties.method = "min")
 set.seed(14)
 
 sampled_targets <- sample_expression_level(
-  sdat = subset(sdat, features = evidence2$Symbol), 
-  targets = filter(evidence2, Curated_target)$Symbol, 
+  sdat = subset(sdat, features = rank_df$Symbol), 
+  targets = filter(rank_df, Curated_target)$Symbol, 
   rank_window = 10)
 
 # Targets from mismatched TRs
 
 mismatched_targets <- lapply(rank_l$Mouse[setdiff(tfs, tf)], function(x) {
-  filter(x, Curated_target)$Symbol
+  intersect(filter(x, Curated_target)$Symbol, rank_df$Symbol)
 })
 
 
-# Collect data for joint comparison
+# Collect data for joint comparison/plotting
 # ------------------------------------------------------------------------------
 
 
-
-
-
-
-# Precision recall dfs
-rank_int_pr <- get_perf_df(
-  rank_df = arrange(evidence, Rank_integrated),
-  label_col = "Curated_target",
-  measure = "PR")
-
-
-# ROC dfs
-rank_int_roc <- get_perf_df(
-  rank_df = arrange(evidence, Rank_integrated),
-  label_col = "Curated_target",
-  measure = "ROC")
-
-
-# Area under the PR curve
-rank_int_auprc <- get_au_perf(
-  rank_df = arrange(evidence, Rank_integrated),
-  label_col = "Curated_target",
-  measure = "AUPRC")
-
-
-# Area under the ROC
-rank_int_auc <- get_au_perf(
-  rank_df = arrange(evidence, Rank_integrated),
-  label_col = "Curated_target",
-  measure = "AUC")
-
-
-
-# Prepare plot dfs
-
-roc_l <- list(Integrated_rank = rank_int_roc, 
-              Coexpr_all = cor_all_roc, 
-              Coexpr_all_abs = cor_all_abs_roc)
-
-
-roc_df <- 
-  do.call(rbind, roc_l) %>%
-  mutate(
-    Group = factor(rep(names(roc_l), each = nrow(roc_l[[1]])),
-                   levels = names(roc_l), ordered = TRUE),
-    lw = (Group == "Integrated_rank"))
-
-
-auc_labels <- c(
-  Integrated_rank = paste0("Integrated AUC=", round(rank_int_auc, 3)),
-  Coexpr_all = paste0("Coexpr (all) AUC=", round(cor_all_auc, 3)),
-  Coexpr_all_abs = paste0("Coexpr (abs all) AUC=", round(cor_all_abs_auc, 3)))
-
-
-# cols <- c("Integrated_rank" = "#1b9e77",
-#           "Coexpr_all" = "dodgerblue4",
-#           "Coexpr_all_abs" = "#7570b3")
-
-
-cols <- c("Integrated_rank" = "black",
-          "Coexpr_all" = "grey67",
-          "Coexpr_all_abs" = "grey77")
-
-
-plot_auc(roc_df, auc_labels, cols, tf)
-
-
-
-
-
-evidence2 <- evidence
-
-
-prep_df <- function(vec, name, add_rank = TRUE) {
-  df <- data.frame(vec)
-  colnames(df) <- name
-  df <- rownames_to_column(df, var = "Symbol")
-  
-  if (add_rank) {
-    df[[paste0("Rank_", name)]] <- rank(-vec, ties.method = "min")
-  }
-  
-  return(df)
-}
-
 # prep_df(agg_tf1, "Agg1") %>% head
+# plyr::join_all(list(de_table, bind_summary), by = "Symbol")
+# cor_all_tf
+# agg_tf1
+# agg_tf2
+# agg_tf3
+# rank_min_tf
+# rank_mean_tf
+# rank_tiebreak_tf
+# rank_avg_all
 
 
-evidence2 <- left_join(evidence2, prep_df(agg_tf1, "Agg1"), by = "Symbol") %>% 
+evidence <- 
+  left_join(rank_df, cor_all_tf, by = "Symbol") %>% 
+  left_join(prep_df(agg_tf1, "Agg1"), by = "Symbol") %>% 
   left_join(prep_df(agg_tf2, "Agg2"), by = "Symbol") %>% 
   left_join(prep_df(agg_tf3, "Agg3"), by = "Symbol") %>% 
   left_join(prep_df(rank_min_tf, "Rank_min", add_rank = FALSE), by = "Symbol") %>% 
@@ -392,6 +336,8 @@ evidence2 <- left_join(evidence2, prep_df(agg_tf1, "Agg1"), by = "Symbol") %>%
   left_join(prep_df(rank_tiebreak_tf, "Rank_tiebreak", add_rank = FALSE), by = "Symbol") %>% 
   left_join(prep_df(rank_avg_all, "Rank_expression", add_rank = FALSE), by = "Symbol")
 
+
+# Which ranking columns to use
 
 keep_cols <- c(
   "Rank_integrated",
@@ -407,38 +353,72 @@ keep_cols <- c(
 )
 
 
-roc_l2 <- lapply(keep_cols, function(x) {
+stopifnot(all(keep_cols %in% colnames(evidence)))
+
+
+# List of ROC dfs
+roc_l <- lapply(keep_cols, function(x) {
+  
   get_perf_df(
-    rank_df = arrange(evidence2, !!sym(x)),
+    rank_df = dplyr::arrange(evidence, !!sym(x)),
     label_col = "Curated_target",
     measure = "ROC") %>% 
     mutate(Group = x)
 })
+names(roc_l) <- keep_cols
 
-names(roc_l2) <- keep_cols
 
-
+# List of AUROCs
 auc_l <- lapply(keep_cols, function(x) {
+  
   get_au_perf(
-    rank_df = arrange(evidence2, !!sym(x)),
+    rank_df = dplyr::arrange(evidence, !!sym(x)),
     label_col = "Curated_target",
     measure = "AUC")
 })
-
 names(auc_l) <- keep_cols
 
 
-# Prepare plot dfs
+
+# List of PR dfs
+pr_l <- lapply(keep_cols, function(x) {
+  
+  get_perf_df(
+    rank_df = dplyr::arrange(evidence, !!sym(x)),
+    label_col = "Curated_target",
+    measure = "PR") %>% 
+    mutate(Group = x)
+})
+names(pr_l) <- keep_cols
 
 
-roc_df2 <- do.call(rbind, roc_l2)
+# List of AUROCs
+auprc_l <- lapply(keep_cols, function(x) {
+  
+  get_au_perf(
+    rank_df = dplyr::arrange(evidence, !!sym(x)),
+    label_col = "Curated_target",
+    measure = "AUPRC")
+})
+names(auprc_l) <- keep_cols
 
 
 
-auc_labels2 <- vapply(keep_cols, function(x) {
-  paste0(x, " AUC=", round(auc_l[[x]], 3))
-}, FUN.VALUE = character(1))
 
+# Prepare for plotting
+# ------------------------------------------------------------------------------
+
+
+# Long df for plotting
+
+roc_df <- do.call(rbind, roc_l) %>% 
+  mutate(Group = factor(Group, levels = keep_cols))
+
+# Labels for plotting
+
+auc_labels <- paste0(keep_cols, " AUC=", round(unlist(auc_l), 3))
+
+# Colours
 
 cols <- c("Rank_integrated" = "black",
           "Rank_cor_all" = "dodgerblue1",
@@ -452,7 +432,8 @@ cols <- c("Rank_integrated" = "black",
           "Rank_expression" = "lightgrey")
 
 
-plot_auc(roc_df2, auc_labels2, cols, tf)
+
+plot_auc(roc_df, auc_labels, cols, tf)
 
 
 
