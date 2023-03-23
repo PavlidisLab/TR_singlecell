@@ -10,9 +10,10 @@ library(Seurat)
 library(cowplot)
 library(parallel)
 library(ROCR)
+library(pheatmap)
+library(RColorBrewer)
 # library(WGCNA)
 # library(ggrepel)
-# library(pheatmap)
 source("R/utils/functions.R")
 source("R/00_config.R")
 
@@ -154,7 +155,7 @@ get_perf_df <- function(rank_df, label_col, measure = NULL) {
 
 get_au_perf <- function(rank_df, label_col, measure = NULL) {
   
-  stopifnot(label_col %in% colnames(rank_df), measure %in% c("AUC", "AUPRC"))
+  stopifnot(label_col %in% colnames(rank_df), measure %in% c("AUROC", "AUPRC"))
   
   # positives/has evidence=1 negatives/no known evidence=0 
   labels <- as.factor(as.numeric(rank_df[[label_col]]))
@@ -164,7 +165,7 @@ get_au_perf <- function(rank_df, label_col, measure = NULL) {
   
   pred <- ROCR::prediction(predictions = scores, labels = labels)
   
-  if (measure == "AUC") {
+  if (measure == "AUROC") {
     perf <- ROCR::performance(pred, measure = "auc")@y.values[[1]]
   } else {
     perf <- ROCR::performance(pred, measure = "aucpr")@y.values[[1]]
@@ -217,7 +218,7 @@ prep_df <- function(vec, name, add_rank = TRUE) {
 # ------------------------------------------------------------------------------
 
 
-tf <- "Ascl1"
+tf <- "Pax6"
 rank_df <- rank_l$Mouse[[tf]]
 
 # Dataframe of TF-gene correlation (+/- abs) and their ranking
@@ -412,7 +413,7 @@ auc_l <- lapply(keep_cols, function(x) {
   get_au_perf(
     rank_df = dplyr::arrange(evidence, !!sym(x)),
     label_col = "Curated_target",
-    measure = "AUC")
+    measure = "AUROC")
 })
 names(auc_l) <- keep_cols
 
@@ -430,7 +431,7 @@ pr_l <- lapply(keep_cols, function(x) {
 names(pr_l) <- keep_cols
 
 
-# List of AUROCs
+# List of AUPRCs
 auprc_l <- lapply(keep_cols, function(x) {
   
   get_au_perf(
@@ -513,7 +514,7 @@ auc_null_l <- lapply(names(mismatched_targets), function(x) {
   get_au_perf(
     rank_df = null_df,
     label_col = "Curated_target",
-    measure = "AUC")
+    measure = "AUROC")
 })
 names(auc_null_l) <- names(mismatched_targets)
 
@@ -524,7 +525,7 @@ auc_null_l[[tf]] <- auc_l$Rank_integrated
 auc_null_labels <- paste0(names(auc_null_l), " AUC=", round(unlist(auc_null_l), 3))
 
 
-cols_null <- c(rep("lightgrey", 7), "red", "blue")
+cols_null <- c(rep("lightgrey", 7), "red", "black")
 names(cols_null) <- names(auc_null_l)
 
 plot_auc(roc_null_df, auc_null_labels, cols_null, tf)
@@ -533,8 +534,206 @@ plot_auc(roc_null_df, auc_null_labels, cols_null, tf)
 
 
 # across all TFs
-# TODO: remove TF but keep consistent dims
 # ------------------------------------------------------------------------------
+
+
+
+
+all_auprc_l <- mclapply(tfs, function(tf) {
+  
+  # rank_df <- rank_l$Mouse[[tf]] %>% 
+  #   filter(Symbol %in% intersect(Symbol, rownames(sdat))) %>% 
+  #   filter(Symbol != tf)
+  
+  
+  rank_df <- rank_l$Mouse[[tf]] %>% 
+    filter(Symbol %in% intersect(Symbol, rownames(sdat)))
+  
+  
+  cor_all_tf <- get_cor_all_df(cor_all, tf, rm_tf = FALSE)
+  
+  cor_tf <- tf_by_ct_cmat(cor_ct, tf, rm_tf = FALSE)
+  all_ct_nas <- apply(cor_tf, 2, function(x) all(is.na(x)))
+  all_ct_nas <- names(all_ct_nas[all_ct_nas])
+  stopifnot(all(sdat@assays$RNA@data[tf, sdat$Cell_type %in% all_ct_nas] == 0))
+  cor_tf <- cor_tf[, setdiff(colnames(cor_tf), all_ct_nas)]
+  
+  
+  thresh_tf1 <- threshold_cormat(cor_tf, top_qtl = 0.995, btm_qtl = 0.005)
+  agg_tf1 <- rowSums(thresh_tf1, na.rm = TRUE)
+  thresh_tf2 <- threshold_cormat(cor_tf, top_qtl = 0.995)
+  agg_tf2 <- rowSums(thresh_tf2, na.rm = TRUE)
+  thresh_tf3 <- threshold_cormat(abs(cor_tf), top_qtl = 0.995)
+  agg_tf3 <- rowSums(thresh_tf3, na.rm = TRUE)
+  
+  
+  rank_tf <- rank_cormat(cor_tf)
+  rank_min_tf <- apply(rank_tf, 1, min)
+  rank_mean_tf <- rowMeans(rank_tf)
+  rank_tiebreak_tf <- data.table::frank(list(rank_min_tf, rank_mean_tf), ties.method = "min")
+  names(rank_min_tf) <- names(rank_mean_tf) <- names(rank_tiebreak_tf) <- rownames(rank_tf)
+  
+  
+  de_ct <- de_top_ct[[tf]] %>% 
+    rownames_to_column(var = "Symbol") %>% 
+    filter(Symbol %in% rank_df$Symbol) %>% 
+    arrange(p_val, -avg_log2FC) %>% 
+    dplyr::select(Symbol, p_val, avg_log2FC) %>% 
+    dplyr::rename(DE_CT_pval = p_val, DE_CT_log2FC = avg_log2FC) %>% 
+    mutate(Rank_DE_CT = 1:nrow(.))
+  
+  
+  de_qntl <- de_top_qntl[[tf]] %>% 
+    rownames_to_column(var = "Symbol") %>% 
+    filter(Symbol %in% rank_df$Symbol) %>% 
+    arrange(p_val, -avg_log2FC) %>% 
+    dplyr::select(Symbol, p_val, avg_log2FC) %>% 
+    dplyr::rename(DE_qntl_pval = p_val, DE_qntl_log2FC = avg_log2FC) %>% 
+    mutate(Rank_DE_qntl = 1:nrow(.))
+  
+  
+  evidence <- 
+    left_join(rank_df, cor_all_tf, by = "Symbol") %>% 
+    left_join(prep_df(agg_tf1, "Agg1"), by = "Symbol") %>% 
+    left_join(prep_df(agg_tf2, "Agg2"), by = "Symbol") %>% 
+    left_join(prep_df(agg_tf3, "Agg3"), by = "Symbol") %>% 
+    left_join(prep_df(rank_min_tf, "Rank_min", add_rank = FALSE), by = "Symbol") %>% 
+    left_join(prep_df(rank_mean_tf, "Rank_mean", add_rank = FALSE), by = "Symbol") %>% 
+    left_join(prep_df(rank_tiebreak_tf, "Rank_tiebreak", add_rank = FALSE), by = "Symbol") %>% 
+    left_join(de_ct, by = "Symbol") %>% 
+    left_join(de_qntl, by = "Symbol") %>% 
+    left_join(prep_df(rank_avg_all, "Rank_expression", add_rank = FALSE), by = "Symbol")
+  
+  
+  auprc_l <- lapply(keep_cols, function(x) {
+    
+    get_au_perf(
+      rank_df = dplyr::arrange(evidence, !!sym(x)),
+      label_col = "Curated_target",
+      measure = "AUPRC")
+  })
+  names(auprc_l) <- keep_cols
+  
+  return(unlist(auprc_l))
+  
+}, mc.cores = 8)
+
+
+
+all_auprc_df <- round(do.call(rbind, all_auprc_l), 3)
+rownames(all_auprc_df) <- tfs
+
+
+pheatmap(all_auprc_df,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         gaps_col = c(1, 3, 6, 9, 11),
+         color = colorRampPalette(brewer.pal(n = 7, name = "OrRd"))(100),
+         display_numbers = all_auprc_df,
+         number_color = "black",
+         fontsize = 20,
+         cellwidth = 50,
+         cellheight = 50)
+
+
+
+
+all_auroc_l <- mclapply(tfs, function(tf) {
+  
+  rank_df <- rank_l$Mouse[[tf]] %>%
+    filter(Symbol %in% intersect(Symbol, rownames(sdat))) %>%
+    filter(Symbol != tf)
+  
+  # rank_df <- rank_l$Mouse[[tf]] %>% 
+  #   filter(Symbol %in% intersect(Symbol, rownames(sdat)))
+  
+  
+  cor_all_tf <- get_cor_all_df(cor_all, tf, rm_tf = FALSE)
+  
+  cor_tf <- tf_by_ct_cmat(cor_ct, tf, rm_tf = FALSE)
+  all_ct_nas <- apply(cor_tf, 2, function(x) all(is.na(x)))
+  all_ct_nas <- names(all_ct_nas[all_ct_nas])
+  stopifnot(all(sdat@assays$RNA@data[tf, sdat$Cell_type %in% all_ct_nas] == 0))
+  cor_tf <- cor_tf[, setdiff(colnames(cor_tf), all_ct_nas)]
+  
+  
+  thresh_tf1 <- threshold_cormat(cor_tf, top_qtl = 0.995, btm_qtl = 0.005)
+  agg_tf1 <- rowSums(thresh_tf1, na.rm = TRUE)
+  thresh_tf2 <- threshold_cormat(cor_tf, top_qtl = 0.995)
+  agg_tf2 <- rowSums(thresh_tf2, na.rm = TRUE)
+  thresh_tf3 <- threshold_cormat(abs(cor_tf), top_qtl = 0.995)
+  agg_tf3 <- rowSums(thresh_tf3, na.rm = TRUE)
+  
+  
+  rank_tf <- rank_cormat(cor_tf)
+  rank_min_tf <- apply(rank_tf, 1, min)
+  rank_mean_tf <- rowMeans(rank_tf)
+  rank_tiebreak_tf <- data.table::frank(list(rank_min_tf, rank_mean_tf), ties.method = "min")
+  names(rank_min_tf) <- names(rank_mean_tf) <- names(rank_tiebreak_tf) <- rownames(rank_tf)
+  
+  
+  de_ct <- de_top_ct[[tf]] %>% 
+    rownames_to_column(var = "Symbol") %>% 
+    filter(Symbol %in% rank_df$Symbol) %>% 
+    arrange(p_val, -avg_log2FC) %>% 
+    dplyr::select(Symbol, p_val, avg_log2FC) %>% 
+    dplyr::rename(DE_CT_pval = p_val, DE_CT_log2FC = avg_log2FC) %>% 
+    mutate(Rank_DE_CT = 1:nrow(.))
+  
+  
+  de_qntl <- de_top_qntl[[tf]] %>% 
+    rownames_to_column(var = "Symbol") %>% 
+    filter(Symbol %in% rank_df$Symbol) %>% 
+    arrange(p_val, -avg_log2FC) %>% 
+    dplyr::select(Symbol, p_val, avg_log2FC) %>% 
+    dplyr::rename(DE_qntl_pval = p_val, DE_qntl_log2FC = avg_log2FC) %>% 
+    mutate(Rank_DE_qntl = 1:nrow(.))
+  
+  
+  evidence <- 
+    left_join(rank_df, cor_all_tf, by = "Symbol") %>% 
+    left_join(prep_df(agg_tf1, "Agg1"), by = "Symbol") %>% 
+    left_join(prep_df(agg_tf2, "Agg2"), by = "Symbol") %>% 
+    left_join(prep_df(agg_tf3, "Agg3"), by = "Symbol") %>% 
+    left_join(prep_df(rank_min_tf, "Rank_min", add_rank = FALSE), by = "Symbol") %>% 
+    left_join(prep_df(rank_mean_tf, "Rank_mean", add_rank = FALSE), by = "Symbol") %>% 
+    left_join(prep_df(rank_tiebreak_tf, "Rank_tiebreak", add_rank = FALSE), by = "Symbol") %>% 
+    left_join(de_ct, by = "Symbol") %>% 
+    left_join(de_qntl, by = "Symbol") %>% 
+    left_join(prep_df(rank_avg_all, "Rank_expression", add_rank = FALSE), by = "Symbol")
+  
+  
+  auroc_l <- lapply(keep_cols, function(x) {
+    
+    get_au_perf(
+      rank_df = dplyr::arrange(evidence, !!sym(x)),
+      label_col = "Curated_target",
+      measure = "AUROC")
+  })
+  names(auroc_l) <- keep_cols
+  
+  return(unlist(auroc_l))
+  
+}, mc.cores = 8)
+
+
+
+all_auroc_df <- round(do.call(rbind, all_auroc_l), 3)
+rownames(all_auroc_df) <- tfs
+
+
+pheatmap(all_auroc_df,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         gaps_col = c(1, 3, 6, 9, 11),
+         color = colorRampPalette(brewer.pal(n = 7, name = "Greens"))(100),
+         display_numbers = all_auroc_df,
+         number_color = "black",
+         fontsize = 20,
+         cellwidth = 50,
+         cellheight = 50)
+
+
 
 
 tt <- lapply(tfs, function(x) {
