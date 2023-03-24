@@ -33,11 +33,9 @@ cor_ct <- lapply(cts, function(x) {
   
   cells <- sdat$Cell_type == x
   
-  cmat <- WGCNA::cor(x = mat[cells, tfs],
-                     y = mat[cells, ],
+  cmat <- WGCNA::cor(x = mat[cells, ],
                      nThreads = ncore,
                      use = "pairwise.complete.obs")
-  
 })
 
 names(cor_ct) <- cts
