@@ -121,14 +121,20 @@ sample_expression_level <- function(sdat, targets, rank_window = 10) {
 
 # TODO:
 
-plot_scatter <- function(sdat, gene1, gene2) {
+plot_scatter <- function(sdat, gene1, gene2, assay = "RNA", slot = "data") {
   
-  plot_df <- data.frame(gene1 = sdat@assays$RNA@data[gene1, ],
-                        gene2 = sdat@assays$RNA@data[gene2, ])
+  stopifnot(assay %in% Assays(sdat), slot %in% slotNames(sdat@assays[[assay]]))
   
-  ggplot(plot_df, aes(x = gene1, y = gene2)) +
-    geom_jitter() +
+  counts <- GetAssayData(object = sdat_sub@assays[[assay]], slot = slot)
+  
+  plot_df <- data.frame(t(as.matrix(counts[c(gene1, gene2), ])))
+  
+  ggplot(plot_df, aes(x = !!sym(gene1), y = !!sym(gene2))) +
+    # geom_jitter(shape = 21, size = 2.4) +
+    geom_point(shape = 21, size = 2.4) +
     xlab(gene1) +
     ylab(gene2) +
-    theme_classic()
+    theme_classic() +
+    theme(axis.title = element_text(size = 25),
+          axis.text = element_text(size = 20))
 }
