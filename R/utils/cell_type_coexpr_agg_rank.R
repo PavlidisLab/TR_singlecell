@@ -95,6 +95,34 @@ tf_na_count <- function(cor_ct_list, tf) {
 }
 
 
+# Return a df of the max cor for each cell type for the given TR. NAs removed
+
+max_cor_df <- function(cor_ct_list, tf) {
+  
+  cor_max <- lapply(names(cor_ct_list), function(x) {
+    
+    cor_mat <- cor_ct_list[[x]]
+    
+    vec <- cor_mat[tf, setdiff(colnames(cor_mat), tf)]
+    
+    if (all(is.na(vec))) {
+      return(NA)
+    }
+    
+    data.frame(
+      Cell_type = x,
+      Value = max(vec, na.rm = TRUE),
+      Symbol = names(vec)[which.max(vec)])
+  })
+  
+  cor_max <- cor_max[!is.na(cor_max)]
+  
+  cor_max <- data.frame(do.call(rbind, cor_max)) %>% 
+    arrange(desc(Value))
+  
+  return(cor_max)
+}
+
 
 ##
 
@@ -128,23 +156,19 @@ assertthat::are_equal(
   cor_rank_mean_nona["Xkr4", "Ascl1"])
 
 
+# Then convert these aggregations to ranks. Mean_all and sum same rank.
 
 cor_agg_sum <- rank_cormat(-cor_rank_sum)
 cor_agg_mean_nona <- rank_cormat(-cor_rank_mean_nona)
 cor_agg_mean_all <- rank_cormat(-cor_rank_mean_all)
+# identical(cor_agg_sum[, tf], cor_agg_mean_all[, tf])
 
-cor_rank_sum[1:5, 1:5]
-cor_rank_mean_nona[1:5, 1:5]
-cor_rank_mean_all[1:5, 1:5]
 
-cor_agg_sum[1:5, 1:5]
-cor_agg_mean_nona[1:5, 1:5]
-cor_agg_mean_all[1:5, 1:5]
+
+# Focus on single TF and organize gene rankings
 
 
 tf <- "Ascl1"
-
-identical(cor_agg_sum[, tf], cor_agg_mean_all[, tf])
 
 
 rank_df <- data.frame(
@@ -162,6 +186,38 @@ rank_df <- data.frame(
 cor(select_if(rank_df, is.numeric), use = "pairwise.complete.obs")
 
 
+
+filter(rank_df, Count_NA < 120) %>% arrange(Mean_rank_nona) %>% head()
+
+
+gene2 <- "Stk17b"
+ct <- "VGLUT1-31-Igfn1_Ndst4"
+
+sort(sapply(cor_ct, function(x) x[tf, gene2]), decreasing = TRUE)
+head(sort(cor_ct[[ct]][tf, ], decreasing = TRUE))
+
+
+# By cell type
+sdat_sub <- subset(sdat, idents = ct)
+plot_scatter(sdat_sub, tf, gene2, slot = "data", jitter = TRUE)
+plot_scatter(sdat_sub, tf, gene2, slot = "data", jitter = FALSE)
+plot_scatter(sdat_sub, tf, gene2, slot = "counts", jitter = TRUE)
+plot_scatter(sdat_sub, tf, gene2, slot = "counts", jitter = FALSE)
+cor(t(as.matrix(GetAssayData(object = sdat_sub, slot = "data")[c(tf, gene2), ])))
+cor(t(as.matrix(GetAssayData(object = sdat_sub, slot = "counts")[c(tf, gene2), ])))
+
+
+# Across all cells
+plot_scatter(sdat, tf, gene2, slot = "data", jitter = TRUE)
+plot_scatter(sdat, tf, gene2, slot = "data", jitter = FALSE)
+plot_scatter(sdat, tf, gene2, slot = "counts", jitter = TRUE)
+plot_scatter(sdat, tf, gene2, slot = "counts", jitter = FALSE)
+cor_all[tf, gene2]
+cor(t(as.matrix(GetAssayData(object = sdat, slot = "counts")[c(tf, gene2), ])))
+
+
+# Which TF-gene pair had max cor in each cell type
+max_cor <- max_cor_df(cor_ct, tf)
 
 
 
