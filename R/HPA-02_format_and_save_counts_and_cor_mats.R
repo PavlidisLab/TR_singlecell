@@ -92,7 +92,7 @@ mat_list <- list(
   FANTOM = process_mat(fantom, var = "Normalized.tags.per.million"),
   Allen = process_mat(allen, var = "Expression.energy", group = "Brain.region"),
   Scell = process_mat(sc, group = "Cell.type"),
-  Scell_tissue = process_mat(sc_tissue, var = "pTPM", group = "ID")
+  Scell_tissue = process_mat(sc_tissue, var = "pTPM", group = "ID"),
   Pigbrain = process_mat(pigbrain, group = "Brain.region"),
   Mousebrain = process_mat(mousebrain, group = "Brain.region"),
   Blood_HPA = process_mat(blood_hpa, group = "Blood.cell"),
