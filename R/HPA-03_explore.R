@@ -65,7 +65,7 @@ rank_cor <- function(cor_df) {
 
 
 
-tf <- "PAX6"
+tf <- "NEUROD1"
 tf_cor <- cor_df(cor_l, tf)
 tf_cor_rank <- rank_cor(tf_cor)
 
@@ -81,129 +81,31 @@ all_cor <- cor(dplyr::select_if(tf_cor, is.numeric),
 # ------------------------------------------------------------------------------
 
 
-
-get_perf_df <- function(rank_df, label_col, measure = NULL) {
-  
-  stopifnot(label_col %in% colnames(rank_df), measure %in% c("ROC", "PR"))
-  
-  # positives/has evidence=1 negatives/no known evidence=0 
-  labels <- as.factor(as.numeric(rank_df[[label_col]]))
-  
-  # convert ranks to monotonically decreasing scores representing rank importance
-  scores <- 1/(1:length(labels))
-  
-  pred <- ROCR::prediction(predictions = scores, labels = labels)
-  
-  if (measure == "ROC") {
-    perf <- ROCR::performance(pred, measure = "tpr", x.measure = "fpr")
-    perf_df <- data.frame(TPR = unlist(perf@y.values),
-                          FPR = unlist(perf@x.values))
-  } else {
-    perf <- ROCR::performance(pred, measure = "prec", x.measure = "rec")
-    perf_df <- data.frame(Precision = unlist(perf@y.values),
-                          Recall = unlist(perf@x.values))
-  }
-  
-  return(perf_df)
-}
-
-
-# TODO:
-
-get_au_perf <- function(rank_df, label_col, measure = NULL) {
-  
-  stopifnot(label_col %in% colnames(rank_df), measure %in% c("AUROC", "AUPRC"))
-  
-  # positives/has evidence=1 negatives/no known evidence=0 
-  labels <- as.factor(as.numeric(rank_df[[label_col]]))
-  
-  # convert ranks to monotonically decreasing scores representing rank importance
-  scores <- 1/(1:length(labels))
-  
-  pred <- ROCR::prediction(predictions = scores, labels = labels)
-  
-  if (measure == "AUROC") {
-    perf <- ROCR::performance(pred, measure = "auc")@y.values[[1]]
-  } else {
-    perf <- ROCR::performance(pred, measure = "aucpr")@y.values[[1]]
-  }
-  
-  return(perf)
-}
-
-
-# TODO
-# TODO: labels should just be generated inside
-
-plot_auc <- function(roc_df, auc_labels, cols, tf) {
-  
-  p <- 
-    # ggplot(roc_df, aes(x = Recall, y = Precision, col = Group)) +
-    ggplot(roc_df, aes(x = FPR, y = TPR, col = Group)) +
-    geom_path() +
-    ggtitle(tf) +
-    scale_color_manual(labels = auc_labels, values = cols) +
-    guides(colour = guide_legend(ncol = 2)) +
-    theme_classic() +
-    theme(axis.text = element_text(size = 25),
-          axis.title = element_text(size = 30),
-          plot.title = element_text(size = 30),
-          legend.title = element_blank(),
-          legend.text = element_text(size = 20),
-          legend.position = c(0.7, 0.2))
-  
-  return(p)
-}
-
-
 rank_df <- left_join(
   rank_l$Human[[tf]][, c("Symbol", "Rank_integrated", "Curated_target")],
   rownames_to_column(data.frame(tf_cor_rank), var = "Symbol"),
-  by = "Symbol")
+  by = "Symbol") %>% 
+  filter(Symbol != tf)
   
 
 keep_cols <- c("Rank_integrated", "Average_rank", names(expr_l))
 
 
-# List of ROC dfs
-roc_l <- lapply(keep_cols, function(x) {
-  
-  get_perf_df(
-    rank_df = dplyr::arrange(rank_df, !!sym(x)),
-    label_col = "Curated_target",
-    measure = "ROC") %>%
-    # measure = "PR") %>% 
-    mutate(Group = x)
-})
-names(roc_l) <- keep_cols
+pr_df <- all_perf_df(rank_df, keep_cols, label_col = "Curated_target", measure = "PR")
+auprc <- all_au_perf(rank_df, keep_cols, label_col = "Curated_target", measure = "AUPRC")
+
+roc_df <- all_perf_df(rank_df, keep_cols, label_col = "Curated_target", measure = "ROC")
+auroc <- all_au_perf(rank_df, keep_cols, label_col = "Curated_target", measure = "AUROC")
 
 
-# List of AUROCs
-auc_l <- lapply(keep_cols, function(x) {
-  
-  get_au_perf(
-    rank_df = dplyr::arrange(rank_df, !!sym(x)),
-    label_col = "Curated_target",
-    measure = "AUROC")
-    # measure = "AUPRC")
-})
-names(auc_l) <- keep_cols
-
-
-roc_df <- do.call(rbind, roc_l) %>% 
-  mutate(Group = factor(Group, levels = keep_cols))
-
-auc_labels <- paste0(names(auc_l), " AUC=", round(unlist(auc_l), 3))
-
-
-cols <- c(rep("lightgrey", length(auc_labels)))
-names(cols) <- names(auc_l)
+cols <- c(rep("lightgrey", length(keep_cols)))
+names(cols) <- keep_cols
 cols["Rank_integrated"] <- "black"
 cols["Average_rank"] <- "red"
 
 
-plot_auc(roc_df, auc_labels, cols, tf)
-
+plot_perf(df = roc_df, auc_l = auroc, measure = "ROC", cols = cols, title = tf, ncol_legend = 2)
+plot_perf(df = pr_df, auc_l = auprc, measure = "PR", cols = cols, title = tf, ncol_legend = 2)
 
 
 
@@ -211,9 +113,12 @@ plot_auc(roc_df, auc_labels, cols, tf)
 # ------------------------------------------------------------------------------
 
 
+# PAX6 - PCSK2 perfect cor due to sparsity, but does have good evidence otherwise
+
+
 # TODO: 
 
-gene <- "CSF1"
+gene <- "PCSK2"
 
 p_list <- lapply(names(expr_l), function(x) {
   
