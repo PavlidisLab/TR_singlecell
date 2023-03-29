@@ -16,6 +16,11 @@ sdat <- readRDS(seurat_path)
 cor_ct <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_cormat_celltype.RDS")
 cor_all <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_cormat_all.RDS")
 
+# Ranked targets from paper
+rank_path <- "/space/scratch/amorin/R_objects/ranked_target_list_Apr2022.RDS"
+rank_l <- readRDS(rank_path)
+
+
 
 
 get_cor_all_df <- function(cmat, tf, rm_tf = TRUE) {
@@ -168,7 +173,7 @@ cor_agg_mean_all <- rank_cormat(-cor_rank_mean_all)
 # ------------------------------------------------------------------------------
 
 
-tf <- "Runx1"
+tf <- "Pax6"
 
 
 # Which TF-gene pair had max cor in each cell type
@@ -210,11 +215,11 @@ filter(rank_df, Count_NA == min(rank_df$Count_NA)) %>% arrange(Mean_rank_nona) %
 # ------------------------------------------------------------------------------
 
 
-gene2 <- "Serpinb3c"
-ct <- "VGLUT1-22-Trh_Medag"
+gene2 <- "Meis2"
+ct <- "GABA-46-Lamp5-Kit"
 
 sort(sapply(cor_ct, function(x) x[tf, gene2]), decreasing = TRUE)
-sort(sapply(cor_rank_ct, function(x) x[gene2, tf]), decreasing = TRUE)
+sort(sapply(cor_rank_ct, function(x) x[gene2, tf]))
 head(sort(cor_ct[[ct]][tf, ], decreasing = TRUE))
 
 
@@ -236,6 +241,35 @@ plot_scatter(sdat, tf, gene2, slot = "counts", jitter = TRUE)
 plot_scatter(sdat, tf, gene2, slot = "counts", jitter = FALSE)
 cor_all[tf, gene2]
 cor(t(as.matrix(GetAssayData(object = sdat, slot = "counts")[c(tf, gene2), ])))
+
+
+
+
+###
+
+rank_df <- rank_l$Mouse[[tf]] %>% 
+  dplyr::select(Symbol, Rank_integrated, Curated_target) %>% 
+  left_join(rank_df, by = "Symbol") %>% 
+  filter(Symbol != tf)
+
+
+keep_cols <- c("Rank_integrated", "Sum_rank", "Mean_rank_nona")
+
+
+pr_df <- all_perf_df(rank_df, keep_cols, label_col = "Curated_target", measure = "PR")
+auprc <- all_au_perf(rank_df, keep_cols, label_col = "Curated_target", measure = "AUPRC")
+
+roc_df <- all_perf_df(rank_df, keep_cols, label_col = "Curated_target", measure = "ROC")
+auroc <- all_au_perf(rank_df, keep_cols, label_col = "Curated_target", measure = "AUROC")
+
+cols <- c(rep("lightgrey", length(keep_cols)))
+names(cols) <- keep_cols
+cols["Rank_integrated"] <- "black"
+
+
+plot_perf(df = roc_df, auc_l = auroc, measure = "ROC", cols = cols, title = tf, ncol_legend = 1)
+plot_perf(df = pr_df, auc_l = auprc, measure = "PR", cols = cols, title = tf, ncol_legend = 1)
+
 
 
 
