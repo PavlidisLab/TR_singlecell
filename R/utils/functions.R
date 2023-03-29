@@ -114,9 +114,154 @@ sample_expression_level <- function(sdat, targets, rank_window = 10) {
 
 
 
+# Performance of rankings in a data frame. 
+# ------------------------------------------------------------------------------
 
 
-# Temp plot functions
+# TODO:
+
+get_perf_df <- function(rank_df, label_col, measure = NULL) {
+  
+  stopifnot(label_col %in% colnames(rank_df), measure %in% c("ROC", "PR"))
+  
+  # positives/has evidence=1 negatives/no known evidence=0 
+  labels <- as.factor(as.numeric(rank_df[[label_col]]))
+  
+  # convert ranks to monotonically decreasing scores representing rank importance
+  scores <- 1/(1:length(labels))
+  
+  pred <- ROCR::prediction(predictions = scores, labels = labels)
+  
+  if (measure == "ROC") {
+    perf <- ROCR::performance(pred, measure = "tpr", x.measure = "fpr")
+    perf_df <- data.frame(TPR = unlist(perf@y.values),
+                          FPR = unlist(perf@x.values))
+  } else {
+    perf <- ROCR::performance(pred, measure = "prec", x.measure = "rec")
+    perf_df <- data.frame(Precision = unlist(perf@y.values),
+                          Recall = unlist(perf@x.values))
+  }
+  
+  return(perf_df)
+}
+
+
+# TODO:
+
+get_au_perf <- function(rank_df, label_col, measure = NULL) {
+  
+  stopifnot(label_col %in% colnames(rank_df), measure %in% c("AUROC", "AUPRC"))
+  
+  # positives/has evidence=1 negatives/no known evidence=0 
+  labels <- as.factor(as.numeric(rank_df[[label_col]]))
+  
+  # convert ranks to monotonically decreasing scores representing rank importance
+  scores <- 1/(1:length(labels))
+  
+  pred <- ROCR::prediction(predictions = scores, labels = labels)
+  
+  if (measure == "AUROC") {
+    perf <- ROCR::performance(pred, measure = "auc")@y.values[[1]]
+  } else {
+    perf <- ROCR::performance(pred, measure = "aucpr")@y.values[[1]]
+  }
+  
+  return(perf)
+}
+
+
+
+# TODO:
+
+all_perf_df <- function(rank_df,
+                        keep_cols,
+                        label_col,
+                        measure = NULL) {
+  
+  
+  stopifnot(label_col %in% colnames(rank_df), measure %in% c("ROC", "PR"))
+ 
+  perf_l <- lapply(keep_cols, function(x) {
+    
+    get_perf_df(
+      rank_df = dplyr::arrange(rank_df, !!sym(x)),
+      label_col,
+      measure) %>%
+      mutate(Group = x)
+  })
+  
+  perf_df <- do.call(rbind, perf_l) %>% 
+    mutate(Group = factor(Group, levels = keep_cols))
+   
+  return(perf_df)
+}
+
+
+# TODO:
+
+all_au_perf <- function(rank_df,
+                        keep_cols,
+                        label_col,
+                        measure = NULL) {
+  
+  
+  stopifnot(label_col %in% colnames(rank_df), measure %in% c("AUROC", "AUPRC"))
+  
+  perf_l <- lapply(keep_cols, function(x) {
+    
+    get_au_perf(
+      rank_df = dplyr::arrange(rank_df, !!sym(x)),
+      label_col,
+      measure)
+  })
+  
+  names(perf_l) <- keep_cols
+  
+  return(perf_l)
+}
+
+
+
+# TODO
+
+plot_perf <- function(df, 
+                      auc_l, 
+                      measure = NULL, 
+                      cols, 
+                      title,
+                      ncol_legend = 1) {
+  
+  stopifnot(measure %in% c("ROC", "PR"), "Group" %in% colnames(df))
+  
+  if (measure == "ROC") {
+    p <- ggplot(df, aes(x = FPR, y = TPR, col = Group))
+  } else {
+    p <- ggplot(df, aes(x = Recall, y = Precision, col = Group))
+  }
+  
+  labels <- paste0(names(auc_l), " AUC=", round(unlist(auc_l), 3))
+  
+  p <- p +
+    geom_path() +
+    ggtitle(title) +
+    scale_color_manual(labels = labels, values = cols) +
+    guides(colour = guide_legend(ncol = ncol_legend)) +
+    theme_classic() +
+    theme(axis.text = element_text(size = 25),
+          axis.title = element_text(size = 30),
+          plot.title = element_text(size = 30),
+          legend.title = element_blank(),
+          legend.text = element_text(size = 20),
+          legend.position = c(0.7, 0.2))
+  
+  return(p)
+}
+
+
+
+
+# Plot functions interacting with Seurat object
+# ------------------------------------------------------------------------------
 
 
 # TODO:
