@@ -39,8 +39,8 @@ cor_ct <- lapply(cts, function(x) {
   na_genes <- apply(mat, 2, function(x) sum(x != 0)) <= min_count
   mat[, na_genes] <- NA
   
-  cmat <- WGCNA::cor(x = mat,
-                     y = mat[, tfs], 
+  cmat <- WGCNA::cor(x = mat[, tfs],
+                     y = mat,
                      nThreads = ncore,
                      use = "pairwise.complete.obs")
 })
