@@ -1,7 +1,6 @@
 ## TODO: fix inconsistent dims of cor->rank
 ## -----------------------------------------------------------------------------
 
-
 library(tidyverse)
 library(Seurat)
 library(parallel)
@@ -21,7 +20,7 @@ rank_path <- "/space/scratch/amorin/R_objects/ranked_target_list_Apr2022.RDS"
 rank_l <- readRDS(rank_path)
 
 
-
+#
 
 get_cor_all_df <- function(cmat, tf, rm_tf = TRUE) {
   
@@ -57,17 +56,6 @@ tf_by_ct_cmat <- function(cor_list, tf, rm_tf = TRUE) {
   
   return(cor_tf)
 }
-
-
-# Convert cor matrix to column-wise (cell-type) ranks such that 1 is best
-
-rank_cormat <- function(cmat) {
-  
-  rank_mat <- apply(-cmat, 2, rank, ties.method = "min", na.last = "keep")
-  
-  return(rank_mat)
-}
-
 
 
 # NA counts
@@ -129,12 +117,46 @@ max_cor_df <- function(cor_ct_list, tf) {
 }
 
 
-##
+# Convert cor matrix to column-wise (cell-type) ranks such that 1 is best
+
+rank_cormat <- function(cmat) {
+  
+  rank_mat <- apply(-cmat, 2, rank, ties.method = "min", na.last = "keep")
+  
+  return(rank_mat)
+}
 
 
-cor_rank_ct <- mclapply(cor_ct, function(x) {
-  rank_cormat(t(x))
-}, mc.cores = ncore)
+# TODO
+
+agg_cormat <- function(cor_ct_list, zero_nas = TRUE, ncores = 1) {
+  
+  # Set NA cors to 0
+  if (zero_nas) {
+    cor_ct_list <- lapply(cor_ct, function(x) {
+      x[is.na(x)] <- 0
+      return(x)
+    })
+  }
+  
+  # Convert cors to ranks (1=best)
+  cor_ct_rank <- mclapply(cor_ct_list, function(x) {
+    rank_cormat(t(x))
+  }, mc.cores = ncores)
+  
+  # Sum list of rank matrices into a single matrix
+  # https://stackoverflow.com/questions/42628385/sum-list-of-matrices-with-nas
+  cor_ct_rank_sum <- apply(simplify2array(cor_ct_rank), 1:2, sum, na.rm = TRUE)
+  
+  # Convert sum of ranks into a final rank (1=best)
+  cor_agg_sum <- rank_cormat(-cor_ct_rank_sum)
+  
+  return(cor_agg_sum)
+}
+
+
+
+
 
 
 
@@ -144,36 +166,67 @@ cor_rank_ct <- mclapply(cor_ct, function(x) {
 # Mean_all divides by the total number of cell types
 
 
-cor_rank_sum <- apply(simplify2array(cor_rank_ct), 1:2, sum, na.rm = TRUE)
-cor_rank_sum[cor_rank_sum == 0] <- NA
+cor_ct[[1]][1:5, 1:5]
 
-cor_rank_mean_nona <- apply(simplify2array(cor_rank_ct), 1:2, mean, na.rm = TRUE)
-cor_rank_mean_all <- cor_rank_sum / length(cor_rank_ct)
+
+cor_ct2 <- lapply(cor_ct, function(x) {
+  x[is.na(x)] <- 0
+  return(x)
+})
+
+
+
+cor_ct2[[1]][1:5, 1:5]
+
+
+cor_ct_rank <- mclapply(cor_ct2, function(x) {
+  rank_cormat(t(x))
+}, mc.cores = ncore)
+
+
+cor_ct_rank[[1]][1:5, 1:5]
+
+
+cor_ct_rank_sum <- apply(simplify2array(cor_ct_rank), 1:2, sum, na.rm = TRUE)
+
+cor_ct_rank_sum[1:5, 1:5]
+
+# cor_ct_rank_sum[cor_ct_rank_sum == 0] <- NA
+
+cor_ct_rank_mean_nona <- apply(simplify2array(cor_ct_rank), 1:2, mean, na.rm = TRUE)
+cor_ct_rank_mean_all <- cor_ct_rank_sum / length(cor_ct_rank)
+
+cor_ct_rank_mean_nona[1:5, 1:5]
+cor_ct_rank_mean_all[1:5, 1:5]
 
 
 assertthat::are_equal(
-  sum(sapply(cor_rank_ct, function(x) x[1, 1]), na.rm = TRUE),
-  cor_rank_sum[1, 1])
+  sum(sapply(cor_ct_rank, function(x) x[1, 1]), na.rm = TRUE),
+  cor_ct_rank_sum[1, 1])
 
 
 assertthat::are_equal(
-  mean(sapply(cor_rank_ct, function(x) x[1, 1]), na.rm = TRUE),
-  cor_rank_mean_nona[1, 1])
+  mean(sapply(cor_ct_rank, function(x) x[1, 1]), na.rm = TRUE),
+  cor_ct_rank_mean_nona[1, 1])
 
 
 # Then convert these aggregations to ranks. Mean_all and sum have same rank.
 
-cor_agg_sum <- rank_cormat(-cor_rank_sum)
-cor_agg_mean_nona <- rank_cormat(-cor_rank_mean_nona)
-cor_agg_mean_all <- rank_cormat(-cor_rank_mean_all)
+cor_agg_sum <- rank_cormat(-cor_ct_rank_sum)
+cor_agg_mean_nona <- rank_cormat(-cor_ct_rank_mean_nona)
+cor_agg_mean_all <- rank_cormat(-cor_ct_rank_mean_all)
 # identical(cor_agg_sum[, tf], cor_agg_mean_all[, tf])
+
+cor_agg_sum[1:5, 1:5]
+cor_agg_mean_nona[1:5, 1:5]
+cor_agg_mean_all[1:5, 1:5]
 
 
 # Focus on single TF and organize gene rankings
 # ------------------------------------------------------------------------------
 
 
-tf <- "Pax6"
+tf <- "Runx1"
 
 
 # Which TF-gene pair had max cor in each cell type
@@ -183,11 +236,11 @@ max_cor <- max_cor_df(cor_ct, tf)
 # Gene rankings by different aggregations in single data frame
 rank_df <- data.frame(
   Symbol = rownames(cor_agg_sum),
-  Sum_raw = cor_rank_sum[, tf],
+  Sum_raw = cor_ct_rank_sum[, tf],
   Sum_rank = cor_agg_sum[, tf],
-  Mean_raw_nona = cor_rank_mean_nona[, tf],
+  Mean_raw_nona = cor_ct_rank_mean_nona[, tf],
   Mean_rank_nona = cor_agg_mean_nona[, tf],
-  Mean_raw_all = cor_rank_mean_all[, tf],
+  Mean_raw_all = cor_ct_rank_mean_all[, tf],
   Mean_rank_all = cor_agg_mean_all[, tf]
   ) %>%
   left_join(tf_na_count(cor_ct, tf), by = "Symbol")
@@ -215,11 +268,11 @@ filter(rank_df, Count_NA == min(rank_df$Count_NA)) %>% arrange(Mean_rank_nona) %
 # ------------------------------------------------------------------------------
 
 
-gene2 <- "Meis2"
-ct <- "GABA-46-Lamp5-Kit"
+gene2 <- "Msr1"
+ct <- "pvm"
 
 sort(sapply(cor_ct, function(x) x[tf, gene2]), decreasing = TRUE)
-sort(sapply(cor_rank_ct, function(x) x[gene2, tf]))
+sort(sapply(cor_ct_rank, function(x) x[gene2, tf]))
 head(sort(cor_ct[[ct]][tf, ], decreasing = TRUE))
 
 
@@ -231,8 +284,13 @@ plot_scatter(sdat_sub, tf, gene2, slot = "counts", jitter = TRUE)
 plot_scatter(sdat_sub, tf, gene2, slot = "counts", jitter = FALSE)
 cor(t(as.matrix(GetAssayData(object = sdat_sub, slot = "data")[c(tf, gene2), ])))
 cor(t(as.matrix(GetAssayData(object = sdat_sub, slot = "counts")[c(tf, gene2), ])))
-sum(sdat@assays$RNA@counts[gene2, sdat$Cell_type == ct] != 0)
-sum(sdat@assays$RNA@counts[tf, sdat$Cell_type == ct] != 0)
+
+sum(sdat@assays$RNA@counts[gene2, sdat$Cell_type == ct] > 0)
+
+sum(sdat@assays$RNA@counts[tf, sdat$Cell_type == ct] > 0)
+
+sum(sdat@assays$RNA@counts[tf, sdat$Cell_type == ct] > 0 & 
+      sdat@assays$RNA@counts[gene2, sdat$Cell_type == ct] > 0)
 
 # Across all cells
 plot_scatter(sdat, tf, gene2, slot = "data", jitter = TRUE)
