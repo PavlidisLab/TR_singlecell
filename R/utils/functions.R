@@ -259,6 +259,99 @@ plot_perf <- function(df,
 
 
 
+# Single cell coexpression aggregation
+# ------------------------------------------------------------------------------
+
+
+# Rank matrix columns such that 1=best.
+
+colrank_mat <- function(mat) {
+  rank_mat <- apply(-mat, 2, rank, ties.method = "min", na.last = "keep")
+  return(rank_mat)
+}
+
+
+# Rank matrix rows such that 1=best.
+
+rowrank_mat <- function(mat) {
+  rank_mat <- apply(-mat, 1, rank, ties.method = "min", na.last = "keep")
+  return(rank_mat)
+}
+
+
+# Set NAs in matrix to the average value of the matrix
+
+na_to_mean <- function(mat) {
+  mat[is.na(mat)] <- mean(mat, na.rm = TRUE)
+  return(mat)
+}
+
+
+# Set NAs in matrix to 0
+
+na_to_zero <- function(mat) {
+  mat[is.na(mat)] <- 0
+  return(mat)
+}
+
+
+
+# Rank sum rank from Harris et al., 2021 (Jesse Gillis) 
+# https://pubmed.ncbi.nlm.nih.gov/34015329/
+# Rank coexpression (1=best) across cell types. Set NAs to network mean. Sum 
+# the cell-type ranks, and then rank order these sums (1=best).
+
+
+aggregate_cor <- function(cmat_list, impute_na = TRUE, ncores = 1) {
+  
+  # Convert cors to ranks (1=best)
+  rank_list <- mclapply(cmat_list, rowrank_mat, mc.cores = ncores)
+  
+  # Set NAs
+  if (impute_na) {
+    rank_list <- lapply(rank_list, na_to_mean)
+  }
+  
+  # Sum list of rank matrices into a single matrix
+  # https://stackoverflow.com/questions/42628385/sum-list-of-matrices-with-nas
+  sum_rank <- apply(simplify2array(rank_list), 1:2, sum, na.rm = TRUE)
+  
+  # Convert sum of ranks into a final rank (1=best)
+  final_rank <- colrank_mat(-sum_rank)
+  
+  return(final_rank)
+}
+
+
+
+
+# Here looking at setting cors to average values, intead of ranks
+aggregate_cor2 <- function(cmat_list, impute_na = TRUE, ncores = 1) {
+  
+  # Set NAs
+  if (impute_na) {
+    cmat_list <- lapply(cmat_list, na_to_mean)
+  }
+  
+  # Convert cors to ranks (1=best)
+  rank_list <- mclapply(cmat_list, rowrank_mat, mc.cores = ncores)
+
+  # Sum list of rank matrices into a single matrix
+  # https://stackoverflow.com/questions/42628385/sum-list-of-matrices-with-nas
+  sum_rank <- apply(simplify2array(rank_list), 1:2, sum, na.rm = TRUE)
+  
+  # Convert sum of ranks into a final rank (1=best)
+  final_rank <- colrank_mat(-sum_rank)
+  
+  return(final_rank)
+}
+
+
+sum_rank[1:5, 1:5]
+final_rank[1:5, 1:5]
+head(sort(final_rank[, 1]))
+head(sort(sum_rank[, 1]))
+
 
 # Plot functions interacting with Seurat object
 # ------------------------------------------------------------------------------
