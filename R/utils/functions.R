@@ -2,8 +2,34 @@
 ## TODO: sample_expression_level() impl requires subset (costly) - try pre-format input mat
 ## -----------------------------------------------------------------------------
 
-
 library(parallel)
+library(Seurat)
+
+
+
+# TODO:
+
+mat_to_df <- function(mat, symmetric = TRUE) {
+  
+  if (symmetric) {
+    df <- data.frame(
+      Row = rownames(mat)[row(mat)[lower.tri(mat)]],
+      Col = colnames(mat)[col(mat)[lower.tri(mat)]],
+      Value = mat[lower.tri(mat)],
+      stringsAsFactors = FALSE
+    )
+  } else {
+    df <- data.frame(
+      Row = rownames(mat)[row(mat)],
+      Col = colnames(mat)[col(mat)],
+      Value = c(mat),
+      stringsAsFactors = FALSE
+    )
+  }
+  return(df)
+}
+
+
 
 
 # TODO:
@@ -33,7 +59,7 @@ top_expr_celltype <- function(sdat, avg_mat, gene) {
 
 
 
-# TODO:
+# TODO: doc and use slot get method
 
 get_ct_avg <- function(sdat, assay = "RNA", scale = FALSE, ncores = 8) {
   
@@ -60,34 +86,10 @@ get_ct_avg <- function(sdat, assay = "RNA", scale = FALSE, ncores = 8) {
 
 
 
-# TODO:
-
-mat_to_df <- function(mat, symmetric = TRUE) {
-  
-  if (symmetric) {
-    df <- data.frame(
-      Row = rownames(mat)[row(mat)[lower.tri(mat)]],
-      Col = colnames(mat)[col(mat)[lower.tri(mat)]],
-      Value = mat[lower.tri(mat)],
-      stringsAsFactors = FALSE
-    )
-  } else {
-    df <- data.frame(
-      Row = rownames(mat)[row(mat)],
-      Col = colnames(mat)[col(mat)],
-      Value = c(mat),
-      stringsAsFactors = FALSE
-    )
-  }
-  return(df)
-}
+# TODO: doc and use slot get method
 
 
-
-# TODO
-
-
-sample_expression_level <- function(sdat, targets, rank_window = 10) {
+sample_expression_level <- function(sdat, targets, rank_window = 200) {
   
   stopifnot(all(targets %in% rownames(sdat)))
   
@@ -221,44 +223,6 @@ all_au_perf <- function(rank_df,
 }
 
 
-
-# TODO
-
-plot_perf <- function(df, 
-                      auc_l, 
-                      measure = NULL, 
-                      cols, 
-                      title,
-                      ncol_legend = 1) {
-  
-  stopifnot(measure %in% c("ROC", "PR"), "Group" %in% colnames(df))
-  
-  if (measure == "ROC") {
-    p <- ggplot(df, aes(x = FPR, y = TPR, col = Group))
-  } else {
-    p <- ggplot(df, aes(x = Recall, y = Precision, col = Group))
-  }
-  
-  labels <- paste0(names(auc_l), " AUC=", round(unlist(auc_l), 3))
-  
-  p <- p +
-    geom_path() +
-    ggtitle(title) +
-    scale_color_manual(labels = labels, values = cols) +
-    guides(colour = guide_legend(ncol = ncol_legend)) +
-    theme_classic() +
-    theme(axis.text = element_text(size = 25),
-          axis.title = element_text(size = 30),
-          plot.title = element_text(size = 30),
-          legend.title = element_blank(),
-          legend.text = element_text(size = 20),
-          legend.position = c(0.7, 0.2))
-  
-  return(p)
-}
-
-
-
 # Single cell coexpression aggregation
 # ------------------------------------------------------------------------------
 
@@ -276,6 +240,14 @@ colrank_mat <- function(mat) {
 rowrank_mat <- function(mat) {
   rank_mat <- apply(-mat, 1, rank, ties.method = "min", na.last = "keep")
   return(rank_mat)
+}
+
+
+# Count NAs for each element of a list of matrices
+
+count_nas <- function(cmat_list) {
+  mat <- apply(simplify2array(cmat_list), 1:2, function(x) sum(is.na(x)))
+  return(mat)
 }
 
 
@@ -347,45 +319,5 @@ aggregate_cor2 <- function(cmat_list, impute_na = TRUE, ncores = 1) {
 }
 
 
-sum_rank[1:5, 1:5]
-final_rank[1:5, 1:5]
-head(sort(final_rank[, 1]))
-head(sort(sum_rank[, 1]))
 
 
-# Plot functions interacting with Seurat object
-# ------------------------------------------------------------------------------
-
-
-# TODO:
-
-plot_scatter <- function(sdat, 
-                         gene1, 
-                         gene2, 
-                         assay = "RNA", 
-                         slot = "data",
-                         jitter = TRUE) {
-  
-  stopifnot(assay %in% Assays(sdat), slot %in% slotNames(sdat@assays[[assay]]))
-  
-  counts <- GetAssayData(object = sdat@assays[[assay]], slot = slot)
-  
-  plot_df <- data.frame(t(as.matrix(counts[c(gene1, gene2), ])))
-  
-  p <- ggplot(plot_df, aes(x = !!sym(gene1), y = !!sym(gene2)))
-  
-  if (jitter) {
-    p <- p + geom_jitter(shape = 21, size = 2.4)
-  } else {
-    p <- p + geom_point(shape = 21, size = 2.4)
-  }
-  
-  p <- p + 
-    xlab(gene1) +
-    ylab(gene2) +
-    theme_classic() +
-    theme(axis.title = element_text(size = 25),
-          axis.text = element_text(size = 20))
-  
-  return(p)
-}
