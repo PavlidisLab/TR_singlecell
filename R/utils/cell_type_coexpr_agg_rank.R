@@ -1,3 +1,4 @@
+## This script tests/examines the Harris 2021 et al. coexpr aggregation approach
 ## TODO: fix inconsistent dims of cor->rank
 ## -----------------------------------------------------------------------------
 
@@ -5,6 +6,7 @@ library(tidyverse)
 library(Seurat)
 library(parallel)
 source("R/utils/functions.R")
+source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
 # Load Seurat object
@@ -20,217 +22,85 @@ rank_path <- "/space/scratch/amorin/R_objects/ranked_target_list_Apr2022.RDS"
 rank_l <- readRDS(rank_path)
 
 
-#
-
-get_cor_all_df <- function(cmat, tf, rm_tf = TRUE) {
-  
-  if (rm_tf) {
-    cmat <- cmat[setdiff(rownames(cmat), tf), ]
-  }
-  
-  df <- 
-    data.frame(Cor_all = cmat[, tf]) %>%
-    rownames_to_column(var = "Symbol") %>%
-    mutate(
-      Cor_all_abs = abs(Cor_all),
-      Rank_cor_all = rank(-Cor_all, ties.method = "min"),
-      Rank_cor_all_abs = rank(-Cor_all_abs, ties.method = "min")
-    )
-  
-  return(df)
-}
+# Generating intermediate steps of aggregation as well as w/ and w/o impute NAs
+# ------------------------------------------------------------------------------
 
 
-# Given a list of cor matrices per cell type and a specified TF, get that TFs
-# gene cors in a gene x cell type matrix
+# Count NA cors and then impute NA cors  to 0 (cor0) or mean (cormean)
+# Note that the Harris 2021 et al. approach imputes NA ranks, not cors.
 
-tf_by_ct_cmat <- function(cor_list, tf, rm_tf = TRUE) {
-  
-  stopifnot(identical(rownames(cor_list[[1]]), rownames(cor_list[[2]])))
-  
-  cor_tf <- do.call(cbind, lapply(cor_ct, function(x) x[tf, ]))
-  
-  if (rm_tf) {
-    cor_tf <- cor_tf[rownames(cor_tf) != tf, ]
-  }
-  
-  return(cor_tf)
-}
+n_na <- count_nas(cor_ct)
+cor0_ct <- lapply(cor_ct, na_to_zero)
+cormean_ct <- lapply(cor_ct, na_to_mean)
 
+# Convert +/- NA imputed cors to ranks, and for -impute convert the resultant
+# NA ranks to the average of the rank matrix (as in Harris 2021)
 
-# NA counts
-
-# na_count_mat <- function(cor_ct_list, ncores = ncore) {
-#   
-#   na_l <- mclapply(cor_ct_list, function(mat) {
-#     apply(mat, 1, function(x) sum(is.na(x)))
-#   }, mc.cores = ncore)
-#   
-#   mat <- do.call(rbind, na_l)
-#   
-#   return(mat)
-# }
-
-
-# For the given TF, return a df of the count of times the cor for each gene-TF 
-# pair was NA across cell types
-
-tf_na_count <- function(cor_ct_list, tf) {
-  
-  na_l <- lapply(cor_ct_list, function(x) {
-    is.na(x[tf, ])
-  })
-  
-  count_na <- data.frame(Count_NA = rowSums(do.call(cbind, na_l))) %>% 
-    rownames_to_column(var = "Symbol")
-  
-  return(count_na)
-}
-
-
-# NA over everything
-tt <- apply(simplify2array(cor_ct), 1:2, function(x) sum(is.na(x)))
-
-
-
-# Return a df of the max cor for each cell type for the given TR. NAs removed
-
-max_cor_df <- function(cor_ct_list, tf) {
-  
-  cor_max <- lapply(names(cor_ct_list), function(x) {
-    
-    cor_mat <- cor_ct_list[[x]]
-    
-    vec <- cor_mat[tf, setdiff(colnames(cor_mat), tf)]
-    
-    if (all(is.na(vec))) {
-      return(NA)
-    }
-    
-    data.frame(
-      Cell_type = x,
-      Value = max(vec, na.rm = TRUE),
-      Symbol = names(vec)[which.max(vec)])
-  })
-  
-  cor_max <- cor_max[!is.na(cor_max)]
-  
-  cor_max <- data.frame(do.call(rbind, cor_max)) %>% 
-    arrange(desc(Value))
-  
-  return(cor_max)
-}
-
-
-
-
-
-
-###
-
-
-cor_ct_nato0 <- lapply(cor_ct, function(x) {
-  x[is.na(x)] <- 0
-  return(x)
-})
-
-
-cor_ct_rank <- mclapply(cor_ct, function(x) {
-  rank_cormat(t(x))
-}, mc.cores = ncore)
-
-
-cor_ct_rank_nato0 <- mclapply(cor_ct_nato0, function(x) {
-  rank_cormat(t(x))
-}, mc.cores = ncore)
-
+cor_ct_rank <- mclapply(cor_ct, colrank_mat, mc.cores = ncore)
+cor0_ct_rank <- mclapply(cor0_ct, colrank_mat, mc.cores = ncore)
+cormean_ct_rank <- mclapply(cormean_ct, colrank_mat, mc.cores = ncore)
+cor_ct_rankmean <- mclapply(cor_ct_rank, na_to_mean, mc.cores = ncore)
 
 # Ensure max cor equals min (best) rank
 
-assertthat::are_equal(
-  names(which.max(cor_ct[[1]][1, ])),
-  names(which.min(cor_ct_rank[[1]][, 1])))
+ct_ix <- sample(n_distinct(sdat$Cell_type), 1)
+tf_ix <- sample(ncol(cor_ct[[ct_ix]]), 1)
 
 assertthat::are_equal(
-  names(which.max(cor_ct_nato0[[1]][1, ])),
-  names(which.min(cor_ct_rank_nato0[[1]][, 1])))
+  names(which.max(cor_ct[[ct_ix]][ , tf_ix])),
+  names(which.min(cor_ct_rank[[ct_ix]][, tf_ix])))
+
+assertthat::are_equal(
+  names(which.max(cor0_ct[[ct_ix]][ , tf_ix])),
+  names(which.min(cor0_ct_rank[[ct_ix]][ , tf_ix])))
+
+assertthat::are_equal(
+  names(which.max(cormean_ct[[ct_ix]][ , tf_ix])),
+  names(which.min(cormean_ct_rank[[ct_ix]][ , tf_ix])))
+
 
 # NAs ranked last, want min non-NA ranking
 
 assertthat::are_equal(
-  names(which.min(cor_ct[[1]][1, ])),
-  names(which.max(cor_ct_rank[[1]][, 1])))
+  names(which.min(cor_ct[[ct_ix]][ , tf_ix])),
+  names(which.max(cor_ct_rank[[ct_ix]][ , tf_ix])))
 
 assertthat::are_equal(
-  names(which.min(cor_ct_nato0[[1]][1, ])),
-  names(which.max(cor_ct_rank_nato0[[1]][, 1])))
+  names(which.min(cor0_ct[[ct_ix]][ , tf_ix])),
+  names(which.max(cor0_ct_rank[[ct_ix]][ , tf_ix])))
 
 
 
 # Aggregate cell type rank matrices
 # https://stackoverflow.com/questions/42628385/sum-list-of-matrices-with-nas
-# Sum ignores NAs (treated as 0), but converts sum==0 (all NAs) to NA
 # Mean_nona divides by the number of non-NA observations
 # Mean_all divides by the total number of cell types
 
 
-cor_ct_rank_sum <- apply(simplify2array(cor_ct_rank), 1:2, sum, na.rm = TRUE)
-cor_ct_rank_nato0_sum <- apply(simplify2array(cor_ct_rank_nato0), 1:2, sum, na.rm = TRUE)
-cor_ct_rank_0tona_sum <- cor_ct_rank_sum
-cor_ct_rank_0tona_sum[cor_ct_rank_0tona_sum == 0] <- NA
-
-cor_ct_rank_mean <- apply(simplify2array(cor_ct_rank), 1:2, mean, na.rm = TRUE)
-cor_ct_rank_nato0_mean <- apply(simplify2array(cor_ct_rank_nato0), 1:2, mean, na.rm = TRUE)
-cor_ct_rank_all_mean <- cor_ct_rank_sum / length(cor_ct_rank)
+cor_rank_sum <- apply(simplify2array(cor_ct_rank), 1:2, sum, na.rm = TRUE)
+cor0_rank_sum <- apply(simplify2array(cor0_ct_rank), 1:2, sum, na.rm = TRUE)
+cormean_rank_sum <- apply(simplify2array(cormean_ct_rank), 1:2, sum, na.rm = TRUE)
+cor_rankmean_sum <- apply(simplify2array(cor_ct_rankmean), 1:2, sum, na.rm = TRUE)
 
 
-assertthat::are_equal(
-  sum(sapply(cor_ct_rank, function(x) x[1, 1]), na.rm = TRUE),
-  cor_ct_rank_sum[1, 1])
+gene_ix1 <- sample(nrow(cor_rank_sum), 1)
+gene_ix2 <- sample(ncol(cor_rank_sum), 1)
 
 
 assertthat::are_equal(
-  mean(sapply(cor_ct_rank, function(x) x[1, 1]), na.rm = TRUE),
-  cor_ct_rank_mean[1, 1])
+  sum(sapply(cor_ct_rank, function(x) x[gene_ix1, gene_ix2]), na.rm = TRUE),
+  cor_rank_sum[gene_ix1, gene_ix2])
 
 
-# Then convert these aggregations to ranks. Mean_all and sum have same rank.
+# Then convert these aggregations to ranks.
 
-cor_agg_sum <- rank_cormat(-cor_ct_rank_sum)
-cor_agg_nato0_sum <- rank_cormat(-cor_ct_rank_nato0_sum)
-cor_agg_0tona_sum <- rank_cormat(-cor_ct_rank_0tona_sum)
+final_keepna <- colrank_mat(-cor_rank_sum)
+final_cor0 <- colrank_mat(-cor0_rank_sum)
+final_cormean <- colrank_mat(-cormean_rank_sum)
+final_rankmean <- colrank_mat(-cor_rankmean_sum)
 
-cor_agg_mean <- rank_cormat(-cor_ct_rank_mean)
-cor_agg_nato0_mean <- rank_cormat(-cor_ct_rank_nato0_mean)
-cor_agg_all_mean <- rank_cormat(-cor_ct_rank_all_mean)
-
-cor_agg_nato0_final <- agg_cor_ct(cor_ct, zero_nas = TRUE, ncores = ncore)
-cor_agg_keepna_final <- agg_cor_ct(cor_ct, zero_nas = FALSE, ncores = ncore)
-
-
-
-# cor_ct[[1]][1:5, 1:5]
-# cor_ct_nato0[[1]][1:5, 1:5]
-# 
-# cor_ct_rank[[1]][1:5, 1:5]
-# cor_ct_rank_nato0[[1]][1:5, 1:5]
-
-# cor_ct_rank_sum[1:5, 1:5]
-# cor_ct_rank_nato0_sum[1:5, 1:5]
-# cor_ct_rank_0tona_sum[1:5, 1:5]
-# cor_ct_rank_mean[1:5, 1:5]
-# cor_ct_rank_nato0_mean[1:5, 1:5]
-# cor_ct_rank_all_mean[1:5, 1:5]
-
-# cor_agg_sum[1:5, 1:5]
-# cor_agg_nato0_sum[1:5, 1:5]
-# cor_agg_0tona_sum[1:5, 1:5]
-# cor_agg_mean[1:5, 1:5]
-# cor_agg_nato0_mean[1:5, 1:5]
-# cor_agg_all_mean[1:5, 1:5]
-
-# cor_agg_nato0_final[1:5, 1:5]
-# cor_agg_keepna_final[1:5, 1:5]
+harris2021 <- aggregate_cor(cor_ct, impute_na = TRUE, ncores = ncore)
+final_2 <- aggregate_cor2(cor_ct, impute_na = TRUE, ncores = ncore)
 
 
 
@@ -238,33 +108,40 @@ cor_agg_keepna_final <- agg_cor_ct(cor_ct, zero_nas = FALSE, ncores = ncore)
 # ------------------------------------------------------------------------------
 
 
-tf <- "Ascl1"
+tf <- "Runx1"
 
 
 # Which TF-gene pair had max cor in each cell type
 max_cor <- max_cor_df(cor_ct, tf)
 
+# NA df
+na_df <- data.frame(Count_NA = n_na[, tf]) %>% 
+  rownames_to_column(var = "Symbol")
+
+
+final_keepna <- colrank_mat(-cor_rank_sum)
+final_cor0 <- colrank_mat(-cor0_rank_sum)
+final_cormean <- colrank_mat(-cormean_rank_sum)
+final_rankmean <- colrank_mat(-cor_rankmean_sum)
+
+harris2021 <- aggregate_cor(cor_ct, impute_na = TRUE, ncores = ncore)
+
 
 # Gene rankings by different aggregations in single data frame
 rank_df <- data.frame(
-  Symbol = rownames(cor_agg_sum),
-  Sum = cor_ct_rank_sum[, tf],
-  Sum_nato0 = cor_ct_rank_nato0_sum[, tf],
-  Sum_0tona = cor_ct_rank_0tona_sum[, tf],
-  Mean = cor_ct_rank_mean[, tf],
-  Mean_nato0 = cor_ct_rank_nato0_mean[, tf],
-  Mean_all = cor_ct_rank_all_mean[, tf],
-  Agg_sum = cor_agg_sum[, tf],
-  Agg_sum_nato0 = cor_agg_nato0_sum[, tf],
-  Agg_sum_0tona = cor_agg_0tona_sum[, tf],
-  Agg_mean = cor_agg_mean[, tf],
-  Agg_mean_nato0 = cor_agg_nato0_mean[, tf],
-  Agg_mean_all = cor_agg_all_mean[, tf],
-  Agg_final_nato0 = cor_agg_nato0_final[, tf],
-  Agg_final_keepna = cor_agg_keepna_final[, tf]
+  Symbol = rownames(harris2021),
+  Sum_keepNA = cor_rank_sum[, tf],
+  Sum_cor0 = cor0_rank_sum[, tf],
+  Sum_cormean = cormean_rank_sum[, tf],
+  Sum_rankmean = cor_rankmean_sum[, tf],
+  Rank_sum_keepNA = final_keepna[, tf],
+  Rank_sum_cor0 = final_cor0[, tf],
+  Rank_sum_cormean = final_cormean[, tf],
+  Rank_sum_rankmean = final_rankmean[, tf],
+  Harris2021 = harris2021[, tf]
 ) %>%
-  left_join(tf_na_count(cor_ct, tf), by = "Symbol") %>% 
-  arrange(Agg_final_nato0)
+  left_join(na_df, by = "Symbol") %>% 
+  arrange(Harris2021)
 
 
 # Correlation of the ranks and the count of NAs
@@ -284,22 +161,23 @@ filter(rank_df, Count_NA < 120) %>% head()
 filter(rank_df, Count_NA == min(rank_df$Count_NA)) %>% head()
 
 
-#
+# Inspecting individual genes/cell types
 # ------------------------------------------------------------------------------
 
 
-gene2 <- "Ank2"
-ct <- "VGLUT2-40-Otp_Pnoc"
+gene2 <- "Nrgn"
 
-sort(sapply(cor_ct, function(x) x[tf, gene2]), decreasing = TRUE)
+sort(sapply(cor_ct, function(x) x[gene2, tf]), decreasing = TRUE)
 sort(sapply(cor_ct_rank, function(x) x[gene2, tf]))
-head(sort(cor_ct[[ct]][tf, ], decreasing = TRUE))
+
+ct <- "VGLUT2-5-Runx1_Zeb2"
+
+head(sort(cor_ct[[ct]][, tf], decreasing = TRUE))
 
 
 # By cell type
 sdat_sub <- subset(sdat, idents = ct)
 plot_scatter(sdat_sub, tf, gene2, slot = "data", jitter = TRUE)
-plot_scatter(sdat_sub, tf, gene2, slot = "data", jitter = FALSE)
 plot_scatter(sdat_sub, tf, gene2, slot = "counts", jitter = TRUE)
 plot_scatter(sdat_sub, tf, gene2, slot = "counts", jitter = FALSE)
 cor(t(as.matrix(GetAssayData(object = sdat_sub, slot = "data")[c(tf, gene2), ])))
@@ -314,11 +192,10 @@ sum(sdat@assays$RNA@counts[tf, sdat$Cell_type == ct] > 0 &
 
 # Across all cells
 plot_scatter(sdat, tf, gene2, slot = "data", jitter = TRUE)
-plot_scatter(sdat, tf, gene2, slot = "data", jitter = FALSE)
 plot_scatter(sdat, tf, gene2, slot = "counts", jitter = TRUE)
 plot_scatter(sdat, tf, gene2, slot = "counts", jitter = FALSE)
-cor_all[tf, gene2]
-cor(t(as.matrix(GetAssayData(object = sdat, slot = "counts")[c(tf, gene2), ])))
+cor_all[gene2, tf]
+cor(t(as.matrix(GetAssayData(object = sdat, slot = "counts")[c(gene2, tf), ])))
 
 
 ###
@@ -329,7 +206,7 @@ rank_df <- rank_l$Mouse[[tf]] %>%
   filter(Symbol != tf)
 
 
-keep_cols <- c("Rank_integrated", "Agg_final_nato0", "Agg_final_keepna")
+keep_cols <- c("Rank_integrated", "Harris2021", "Sum_keepNA", "Sum_cor0", "Sum_cormean")
 
 
 pr_df <- all_perf_df(rank_df, keep_cols, label_col = "Curated_target", measure = "PR")
@@ -345,18 +222,3 @@ cols["Rank_integrated"] <- "black"
 
 plot_perf(df = roc_df, auc_l = auroc, measure = "ROC", cols = cols, title = tf, ncol_legend = 1)
 plot_perf(df = pr_df, auc_l = auprc, measure = "PR", cols = cols, title = tf, ncol_legend = 1)
-
-
-
-
-###
-
-
-# Inspect top negative cor
-gene2 <- names(which.min(a[gene1,]))
-sdat_sub <- subset(sdat, idents = names(cor_ct)[ct_ix])
-plot_scatter(sdat_sub, gene1, gene2, slot = "data")
-plot_scatter(sdat_sub, gene1, gene2, slot = "counts")
-cor(t(as.matrix(GetAssayData(object = sdat_sub, slot = "counts")[c(gene1, gene2), ])))
-cor(t(as.matrix(GetAssayData(object = sdat_sub, slot = "data")[c(gene1, gene2), ])))
-
