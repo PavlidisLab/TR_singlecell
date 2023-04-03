@@ -6,8 +6,12 @@ library(parallel)
 library(Seurat)
 
 
+# Misc helpers
+# ------------------------------------------------------------------------------
 
-# TODO:
+
+# Convert a matrix into a long and skinny df. If symmetric, only return the
+# unique values.
 
 mat_to_df <- function(mat, symmetric = TRUE) {
   
@@ -30,6 +34,38 @@ mat_to_df <- function(mat, symmetric = TRUE) {
 }
 
 
+# Return a df of the max cor for each cell type for the given gene, removing NAs
+# and the gene itself to prevent cor=1
+
+max_cor_df <- function(cmat_list, tf) {
+  
+  cor_max <- lapply(names(cmat_list), function(x) {
+    
+    cor_mat <- cmat_list[[x]]
+    
+    vec <- cor_mat[tf, setdiff(colnames(cor_mat), tf)]
+    
+    if (all(is.na(vec))) {
+      return(NA)
+    }
+    
+    data.frame(
+      Cell_type = x,
+      Value = max(vec, na.rm = TRUE),
+      Symbol = names(vec)[which.max(vec)])
+  })
+  
+  cor_max <- cor_max[!is.na(cor_max)]
+  
+  cor_max <- data.frame(do.call(rbind, cor_max)) %>% 
+    arrange(desc(Value))
+  
+  return(cor_max)
+}
+
+
+# Working with Seurat object
+# ------------------------------------------------------------------------------
 
 
 # TODO:
@@ -277,7 +313,7 @@ na_to_zero <- function(mat) {
 aggregate_cor <- function(cmat_list, impute_na = TRUE, ncores = 1) {
   
   # Convert cors to ranks (1=best)
-  rank_list <- mclapply(cmat_list, rowrank_mat, mc.cores = ncores)
+  rank_list <- mclapply(cmat_list, colrank_mat, mc.cores = ncores)
   
   # Set NAs
   if (impute_na) {
@@ -293,31 +329,3 @@ aggregate_cor <- function(cmat_list, impute_na = TRUE, ncores = 1) {
   
   return(final_rank)
 }
-
-
-
-
-# Here looking at setting cors to average values, intead of ranks
-aggregate_cor2 <- function(cmat_list, impute_na = TRUE, ncores = 1) {
-  
-  # Set NAs
-  if (impute_na) {
-    cmat_list <- lapply(cmat_list, na_to_mean)
-  }
-  
-  # Convert cors to ranks (1=best)
-  rank_list <- mclapply(cmat_list, rowrank_mat, mc.cores = ncores)
-
-  # Sum list of rank matrices into a single matrix
-  # https://stackoverflow.com/questions/42628385/sum-list-of-matrices-with-nas
-  sum_rank <- apply(simplify2array(rank_list), 1:2, sum, na.rm = TRUE)
-  
-  # Convert sum of ranks into a final rank (1=best)
-  final_rank <- colrank_mat(-sum_rank)
-  
-  return(final_rank)
-}
-
-
-
-
