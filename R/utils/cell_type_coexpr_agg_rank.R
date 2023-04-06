@@ -33,6 +33,14 @@ n_na <- count_nas(cor_ct)
 cor0_ct <- lapply(cor_ct, na_to_zero)
 cormean_ct <- lapply(cor_ct, na_to_mean)
 
+
+ct_ix <- sample(n_distinct(sdat$Cell_type), 1)
+na_ix <- which(is.na(cor_ct[[1]]), arr.ind = TRUE)
+sample_na_ix <- na_ix[sample(nrow(na_ix), 1), ]
+assertthat::are_equal(cor0_ct[[ct_ix]][sample_na_ix[1], sample_na_ix[2]], 0)
+assertthat::are_equal(cormean_ct[[ct_ix]][sample_na_ix[1], sample_na_ix[2]], mean(cor_ct[[ct_ix]], na.rm = TRUE))
+
+
 # Convert +/- NA imputed cors to ranks, and for -impute convert the resultant
 # NA ranks to the average of the rank matrix (as in Harris 2021)
 
@@ -100,7 +108,6 @@ final_cormean <- colrank_mat(-cormean_rank_sum)
 final_rankmean <- colrank_mat(-cor_rankmean_sum)
 
 harris2021 <- aggregate_cor(cor_ct, impute_na = TRUE, ncores = ncore)
-final_2 <- aggregate_cor2(cor_ct, impute_na = TRUE, ncores = ncore)
 
 
 
@@ -108,7 +115,7 @@ final_2 <- aggregate_cor2(cor_ct, impute_na = TRUE, ncores = ncore)
 # ------------------------------------------------------------------------------
 
 
-tf <- "Runx1"
+tf <- "Mef2c"
 
 
 # Which TF-gene pair had max cor in each cell type
@@ -128,6 +135,7 @@ harris2021 <- aggregate_cor(cor_ct, impute_na = TRUE, ncores = ncore)
 
 
 # Gene rankings by different aggregations in single data frame
+
 rank_df <- data.frame(
   Symbol = rownames(harris2021),
   Sum_keepNA = cor_rank_sum[, tf],
@@ -145,7 +153,8 @@ rank_df <- data.frame(
 
 
 # Correlation of the ranks and the count of NAs
-rank_df_cor <- cor(select_if(rank_df, is.numeric), use = "pairwise.complete.obs")
+rank_df_cor <- 
+  round(cor(select_if(rank_df, is.numeric), use = "pairwise.complete.obs"), 3)
 
 
 # Gene NA count. When equal to number of cell types, it means that those genes
@@ -165,12 +174,12 @@ filter(rank_df, Count_NA == min(rank_df$Count_NA)) %>% head()
 # ------------------------------------------------------------------------------
 
 
-gene2 <- "Nrgn"
+gene2 <- "Ppp3ca"
 
 sort(sapply(cor_ct, function(x) x[gene2, tf]), decreasing = TRUE)
 sort(sapply(cor_ct_rank, function(x) x[gene2, tf]))
 
-ct <- "VGLUT2-5-Runx1_Zeb2"
+ct <- "VGLUT1-15-Fmo1_Rxfp3"
 
 head(sort(cor_ct[[ct]][, tf], decreasing = TRUE))
 
