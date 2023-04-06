@@ -22,7 +22,7 @@ cts <- unique(sdat$Cell_type)
 tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
 
 # Min count of non-zero expressing cells to keep gene for correlating
-min_count <- 10
+min_count <- 20
 
 
 # Loop over TFs and cor with every other gene
