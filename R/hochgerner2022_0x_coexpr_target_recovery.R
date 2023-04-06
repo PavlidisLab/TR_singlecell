@@ -12,9 +12,9 @@ library(parallel)
 library(ROCR)
 library(pheatmap)
 library(RColorBrewer)
-# library(WGCNA)
-# library(ggrepel)
+library(ggridges)
 source("R/utils/functions.R")
+source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
 # Load Seurat object
@@ -33,8 +33,6 @@ cor_all <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_cormat_all.RD
 de_top_qntl <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_TR_DEA_quantile.RDS")
 de_top_ct <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_TR_DEA_celltype.RDS")
 
-
-
 # Ribosomal genes as positive control for coexpr.
 # Something wonky with table shifts columns over - just want gene symbols
 ribo_genes <- read.delim("/space/grp/amorin/Metadata/MGI_GO_term_ribosomal_genes_15-03-2023.txt", row.names = NULL, stringsAsFactors = FALSE)
@@ -48,6 +46,7 @@ tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
 
 
 # TODO:
+# TODO: Keep rank?
 
 get_cor_all_df <- function(cmat, tf, rm_tf = TRUE) {
   
@@ -71,11 +70,11 @@ get_cor_all_df <- function(cmat, tf, rm_tf = TRUE) {
 # Given a list of cor matrices per cell type and a specified TF, get that TFs
 # gene cors in a gene x cell type matrix
 
-tf_by_ct_cmat <- function(cor_list, tf, rm_tf = TRUE) {
+tf_by_ct_cmat <- function(cmat_list, tf, rm_tf = TRUE) {
 
-  stopifnot(identical(rownames(cor_list[[1]]), rownames(cor_list[[2]])))
+  stopifnot(identical(rownames(cmat_list[[1]]), rownames(cmat_list[[2]])))
 
-  cor_tf <- do.call(cbind, lapply(cor_ct, function(x) x[tf, ]))
+  cor_tf <- do.call(cbind, lapply(cmat_list, function(x) x[, tf]))
 
   if (rm_tf) {
     cor_tf <- cor_tf[rownames(cor_tf) != tf, ]
@@ -85,19 +84,10 @@ tf_by_ct_cmat <- function(cor_list, tf, rm_tf = TRUE) {
 }
 
 
-# Convert cor matrix to column-wise (cell-type) ranks such that 1 is best
-
-rank_cormat <- function(cmat) {
-
-  rank_mat <- apply(-cmat, 2, rank, ties.method = "min")
-
-  return(rank_mat)
-}
-
 
 # TODO
 
-threshold_cormat <- function(mat, top_qtl = 0.95, btm_qtl = NULL) {
+threshold_cmat <- function(mat, top_qtl = 0.95, btm_qtl = NULL) {
   
   mat <- apply(mat, 2, function(x) {
     
@@ -125,81 +115,6 @@ threshold_cormat <- function(mat, top_qtl = 0.95, btm_qtl = NULL) {
 
 # TODO:
 
-get_perf_df <- function(rank_df, label_col, measure = NULL) {
-  
-  stopifnot(label_col %in% colnames(rank_df), measure %in% c("ROC", "PR"))
-  
-  # positives/has evidence=1 negatives/no known evidence=0 
-  labels <- as.factor(as.numeric(rank_df[[label_col]]))
-  
-  # convert ranks to monotonically decreasing scores representing rank importance
-  scores <- 1/(1:length(labels))
-  
-  pred <- ROCR::prediction(predictions = scores, labels = labels)
-  
-  if (measure == "ROC") {
-    perf <- ROCR::performance(pred, measure = "tpr", x.measure = "fpr")
-    perf_df <- data.frame(TPR = unlist(perf@y.values),
-                          FPR = unlist(perf@x.values))
-  } else {
-    perf <- ROCR::performance(pred, measure = "prec", x.measure = "rec")
-    perf_df <- data.frame(Precision = unlist(perf@y.values),
-                          Recall = unlist(perf@x.values))
-  }
-  
-  return(perf_df)
-}
-
-
-# TODO:
-
-get_au_perf <- function(rank_df, label_col, measure = NULL) {
-  
-  stopifnot(label_col %in% colnames(rank_df), measure %in% c("AUROC", "AUPRC"))
-  
-  # positives/has evidence=1 negatives/no known evidence=0 
-  labels <- as.factor(as.numeric(rank_df[[label_col]]))
-  
-  # convert ranks to monotonically decreasing scores representing rank importance
-  scores <- 1/(1:length(labels))
-  
-  pred <- ROCR::prediction(predictions = scores, labels = labels)
-  
-  if (measure == "AUROC") {
-    perf <- ROCR::performance(pred, measure = "auc")@y.values[[1]]
-  } else {
-    perf <- ROCR::performance(pred, measure = "aucpr")@y.values[[1]]
-  }
-  
-  return(perf)
-}
-
-
-# TODO
-# TODO: labels should just be generated inside
-
-plot_auc <- function(roc_df, auc_labels, cols, tf) {
-  
-  p <- 
-    ggplot(roc_df, aes(x = FPR, y = TPR, col = Group)) +
-    geom_path() +
-    ggtitle(tf) +
-    scale_color_manual(labels = auc_labels, values = cols) +
-    # guides(colour = guide_legend(ncol = 1)) +
-    theme_classic() +
-    theme(axis.text = element_text(size = 25),
-          axis.title = element_text(size = 30),
-          plot.title = element_text(size = 30),
-          legend.title = element_blank(),
-          legend.text = element_text(size = 20),
-          legend.position = c(0.8, 0.2))
-  
-  return(p)
-}
-
-
-# TODO:
-
 prep_df <- function(vec, name, add_rank = TRUE) {
   
   df <- data.frame(vec)
@@ -214,11 +129,23 @@ prep_df <- function(vec, name, add_rank = TRUE) {
 }
 
 
+# General stats 
+# ------------------------------------------------------------------------------
+
+
+# All genes and cell types
+genes <- rownames(sdat)
+cts <- unique(sdat$Cell_type)
+
+# Matrix of genes x TFs where elements are the count of NA cors across cell types
+n_na <- count_nas(cor_ct)
+
+
 # Cor across all cells
 # ------------------------------------------------------------------------------
 
 
-tf <- "Pax6"
+tf <- "Mef2c"
 rank_df <- rank_l$Mouse[[tf]]
 
 # Dataframe of TF-gene correlation (+/- abs) and their ranking
@@ -238,58 +165,56 @@ rank_df <- filter(rank_df, Symbol %in% intersect(rank_df$Symbol, rownames(sdat))
 # ------------------------------------------------------------------------------
 
 
-# Matrix TF-gene cor per cell type for the given TF
-cor_tf <- tf_by_ct_cmat(cor_ct, tf, rm_tf = FALSE)
+# Matrix of TF-gene cor per cell type for the given TF
+cor_tf <- tf_by_ct_cmat(cor_ct, tf, rm_tf = TRUE)
 
-# Some NAs refer to genes not expressed in that cell type
-gene_nas <- apply(cor_tf, 1, function(x) sum(is.na(x)))
+# Examine TF-gene NA counts across cell types. NAs result when not enough cells
+# passed non-zero expression filter for the given cell type and TF-gene pair.
+
+gene_nas <- n_na[, tf]
 ct_nas <- apply(cor_tf, 2, function(x) sum(is.na(x)))
+all_gene_nas <- names(which(gene_nas == length(cts)))
+all_ct_nas <- names(which(ct_nas == nrow(cor_tf)))
 
-# All NAs correspond to cell types where TF is not expressed
-all_ct_nas <- apply(cor_tf, 2, function(x) all(is.na(x)))
-all_ct_nas <- names(all_ct_nas[all_ct_nas])
-stopifnot(all(sdat@assays$RNA@data[tf, sdat$Cell_type %in% all_ct_nas] == 0))
+# Remove all NAs
+cor_tf <- cor_tf[setdiff(rownames(cor_tf), all_gene_nas), setdiff(colnames(cor_tf), all_ct_nas)]
 
-# Remove cell types with all NAs
-cor_tf <- cor_tf[, setdiff(colnames(cor_tf), all_ct_nas)]
+# Harris 2021 single cell coexpression aggregation (rank sum rank)
+cor_ct_rm_tf <- lapply(cor_ct, function(x) x[setdiff(rownames(x), tf), ])
+cor_agg_rsr <- aggregate_cor(cor_ct_rm_tf)[rownames(cor_tf), tf]
 
-
-# Threshold aggregate: Binarize the top TF-gene coexpr pairs and then sum 
-# across cell types. Final order is rank of this count.
-
-
-# Accept top 0.5% and bottom 0.5% of cor
-thresh_tf1 <- threshold_cormat(cor_tf, top_qtl = 0.995, btm_qtl = 0.005)
-agg_tf1 <- rowSums(thresh_tf1, na.rm = TRUE)
-
-# Accept only top 0.5% of cor
-thresh_tf2 <- threshold_cormat(cor_tf, top_qtl = 0.995)
-agg_tf2 <- rowSums(thresh_tf2, na.rm = TRUE)
-
-# Accept only top 0.5% of absolute cor
-thresh_tf3 <- threshold_cormat(abs(cor_tf), top_qtl = 0.995)
-agg_tf3 <- rowSums(thresh_tf3, na.rm = TRUE)
-
+# Threshold aggregate: Binarize top top 0.5% of cor, sum, rank
+cor_agg_thresh <- threshold_cmat(cor_tf, top_qtl = 0.995)[rownames(cor_tf), ]
+cor_agg_thresh2 <- rowSums(cor_agg_thresh, na.rm = TRUE)
+cor_agg_thresh3 <- rank(-cor_agg_thresh2, ties.method = "min")
 
 # Min rank scheme, where a TF-gene pair is assigned its best rank across all
 # cell types. Break ties using average cor across across cell types.
-# NOTE: why is frank() removing names from input vectors?
-
-rank_tf <- rank_cormat(cor_tf)
-rank_min_tf <- apply(rank_tf, 1, min)
-rank_mean_tf <- rowMeans(rank_tf)
-rank_tiebreak_tf <- data.table::frank(list(rank_min_tf, rank_mean_tf), ties.method = "min")
-names(rank_min_tf) <- names(rank_mean_tf) <- names(rank_tiebreak_tf) <- rownames(rank_tf)
+cor_agg_mean <- rowMeans(cor_tf, na.rm = TRUE)
+cor_agg_min <- colrank_mat(cor_tf)
+cor_agg_min2  <- apply(cor_agg_min, 1, min, na.rm = TRUE)
+cor_agg_min3 <- data.table::frank(list(cor_agg_min2, -cor_agg_mean), ties.method = "min")
+names(cor_agg_min4) <- names(cor_agg_min3) <- names(cor_agg_min2) <- rownames(cor_tf)
 
 
-# view(data.frame(agg_tf1, agg_tf2, agg_tf3))
-# head(sort(agg_tf, decreasing = TRUE), 20)
-# hist(agg_tf, breaks = 100)
+# Collect into a data frame
+
+stopifnot(identical(rownames(cor_tf), names(cor_agg_rsr)))
+stopifnot(identical(names(cor_agg_rsr), names(cor_agg_thresh3)))
+stopifnot(identical(names(cor_agg_rsr), names(cor_agg_min4)))
 
 
-# view(data.frame(Symbol = rownames(rank_tf), min_rank_tf, mean_rank_tf, tiebreak_min_rank_tf))
-# head(sort(min_rank_tf), 20)
-# sum(min_rank_tf == 1)
+cor_ct_df <- data.frame(
+  Symbol = rownames(cor_tf),
+  Count_NA = gene_nas[rownames(cor_tf)],
+  Mean_cor = cor_agg_mean,
+  Rank_sum_rank = cor_agg_rsr,
+  Thresh_count = cor_agg_thresh2,
+  Thresh_rank = cor_agg_thresh3,
+  Min_rank = cor_agg_min2,
+  Tiebreak_rank = cor_agg_min3
+)
+
 
 
 # DE genes
@@ -936,3 +861,45 @@ ggplot(bin_cor_df) +
         axis.text = element_text(size = 20),
         axis.title = element_text(size = 20),
         plot.title = element_text(size = 20))
+
+
+
+# Ridge plot
+# ------------------------------------------------------------------------------
+
+
+evidence <- left_join(rank_df, cor_all_tf, by = "Symbol") %>% 
+  filter(Symbol != tf) %>% 
+  mutate(
+    Group = cut(Rank_integrated, breaks = seq(1, nrow(.), by = 100), include.lowest = TRUE),
+    Group = ifelse(Rank_integrated > 500, "Bottom", Group),
+    Group = factor(Group, levels = rev(unique(Group))))
+
+
+ggplot(evidence, aes(y = Group, x = Cor_all)) +
+  geom_density_ridges() +
+  geom_vline(xintercept = 0) +
+  theme_classic()
+
+
+ggplot(evidence, aes(y = Group, x = Cor_all)) +
+  geom_boxplot() +
+  theme_classic()
+
+
+ggplot(evidence, aes(y = Group, x = Cor_all_abs)) +
+  geom_density_ridges() +
+  geom_vline(xintercept = 0) +
+  theme_classic()
+
+
+ggplot(evidence, aes(y = Group, x = Cor_all_abs)) +
+  geom_boxplot() +
+  theme_classic()
+
+
+
+ggplot(evidence, aes(y = Curated_target, x = Cor_all)) +
+  geom_density_ridges() +
+  geom_vline(xintercept = 0) +
+  theme_classic()
