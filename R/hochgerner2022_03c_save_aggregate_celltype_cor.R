@@ -29,7 +29,7 @@ rownames(amat) <- colnames(amat) <- rownames(sdat)
 
 # Loop over TFs and cor with every other gene
 
-for (i in cts[1]) {
+for (i in cts) {
   
   message(paste(i, Sys.time()))
   
