@@ -13,6 +13,7 @@ library(ROCR)
 library(pheatmap)
 library(RColorBrewer)
 library(ggridges)
+library(epitools)
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
@@ -194,14 +195,15 @@ cor_agg_mean <- rowMeans(cor_tf, na.rm = TRUE)
 cor_agg_min <- colrank_mat(cor_tf)
 cor_agg_min2  <- apply(cor_agg_min, 1, min, na.rm = TRUE)
 cor_agg_min3 <- data.table::frank(list(cor_agg_min2, -cor_agg_mean), ties.method = "min")
-names(cor_agg_min4) <- names(cor_agg_min3) <- names(cor_agg_min2) <- rownames(cor_tf)
+names(cor_agg_min3) <- names(cor_agg_min2) <- rownames(cor_tf)
 
 
 # Collect into a data frame
 
 stopifnot(identical(rownames(cor_tf), names(cor_agg_rsr)))
+stopifnot(identical(names(cor_agg_rsr), names(cor_agg_mean)))
 stopifnot(identical(names(cor_agg_rsr), names(cor_agg_thresh3)))
-stopifnot(identical(names(cor_agg_rsr), names(cor_agg_min4)))
+stopifnot(identical(names(cor_agg_rsr), names(cor_agg_min3)))
 
 
 cor_ct_df <- data.frame(
@@ -865,6 +867,7 @@ ggplot(bin_cor_df) +
 
 
 # Ridge plot
+# https://r-graph-gallery.com/294-basic-ridgeline-plot.html
 # ------------------------------------------------------------------------------
 
 
