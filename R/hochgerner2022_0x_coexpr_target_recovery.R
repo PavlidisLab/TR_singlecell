@@ -29,6 +29,7 @@ rank_l <- readRDS(rank_path)
 # Load correlation matrices generated per cell type and across all cells
 cor_ct <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_cormat_celltype.RDS")
 cor_all <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_cormat_all.RDS")
+agg_ct <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_aggregate_celltype_cor.RDS")
 
 #
 de_top_qntl <- readRDS("/space/scratch/amorin/R_objects/Hochgerner2022_TR_DEA_quantile.RDS")
@@ -181,8 +182,7 @@ all_ct_nas <- names(which(ct_nas == nrow(cor_tf)))
 cor_tf <- cor_tf[setdiff(rownames(cor_tf), all_gene_nas), setdiff(colnames(cor_tf), all_ct_nas)]
 
 # Harris 2021 single cell coexpression aggregation (rank sum rank)
-cor_ct_rm_tf <- lapply(cor_ct, function(x) x[setdiff(rownames(x), tf), ])
-cor_agg_rsr <- aggregate_cor(cor_ct_rm_tf)[rownames(cor_tf), tf]
+cor_agg_rsr <- agg_ct[rownames(cor_tf), tf]
 
 # Threshold aggregate: Binarize top top 0.5% of cor, sum, rank
 cor_agg_thresh <- threshold_cmat(cor_tf, top_qtl = 0.995)[rownames(cor_tf), ]
