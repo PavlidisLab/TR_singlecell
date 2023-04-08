@@ -9,7 +9,7 @@ source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-out_path <- "/space/scratch/amorin/R_objects/Hochgerner2022_oddsratio_cellcounts.RDS"
+out_path <- "/space/scratch/amorin/R_objects/Hochgerner2022_oddsratio_cellcounts_all.RDS"
 
 # Load Seurat object
 seurat_path <- "/space/scratch/amorin/R_objects/Hochgerner2022_seurat.RDS"
@@ -65,7 +65,7 @@ get_cellcount_or <- function(bin_mat,
 
 
 
-get_or_list <- function(bin_mat, tf, gene_vec, ...) {
+get_or_list <- function(bin_mat, tf, gene_vec, ncores = 1) {
   
   or_list <- mclapply(gene_vec, function(x) {
     
@@ -79,7 +79,7 @@ get_or_list <- function(bin_mat, tf, gene_vec, ...) {
     
     return(res)
     
-  }, mc.cores = ncore)
+  }, mc.cores = ncores)
   
   names(or_list) <- input_genes
   
@@ -88,62 +88,98 @@ get_or_list <- function(bin_mat, tf, gene_vec, ...) {
 
 
 
-tf <- "Ascl1"
-n_genes <- 100
-
-
+# tf <- "Ascl1"
+# n_genes <- 100
 # input_genes <- rank_l$Mouse[[tf]] %>%
 #   filter(Symbol %in% rownames(bin_mat)) %>%
-#   filter(Symbol != tf) %>% 
+#   filter(Symbol != tf) %>%
 #   slice_head(n = n_genes) %>%
 #   pull(Symbol)
 
 
-input_genes <- rank_l$Mouse[[tf]] %>%
-  filter(Symbol %in% rownames(bin_mat)) %>%
-  pull(Symbol)
+# input_genes <- rank_l$Mouse[[tf]] %>%
+#   filter(Symbol %in% rownames(bin_mat)) %>%
+#   pull(Symbol)
 
 
 
 if (!file.exists(out_path)) {
-  or_list <- get_or_list(bin_mat, tf, input_genes)
-  saveRDS(or_list, out_path)
+  
+  all_or_list <- mclapply(tfs, function(x) {
+    
+    input_genes <- rank_l$Mouse[[x]] %>%
+      filter(Symbol %in% rownames(bin_mat)) %>%
+      pull(Symbol)
+    
+    get_or_list(bin_mat, x, input_genes, ncores = 4)
+    
+  }, mc.cores = 4)
+  
+  names(all_or_list) <- tfs
+  
+  saveRDS(all_or_list, out_path)
+  
 } else {
+  
   or_list <- readRDS(out_path)
+  
 }
 
 
 
 
-
-or_df <- do.call(rbind, or_list) %>% 
-  mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
-
-
-log_or_df <- data.frame(cbind(
-  Symbol = or_df$Symbol, 
-  log(dplyr::select(or_df, Odds_ratio, Upper, Lower)),
-  Pval = or_df$Pval
-))
+# if (!file.exists(out_path)) {
+#   or_list <- get_or_list(bin_mat, tf, input_genes)
+#   saveRDS(or_list, out_path)
+# } else {
+#   or_list <- readRDS(out_path)
+# }
 
 
 
-# ggplot(or_df, aes(x = Symbol, y = Odds_ratio)) +
-#   geom_point(size = 2.4, colour = "firebrick4") +
-#   geom_errorbar(aes(ymin = Lower, ymax = Upper), width = 0.4) +
-#   geom_hline(yintercept = 1, linetype = "dashed") +
-#   ylab("Odds ratio") +
-#   xlab("Genes ordered by integrated evidence") +
-#   theme_classic() +
-#   theme(
-#     axis.title = element_text(size = 25),
-#     axis.text.x = element_blank(),
-#     axis.text.y = element_text(size = 20)
-#   )
+
+
+# or_df <- do.call(rbind, or_list) %>% 
+#   mutate(Symbol = factor(Symbol, levels = unique(Symbol))) %>% 
+#   filter(Symbol != tf) %>% 
+#   left_join(rank_l$Mouse[[tf]], by = "Symbol")
+
+# log_or_df <- data.frame(cbind(
+#   Symbol = or_df$Symbol, 
+#   log(dplyr::select(or_df, Odds_ratio, Upper, Lower)),
+#   Pval = or_df$Pval)) %>% 
+#   left_join(rank_l$Mouse[[tf]], by = "Symbol")
+
+
+
+# Cherry pick the top OR that also has annotated evidence
+
+
+# or_boxplot <- function(df, xvar, yvar, yline) {
+#   
+#   ggplot(df, aes(x = !!sym(xvar), y = !!sym(yvar))) +
+#     geom_point(size = 2.4, colour = "firebrick4") +
+#     geom_errorbar(aes(ymin = Lower, ymax = Upper), width = 0.4) +
+#     geom_hline(yintercept = yline, linetype = "dashed") +
+#     ylab("Odds ratio") +
+#     xlab("Genes ordered by integrated evidence") +
+#     theme_classic() +
+#     theme(
+#       axis.title = element_text(size = 25),
+#       axis.text.x = element_blank(),
+#       axis.text.y = element_text(size = 20)
+#     )
+#   
+# }
+
+
+
+# plot_df <- log_or_df %>% 
+#   filter(Curated_target & Rank_integrated <= 500) %>%
+#   mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
 # 
 # 
-# 
-# ggplot(log_or_df, aes(x = Symbol, y = Odds_ratio)) +
+# ggplot(plot_df, aes(x = Symbol, y = Odds_ratio)) +
 #   geom_point(size = 2.4, colour = "firebrick4") +
 #   geom_errorbar(aes(ymin = Lower, ymax = Upper), width = 0.4) +
 #   geom_hline(yintercept = 0, linetype = "dashed") +
@@ -152,19 +188,23 @@ log_or_df <- data.frame(cbind(
 #   theme_classic() +
 #   theme(
 #     axis.title = element_text(size = 25),
-#     axis.text.x = element_blank(),
-#     axis.text.y = element_text(size = 20)
-#   )
+#     axis.title.x = element_blank(),
+#     axis.text = element_text(size = 20))
 # 
 # 
-# heatmap_df <- log_or_df %>% 
-#   mutate(Odds_ratio = ifelse(Pval < 0.05, Odds_ratio, NA)) %>% 
-#   arrange(desc(abs(Odds_ratio)))
+# 
+# plot_df <- log_or_df %>% 
+#   mutate(Top500 = Rank_integrated <= 500)
 # 
 # 
-# pheatmap(heatmap_df$Odds_ratio,
-#          cluster_rows = FALSE,
-#          cluster_cols = FALSE,
-#          na_col = "black",
-#          cellwidth = 5,
-#          cellheight = 5)
+# 
+# ggplot(plot_df, aes(x = Odds_ratio, fill = Top500)) +
+#  geom_density() +
+#   geom_vline(xintercept = 0, linetype = "dashed") +
+#   ylab("Density") +
+#   xlab("Log odds ratio") +
+#   scale_fill_manual(values = c("lightgrey", "orchid4")) +
+#   theme_classic() +
+#   theme(
+#     axis.title = element_text(size = 25),
+#     axis.text = element_text(size = 20))
