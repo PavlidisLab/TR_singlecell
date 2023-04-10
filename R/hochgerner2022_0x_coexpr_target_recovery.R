@@ -2,6 +2,9 @@
 ## TODO: standardize cmat/cormat naming
 ## TODO: decide if prep df handles ranking
 ## TODO: better collection of ranked dfs when finalize which to use
+## TODO: more explicit about genes that are kept
+## TODO: better names for single cell agg
+## TODO: functionality for ortho names
 ## -----------------------------------------------------------------------------
 
 library(plyr)
@@ -208,15 +211,14 @@ stopifnot(identical(names(cor_agg_rsr), names(cor_agg_min3)))
 
 cor_ct_df <- data.frame(
   Symbol = rownames(cor_tf),
-  Count_NA = gene_nas[rownames(cor_tf)],
+  Count_NA_cor = gene_nas[rownames(cor_tf)],
   Mean_cor = cor_agg_mean,
   Rank_sum_rank = cor_agg_rsr,
   Thresh_count = cor_agg_thresh2,
-  Thresh_rank = cor_agg_thresh3,
-  Min_rank = cor_agg_min2,
-  Tiebreak_rank = cor_agg_min3
+  Rank_binthresh = cor_agg_thresh3,
+  Rank_min = cor_agg_min2,
+  Rank_tiebreak = cor_agg_min3
 )
-
 
 
 # DE genes
@@ -248,9 +250,11 @@ de_qntl <- de_top_qntl[[tf]] %>%
 
 # Rank genes by their average expression across all cells
 
-avg_all <- rowMeans(sdat@assays$RNA@data)
-avg_all <- avg_all[rank_df$Symbol]
-rank_avg_all <- rank(-avg_all, ties.method = "min")
+avg_all <- rowMeans(sdat@assays$RNA@data)[rank_df$Symbol]
+
+rank_avg_all <- 
+  data.frame(Rank_expression = rank(-avg_all, ties.method = "min")) %>% 
+  rownames_to_column(var = "Symbol")
 
 
 # Sampled targets matched to expression level of observed targets
@@ -260,7 +264,7 @@ set.seed(14)
 sampled_targets <- sample_expression_level(
   sdat = subset(sdat, features = rank_df$Symbol), 
   targets = filter(rank_df, Curated_target)$Symbol, 
-  rank_window = 10)
+  rank_window = 200)
 
 # Targets from mismatched TRs
 
@@ -276,29 +280,10 @@ mismatched_targets[["Matched_expression"]] <- sampled_targets
 # ------------------------------------------------------------------------------
 
 
-# prep_df(agg_tf1, "Agg1") %>% head
-# plyr::join_all(list(de_table, bind_summary), by = "Symbol")
-# cor_all_tf
-# agg_tf1
-# agg_tf2
-# agg_tf3
-# rank_min_tf
-# rank_mean_tf
-# rank_tiebreak_tf
-# rank_avg_all
-
-
-evidence <- 
-  left_join(rank_df, cor_all_tf, by = "Symbol") %>% 
-  left_join(prep_df(agg_tf1, "Agg1"), by = "Symbol") %>% 
-  left_join(prep_df(agg_tf2, "Agg2"), by = "Symbol") %>% 
-  left_join(prep_df(agg_tf3, "Agg3"), by = "Symbol") %>% 
-  left_join(prep_df(rank_min_tf, "Rank_min", add_rank = FALSE), by = "Symbol") %>% 
-  left_join(prep_df(rank_mean_tf, "Rank_mean", add_rank = FALSE), by = "Symbol") %>% 
-  left_join(prep_df(rank_tiebreak_tf, "Rank_tiebreak", add_rank = FALSE), by = "Symbol") %>% 
-  left_join(de_ct, by = "Symbol") %>% 
-  left_join(de_qntl, by = "Symbol") %>% 
-  left_join(prep_df(rank_avg_all, "Rank_expression", add_rank = FALSE), by = "Symbol")
+evidence <- plyr::join_all(
+  list(rank_df, cor_all_tf, cor_ct_df, de_ct, de_qntl, rank_avg_all),
+  by = "Symbol") %>% 
+  filter(Symbol != tf)
 
 
 # Which ranking columns to use
@@ -307,11 +292,9 @@ keep_cols <- c(
   "Rank_integrated",
   "Rank_cor_all",
   "Rank_cor_all_abs",
-  "Rank_Agg1",
-  "Rank_Agg2",
-  "Rank_Agg3",
+  "Rank_sum_rank",
+  "Rank_binthresh",
   "Rank_min",
-  "Rank_mean",
   "Rank_tiebreak",
   "Rank_DE_CT",
   "Rank_DE_qntl",
@@ -322,86 +305,36 @@ keep_cols <- c(
 stopifnot(all(keep_cols %in% colnames(evidence)))
 
 
-# List of ROC dfs
-roc_l <- lapply(keep_cols, function(x) {
-  
-  get_perf_df(
-    rank_df = dplyr::arrange(evidence, !!sym(x)),
-    label_col = "Curated_target",
-    measure = "ROC") %>% 
-    mutate(Group = x)
-})
-names(roc_l) <- keep_cols
+# Precision recall dfs and AURPC values
+pr_df <- all_perf_df(evidence, keep_cols, label_col = "Curated_target", measure = "PR")
+auprc <- all_au_perf(evidence, keep_cols, label_col = "Curated_target", measure = "AUPRC")
 
-
-# List of AUROCs
-auc_l <- lapply(keep_cols, function(x) {
-  
-  get_au_perf(
-    rank_df = dplyr::arrange(evidence, !!sym(x)),
-    label_col = "Curated_target",
-    measure = "AUROC")
-})
-names(auc_l) <- keep_cols
-
-
-
-# List of PR dfs
-pr_l <- lapply(keep_cols, function(x) {
-  
-  get_perf_df(
-    rank_df = dplyr::arrange(evidence, !!sym(x)),
-    label_col = "Curated_target",
-    measure = "PR") %>% 
-    mutate(Group = x)
-})
-names(pr_l) <- keep_cols
-
-
-# List of AUPRCs
-auprc_l <- lapply(keep_cols, function(x) {
-  
-  get_au_perf(
-    rank_df = dplyr::arrange(evidence, !!sym(x)),
-    label_col = "Curated_target",
-    measure = "AUPRC")
-})
-names(auprc_l) <- keep_cols
-
-
+# ROC dfs and AUROC values
+roc_df <- all_perf_df(evidence, keep_cols, label_col = "Curated_target", measure = "ROC")
+auroc <- all_au_perf(evidence, keep_cols, label_col = "Curated_target", measure = "AUROC")
 
 
 # Prepare for plotting
-# ------------------------------------------------------------------------------
-
-
-# Long df for plotting
-
-roc_df <- do.call(rbind, roc_l) %>% 
-  mutate(Group = factor(Group, levels = keep_cols))
-
-# Labels for plotting
-
-auc_labels <- paste0(keep_cols, " AUC=", round(unlist(auc_l), 3))
 
 # Colours
 
 cols <- c("Rank_integrated" = "black",
           "Rank_cor_all" = "dodgerblue1",
           "Rank_cor_all_abs" = "dodgerblue2",
-          "Rank_Agg1" = "orangered1",
-          "Rank_Agg2" = "orangered2",
-          "Rank_Agg3" = "orangered3",
-          "Rank_min" = "seagreen2",
-          "Rank_mean" = "seagreen3",
+          "Rank_sum_rank" = "orangered1",
+          "Rank_binthresh" = "orangered2",
+          "Rank_min" = "orangered3",
+          "Rank_tiebreak" = "orangered4",
           "Rank_tiebreak" = "seagreen4",
-          "Rank_DE_qntl" = "purple",
-          "Rank_DE_CT" = "green",
+          "Rank_DE_qntl" = "seagreen2",
+          "Rank_DE_CT" = "seagreen4",
           "Rank_expression" = "lightgrey")
 
 
 
-plot_auc(roc_df, auc_labels, cols, tf)
+plot_perf(df = roc_df, auc_l = auroc, measure = "ROC", cols = cols, title = tf, ncol_legend = 2)
+plot_perf(df = pr_df, auc_l = auprc, measure = "PR", cols = cols, title = tf, ncol_legend = 2)
+
 
 
 
