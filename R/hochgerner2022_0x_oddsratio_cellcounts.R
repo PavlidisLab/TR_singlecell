@@ -1,4 +1,4 @@
-## 
+## TODO: fix save
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -9,7 +9,7 @@ source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-out_path <- "/space/scratch/amorin/R_objects/Hochgerner2022_oddsratio_cellcounts_all.RDS"
+out_path <- "/space/scratch/amorin/R_objects/Hochgerner2022_oddsratio_cellcounts"
 
 # Load Seurat object
 seurat_path <- "/space/scratch/amorin/R_objects/Hochgerner2022_seurat.RDS"
@@ -69,8 +69,6 @@ get_or_list <- function(bin_mat, tf, gene_vec, ncores = 1) {
   
   or_list <- mclapply(gene_vec, function(x) {
     
-    message(paste(x, Sys.time()))
-    
     res <- tryCatch({
       get_cellcount_or(bin_mat, tf, x)
     }, error = function(e) {
@@ -81,7 +79,7 @@ get_or_list <- function(bin_mat, tf, gene_vec, ncores = 1) {
     
   }, mc.cores = ncores)
   
-  names(or_list) <- input_genes
+  names(or_list) <- gene_vec
   
   return(or_list)
 }
@@ -104,25 +102,31 @@ get_or_list <- function(bin_mat, tf, gene_vec, ncores = 1) {
 
 
 if (!file.exists(out_path)) {
-  
+
   all_or_list <- mclapply(tfs, function(x) {
+
+    message(paste(x, Sys.time()))
     
     input_genes <- rank_l$Mouse[[x]] %>%
       filter(Symbol %in% rownames(bin_mat)) %>%
       pull(Symbol)
+
+    or_list <- get_or_list(bin_mat, x, input_genes, ncores = 4)
     
-    get_or_list(bin_mat, x, input_genes, ncores = 4)
+    saveRDS(or_list, paste0(out_path, "_", x, ".RDS"))
     
+    return(or_list)
+
   }, mc.cores = 4)
-  
+
   names(all_or_list) <- tfs
-  
-  saveRDS(all_or_list, out_path)
-  
+
+  saveRDS(all_or_list, paste0(out_path, "_all.RDS"))
+
 } else {
-  
+
   or_list <- readRDS(out_path)
-  
+
 }
 
 
