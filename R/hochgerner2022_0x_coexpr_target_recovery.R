@@ -358,7 +358,7 @@ fake_auprc <- all_au_perf(fake_evidence, keep_cols, label_col = "Curated_target"
 fake_roc_df <- all_perf_df(fake_evidence, keep_cols, label_col = "Curated_target", measure = "ROC")
 fake_auroc <- all_au_perf(fake_evidence, keep_cols, label_col = "Curated_target", measure = "AUROC")
 plot_perf(df = fake_roc_df, auc_l = fake_auroc, measure = "ROC", cols = cols, title = tf, ncol_legend = 1)
-plot_perf(df = fake_pr_df, auc_l = fake_auprc, measure = "PR", cols = cols, title = tf, ncol_legend = 1)
+plot_perf(df = fake_pr_df, auc_l = fake_auprc, measure = "PR", cols = cols, title = tf, ncol_legend = 1) + theme(legend.position = c(0.7, 0.7))
 ##
 
 
@@ -544,38 +544,49 @@ all_perf_l <- mclapply(tfs, function(tf) {
 names(all_perf_l) <- tfs
 
 
-all_auprc_mat <- do.call(cbind, lapply(all_perf_l, `[[`, "AUPRC"))
-rownames(all_auprc_mat) <- keep_cols
-
-
-pheatmap(all_auprc_mat,
-         cluster_rows = TRUE,
-         cluster_cols = FALSE,
-         # gaps_col = c(1, 3, 6, 9, 11),
-         color = colorRampPalette(brewer.pal(n = 7, name = "OrRd"))(100),
-         display_numbers = round(all_auprc_mat, 3),
-         number_color = "black",
-         fontsize = 20,
-         cellwidth = 50,
-         cellheight = 50)
-
-
-
+# AUPRC heatmap
 
 all_auprc_mat <- do.call(cbind, lapply(all_perf_l, `[[`, "AUPRC"))
 rownames(all_auprc_mat) <- keep_cols
+all_auprc_mat <- all_auprc_mat[order(rowMeans(all_auprc_mat)), ]
 
 
 pheatmap(all_auprc_mat,
-         cluster_rows = TRUE,
+         cluster_rows = FALSE,
          cluster_cols = FALSE,
-         # gaps_col = c(1, 3, 6, 9, 11),
-         color = colorRampPalette(brewer.pal(n = 7, name = "OrRd"))(100),
-         display_numbers = round(all_auprc_mat, 3),
+         color = colorRampPalette(brewer.pal(n = 9, name = "Blues"))(100),
+         # display_numbers = round(all_auprc_mat, 3),
          number_color = "black",
+         border_color = NA,
          fontsize = 20,
          cellwidth = 50,
-         cellheight = 50)
+         cellheight = 50,
+         height = 9,
+         width = 9)
+
+
+
+
+
+# AUROC heatmap
+
+all_auroc_mat <- do.call(cbind, lapply(all_perf_l, `[[`, "AUROC"))
+rownames(all_auroc_mat) <- keep_cols
+all_auroc_mat <- all_auroc_mat[order(rowMeans(all_auroc_mat)), ]
+
+
+pheatmap(all_auroc_mat,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = colorRampPalette(brewer.pal(n = 9, name = "YlGn"))(100),
+         # display_numbers = round(all_auproc_mat, 3),
+         number_color = "black",
+         border_color = NA,
+         fontsize = 20,
+         cellwidth = 50,
+         cellheight = 50,
+         height = 9,
+         width = 9)
 
 
 
