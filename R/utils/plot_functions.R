@@ -34,7 +34,7 @@ plot_perf <- function(df,
           plot.title = element_text(size = 30),
           legend.title = element_blank(),
           legend.text = element_text(size = 20),
-          legend.position = c(0.7, 0.2))
+          legend.position = c(0.8, 0.25))
   
   return(p)
 }
