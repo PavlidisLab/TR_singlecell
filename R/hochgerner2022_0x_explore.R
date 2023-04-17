@@ -37,7 +37,6 @@ ribo_genes <- intersect(ribo_genes$MGI.Gene.Marker.ID, rownames(sdat))
 tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
 
 
-
 #
 # ------------------------------------------------------------------------------
 
