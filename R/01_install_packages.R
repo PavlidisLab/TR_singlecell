@@ -12,7 +12,6 @@ if (!requireNamespace("remotes")) install.packages("remotes")
 
 install.packages("Seurat")
 install.packages("WGCNA")
-
 install.packages("umap")
 install.packages("RcppTOML")
 install.packages("igraph")

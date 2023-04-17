@@ -174,12 +174,12 @@ filter(rank_df, Count_NA == min(rank_df$Count_NA)) %>% head()
 # ------------------------------------------------------------------------------
 
 
-gene2 <- "Ppp3ca"
+gene2 <- "Lhx8"
 
 sort(sapply(cor_ct, function(x) x[gene2, tf]), decreasing = TRUE)
 sort(sapply(cor_ct_rank, function(x) x[gene2, tf]))
 
-ct <- "VGLUT1-15-Fmo1_Rxfp3"
+ct <- "GABA-50-Chat-Vip"
 
 head(sort(cor_ct[[ct]][, tf], decreasing = TRUE))
 
