@@ -4,32 +4,51 @@ source("R/utils/functions.R")
 
 
 sc_dir_hg <- "/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata/"
-dat <- read.delim(file.path(sc_dir_hg, "GSE180928/GSE180928_filtered_cell_counts.csv"), sep = ",")
-meta <- read.delim(file.path(sc_dir_hg, "GSE180928/GSE180928_metadata.csv"), sep = ",")
-
-rownames(dat) <- dat$X
-dat$X <- NULL
-colnames(dat) <- str_replace_all(colnames(dat), "\\.", "_")
-dat <- as.matrix(dat)
+dat_path <- file.path(sc_dir_hg, "GSE180928/GSE180928_filtered_cell_counts.csv")
+meta_path <- file.path(sc_dir_hg, "GSE180928/GSE180928_metadata.csv")
+out_path <- "/space/scratch/amorin/R_objects/20_04_2023_GSE180928.RDS"
 
 
-meta <- meta %>% 
-  dplyr::rename(ID = X, Cell_type = Cluster) %>% 
-  mutate(ID = str_replace_all(ID, "-", "_"))
+if (!file.exists(out_path)) {
+  
+  dat <- read.delim(file.path(sc_dir_hg, "GSE180928/GSE180928_filtered_cell_counts.csv"), sep = ",")
+  meta <- read.delim(file.path(sc_dir_hg, "GSE180928/GSE180928_metadata.csv"), sep = ",")
+  
+  rownames(dat) <- dat$X
+  dat$X <- NULL
+  colnames(dat) <- str_replace_all(colnames(dat), "\\.", "_")
+  dat <- as.matrix(dat)
+  
+  
+  meta <- meta %>% 
+    dplyr::rename(ID = X, Cell_type = Cluster) %>% 
+    mutate(ID = str_replace_all(ID, "-", "_"))
+  
+  stopifnot(all(colnames(dat) %in% meta$ID))
+  
+  dat <- dat[, meta$ID]
+  
+  saveRDS(list(dat, meta), file = out_path)
+  
+} else {
+  
+  dat <- readRDS(out_path)
+  meta <- dat[[2]]
+  dat <- dat[[1]]
+  
+}
 
-stopifnot(all(colnames(dat) %in% meta$ID))
 
-dat <- dat[, meta$ID]
 
 stopifnot(identical(colnames(dat), meta$ID))
 
 cts <- unique(meta$Cell_type)
-
 tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
 genes <- rownames(dat)
 
+
 # Min count of non-zero expressing cells to keep gene for correlating
-min_count <- 20
+min_cell <- 20
 
 
 thresh <- floor(nrow(dat) * 0.005)
@@ -38,19 +57,6 @@ thresh <- thresh + 1  # +1 for the moment to account for keeping self cor
 
 
 # Subset for speed of testing
-
-# mat <- dat[1:1000, filter(meta, Cell_type == cts[1])$ID]
-# meta_sub <- filter(meta, Cell_type == meta$Cell_type[1])
-# meta_sub2 <- filter(meta, Cell_type %in% cts[1:2])
-# stopifnot(identical(ncol(mat), nrow(meta_sub)))
-# saveRDS(list(mat, meta_sub, meta_sub2), file = "~/scratch/R_objects/17_04_2023_GSE180928_subset_for_test.RDS")
-
-# 
-# dat2 <- readRDS("~/scratch/R_objects/17_04_2023_GSE180928_subset_for_test.RDS")
-# mat <- dat2[[1]]
-# meta_sub <- dat2[[2]]
-# meta_sub2 <- dat2[[3]]
-
 
 mat <- dat[1:1000, ]
 meta_sub <- filter(meta, Cell_type %in% cts[1:2])
@@ -99,9 +105,11 @@ allrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
 
 get_cor_mat <- function(mat, 
                         cor_method = "pearson",
-                        lower_tri = TRUE) {
+                        lower_tri = TRUE,
+                        ncores = 1) {
   
-  cmat <- WGCNA::cor(mat, method = cor_method, use = "pairwise.complete.obs")
+  cmat <- WGCNA::cor(
+    mat, method = cor_method, use = "pairwise.complete.obs", nThreads = ncores)
   
   if (lower_tri) {
     diag(cmat) <- NA
@@ -178,45 +186,6 @@ cor_and_rank <- function(mat,
 # https://pubmed.ncbi.nlm.nih.gov/34015329/
 # Rank coexpression (1=best) across cell types. Set NAs to network mean. Sum 
 # the cell-type ranks, and then rank order these sums (1=best).
-
-
-# all_RSR_aggregate <- function(mat,
-#                               meta, 
-#                               min_cell = 20, 
-#                               # cor_method = "pearson",
-#                               # na_action,
-#                               # ties_arg = "min",
-#                               ...) {
-#   
-#   stopifnot(c("Cell_type", "ID") %in% colnames(meta))
-#   
-#   cts <- unique(meta$Cell_type)
-#   genes <- rownames(mat)
-#   
-#   amat <- init_agg_mat(row_genes = genes)
-#   
-#   for (ct in cts) {
-#     
-#     message(paste(ct, Sys.time()))
-#     
-#     # Subset cell type counts and transpose matrix (genes as columns) for cor
-#     ct_mat <- t(mat[, filter(meta, Cell_type == ct)$ID])
-#     ct_mat <- under_min_count_to_na(ct_mat, min_cell)
-#     
-#     if (sum(is.na(ct_mat)) == length(ct_mat)) {
-#       message(paste(ct, "skipped due to insufficient counts"))
-#       next()
-#     }
-#     
-#     rmat <- cor_and_rank(ct_mat)
-#     amat <- amat + rmat
-#   
-#   }
-#   
-#   amat <- colrank_mat(-amat, na_arg = "last", ties_arg = "min")
-#   
-#   return(amat)
-# }
 
 
 # 1: Column rank where NAs cors are set to 0.
@@ -489,60 +458,57 @@ all_RSR_aggregate6 <- function(mat,
 }
 
 
+# Average Z-score
+all_zscore_aggregate <- function(mat,
+                                  meta,
+                                  min_cell = 20,
+                                  ...) {
+  
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta))
+  
+  cts <- unique(meta$Cell_type)
+  genes <- rownames(mat)
+  
+  amat <- init_agg_mat(row_genes = genes)
+  na_mat <- amat
+  
+  for (ct in cts) {
+    
+    message(paste(ct, Sys.time()))
+    
+    # Subset cell type counts and transpose matrix (genes as columns) for cor
+    ct_mat <- t(mat[, filter(meta, Cell_type == ct)$ID])
+    ct_mat <- under_min_count_to_na(ct_mat, min_cell)
+    
+    if (sum(is.na(ct_mat)) == length(ct_mat)) {
+      message(paste(ct, "skipped due to insufficient counts"))
+      next()
+    }
+    
+    cmat <- get_cor_mat(ct_mat, lower_tri = FALSE)
+    
+    na_ix <- which(is.na(cmat), arr.ind = TRUE)
+    na_mat[na_ix] <- na_mat[na_ix] + 1
+    
+    cmat[is.na(cmat)] <- 0
+    # diag(cmat) <- NA
+  
+    zmat <- scale(cmat)
+    zmat[is.na(zmat)] <- 0
+    
+    amat <- amat + zmat
 
+  }
+  
+  agg_list <- list(
+    Amat = amat,
+    Avg_all = (amat / length(cts)),
+    Avg_nonNA = (amat / (length(cts) - na_mat)),
+    NA_mat = na_mat)
+  
+  return(agg_list)
+}
 
-## Need to keep track of NAs -> 0s without ranking symmetric NAs
-
-ct_mat <- t(mat[, filter(meta, Cell_type == cts[1])$ID])
-ct_mat <- under_min_count_to_na(ct_mat, min_cell)
-
-cmat_tri <- get_cor_mat(ct_mat)
-cmat_full <- get_cor_mat(ct_mat, lower_tri = FALSE)
-
-cmat_full_nato0 <- cmat_full
-cmat_full_nato0[is.na(cmat_full_nato0)] <- 0
-
-cmat_full_nato0_tri <- cmat_full_nato0
-diag(cmat_full_nato0_tri) <- NA
-cmat_full_nato0_tri[upper.tri(cmat_full_nato0_tri)] <- NA
-
-rmat_full_nato0_tri <- allrank_mat(cmat_full_nato0_tri)
-
-
-
-ct_mat[1:5, 1:5]
-cmat_tri[1:5, 1:5]
-cmat_full[1:5, 1:5]
-cmat_full_nato0[1:5, 1:5]
-cmat_full_nato0_tri[1:5, 1:5]
-rmat_full_nato0_tri[1:5, 1:5]
-
-
-sum(is.na(cmat_full))
-which(is.na(cmat_full), arr.ind = TRUE)[1,]
-cmat_full[24, 1, drop = FALSE]
-
-sum(is.na(cmat_full_nato0))
-sum(is.na(cmat_tri))
-sum(is.na(cmat_full_nato0_tri))
-
-which(cmat_full_nato0_tri == 0, arr.ind = TRUE)[1,]
-cmat_full_nato0_tri[24, 1, drop = FALSE]
-
-
-which(rmat_full_nato0_tri == min(rmat_full_nato0_tri, na.rm = TRUE), arr.ind = TRUE)
-cmat_full_nato0_tri[630, 498, drop = FALSE]
-rmat_full_nato0_tri[630, 498, drop = FALSE]
-
-##
-
-
-cmat[1:5, 1:5]
-rmat[1:5, 1:5]
-amat[1:5, 1:5]
-which(cmat == max(cmat, na.rm = TRUE), arr.ind = TRUE)
-which(rmat == min(rmat, na.rm = TRUE), arr.ind = TRUE)
-which(amat == min(amat, na.rm = TRUE), arr.ind = TRUE)
 
 
 # Check init agg mat
@@ -655,10 +621,68 @@ rsr4 <- all_RSR_aggregate4(mat, meta)
 rsr5 <- all_RSR_aggregate5(mat, meta)
 rsr6 <- all_RSR_aggregate6(mat, meta)
 
+summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], rsr3[,x])))
+summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], rsr5[,x])))
+summary(sapply(1:ncol(rsr4), function(x) cor(rsr6[,x], rsr5[,x], use = "pairwise.complete.obs")))
 
 
 
-# Speed of cor. ncore8 actually slightly slows down, likely NA related.
+
+
+
+
+## Need to keep track of NAs -> 0s without ranking symmetric NAs
+
+ct_mat <- t(mat[, filter(meta, Cell_type == cts[1])$ID])
+ct_mat <- under_min_count_to_na(ct_mat, min_cell)
+
+cmat_tri <- get_cor_mat(ct_mat)
+cmat_full <- get_cor_mat(ct_mat, lower_tri = FALSE)
+
+cmat_full_nato0 <- cmat_full
+cmat_full_nato0[is.na(cmat_full_nato0)] <- 0
+
+cmat_full_nato0_tri <- cmat_full_nato0
+diag(cmat_full_nato0_tri) <- NA
+cmat_full_nato0_tri[upper.tri(cmat_full_nato0_tri)] <- NA
+
+rmat_full_nato0_tri <- allrank_mat(cmat_full_nato0_tri)
+
+
+
+ct_mat[1:5, 1:5]
+cmat_tri[1:5, 1:5]
+cmat_full[1:5, 1:5]
+cmat_full_nato0[1:5, 1:5]
+cmat_full_nato0_tri[1:5, 1:5]
+rmat_full_nato0_tri[1:5, 1:5]
+
+
+sum(is.na(cmat_full))
+which(is.na(cmat_full), arr.ind = TRUE)[1,]
+cmat_full[24, 1, drop = FALSE]
+
+sum(is.na(cmat_full_nato0))
+sum(is.na(cmat_tri))
+sum(is.na(cmat_full_nato0_tri))
+
+which(cmat_full_nato0_tri == 0, arr.ind = TRUE)[1,]
+cmat_full_nato0_tri[24, 1, drop = FALSE]
+
+
+which(rmat_full_nato0_tri == min(rmat_full_nato0_tri, na.rm = TRUE), arr.ind = TRUE)
+cmat_full_nato0_tri[630, 498, drop = FALSE]
+rmat_full_nato0_tri[630, 498, drop = FALSE]
+
+##
+
+
+cmat[1:5, 1:5]
+rmat[1:5, 1:5]
+amat[1:5, 1:5]
+which(cmat == max(cmat, na.rm = TRUE), arr.ind = TRUE)
+which(rmat == min(rmat, na.rm = TRUE), arr.ind = TRUE)
+which(amat == min(amat, na.rm = TRUE), arr.ind = TRUE)# Speed of cor. ncore8 actually slightly slows down, likely NA related.
 res <- microbenchmark::microbenchmark(
   F1 = WGCNA::cor(mat, nThreads = 1),
   F2 = WGCNA::cor(mat, nThreads = 8),
