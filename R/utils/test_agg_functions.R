@@ -50,35 +50,52 @@ genes <- rownames(dat)
 # Min count of non-zero expressing cells to keep gene for correlating
 min_cell <- 20
 
-
+# Threshold topn n position for binarizing
 thresh <- floor(nrow(dat) * 0.005)
 thresh <- thresh + 1  # +1 for the moment to account for keeping self cor
 
 
-
 # Subset for speed of testing
-
-mat <- dat[1:1000, ]
+mat <- dat[5001:6000, ]
 meta_sub <- filter(meta, Cell_type %in% cts[1:2])
 
 
 
+
 # Check init agg mat
+# ------------------------------------------------------------------------------
+
+
 genes <- rownames(mat)
 amat1 <- init_agg_mat(row_genes = genes)
 # amat2 <- init_agg_mat(row_genes = genes, col_genes = str_to_upper(tfs))
 
 
-# Check min to NA. Transpose as intended that genes are columns
-na_mat <- under_min_count_to_na(t(mat))
+
+
+# Subset to cell type and check min to NA. Transpose so genes are columns
+# ------------------------------------------------------------------------------
+
+
+ct <- cts[1]
+ct_mat <- t(mat[, filter(meta, Cell_type == ct)$ID])
+
+na_mat <- under_min_count_to_na(ct_mat)
+
 na_gene <- genes[which(is.na(na_mat), arr.ind = TRUE)[, "col"][1]]
-sum(mat[na_gene, ] != 0) < min_count
-sum(is.na(mat))
-sum(is.na(na_mat))
-na_mat[1:5, 1:5]
+
+stopifnot(sum(ct_mat[, na_gene] != 0) < min_cell)
+stopifnot(sum(is.na(na_mat)) > sum(is.na(ct_mat)))
+
+
+# na_mat[1:5, 1:5]
+# ct_mat[1:5, 1:5]
 
 
 # Check cor. Transpose mat so that genes are cols.
+# ------------------------------------------------------------------------------
+
+
 cmat1 <- get_cor_mat(t(mat))
 cmat2 <- get_cor_mat(t(mat), lower_tri = FALSE)
 cmat3 <- get_cor_mat(na_mat)
@@ -94,6 +111,9 @@ cmat4[1:5, 1:5]
 
 
 # Check ranking of each element of matrix
+# ------------------------------------------------------------------------------
+
+
 allrank1 <- allrank_mat(cmat1)
 allrank2 <- allrank_mat(cmat2)
 allrank3 <- allrank_mat(cmat3)
@@ -116,6 +136,8 @@ df <- mat_to_df(allrank1) %>%
 
 # Check row rank. Default is ties as min and keep NA. mat will be ordered by
 # cells, na_mat will be ordered by genes
+# ------------------------------------------------------------------------------
+
 
 rowrank1 <- rowrank_mat(mat)
 rowrank2 <- rowrank_mat(na_mat)
@@ -141,6 +163,9 @@ rowrank6[1:5, 1:5]
 
 
 # Check col rank
+# ------------------------------------------------------------------------------
+
+
 colrank1 <- colrank_mat(t(mat)) # default is min
 
 colrank1[1:5, 1:5]
@@ -148,24 +173,30 @@ t(mat)[1:5, 1:5]
 
 
 # Check cor and rank
-cr1 <- cor_and_rank(mat, na_arg = "last")
-cr2 <- cor_and_rank(na_mat, na_arg = "last")
-cr3 <- cor_and_rank(mat, na_arg = "mean")
-cr4 <- cor_and_rank(na_mat, na_arg = "mean")
-cr5 <- cor_and_rank(mat, ties_arg = "min")
-cr6 <- cor_and_rank(na_mat, ties_arg = "random")
-
-cr1[1:5, 1:5]
-cr2[1:5, 1:5]
-cr3[1:5, 1:5]
-cr4[1:5, 1:5]
-cr5[1:5, 1:5]
-cr6[1:5, 1:5]
-
-identical(cr1, cr2)
+# ------------------------------------------------------------------------------
 
 
-# Check RSR
+# cr1 <- cor_and_rank(mat, na_arg = "last")
+# cr2 <- cor_and_rank(na_mat, na_arg = "last")
+# cr3 <- cor_and_rank(mat, na_arg = "mean")
+# cr4 <- cor_and_rank(na_mat, na_arg = "mean")
+# cr5 <- cor_and_rank(mat, ties_arg = "min")
+# cr6 <- cor_and_rank(na_mat, ties_arg = "random")
+# 
+# cr1[1:5, 1:5]
+# cr2[1:5, 1:5]
+# cr3[1:5, 1:5]
+# cr4[1:5, 1:5]
+# cr5[1:5, 1:5]
+# cr6[1:5, 1:5]
+# 
+# identical(cr1, cr2)
+
+
+# Check RSR and Zscore
+# ------------------------------------------------------------------------------
+
+
 rsr1 <- all_RSR_aggregate1(mat, meta)
 rsr2 <- all_RSR_aggregate2(mat, meta)
 rsr3 <- all_RSR_aggregate3(mat, meta)
@@ -173,13 +204,50 @@ rsr4 <- all_RSR_aggregate4(mat, meta)
 rsr5 <- all_RSR_aggregate5(mat, meta)
 rsr6 <- all_RSR_aggregate6(mat, meta)
 
+z1 <- all_zscore_aggregate(mat, meta)
+
+
 summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], rsr3[,x])))
 summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], rsr5[,x])))
 summary(sapply(1:ncol(rsr4), function(x) cor(rsr6[,x], rsr5[,x], use = "pairwise.complete.obs")))
+summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], z1$Avg_all[,x])))
+summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], z1$Avg_nonNA[,x])))
 
 
 
-## Need to keep track of NAs -> 0s without ranking symmetric NAs
+rank_df <- data.frame(
+  Symbol = rownames(rsr1),
+  RSR1 = rsr1[, "ASCL1"],
+  RSR2 = rsr2[, "ASCL1"],
+  RSR3 = rsr3[, "ASCL1"],
+  RSR4 = rsr4[, "ASCL1"],
+  RSR5 = rsr5[, "ASCL1"],
+  RSR6 = rsr6[, "ASCL1"],
+  Z_all = z1$Avg_all[, "ASCL1"],
+  Z_nonNA = z1$Avg_nonNA[, "ASCL1"]
+)
+
+
+plot(rsr1[,1], z1$Avg_all[,1])
+plot(rsr1[,1], z1$Avg_nonNA[,1])
+cor(rsr1[,1], z1$Avg_nonNA[,1], method = "spearman")
+cor(rsr1[,1], z1$Avg_nonNA[,1], method = "spearman")
+
+summary(sapply(1:ncol(z1$Avg_all), function(x) cor(z1$NA_mat[, x], z1$Avg_all[, x], method = "spearman")))
+summary(sapply(1:ncol(z1$Avg_all), function(x) cor(z1$NA_mat[, x], z1$Avg_nonNA[, x], method = "spearman")))
+
+
+
+
+# z1$Avg_all[1:5, 1:5]
+# z1$Avg_nonNA[1:5, 1:5]
+all_celltype_cor(mat, meta, gene1 = "ASCL1", gene2 = "OLIG1")
+
+
+
+# Need to keep track of NAs -> 0s without ranking symmetric NAs
+# ------------------------------------------------------------------------------
+
 
 ct_mat <- t(mat[, filter(meta, Cell_type == cts[1])$ID])
 ct_mat <- under_min_count_to_na(ct_mat, min_cell)
@@ -222,10 +290,11 @@ which(rmat_full_nato0_tri == min(rmat_full_nato0_tri, na.rm = TRUE), arr.ind = T
 cmat_full_nato0_tri[630, 498, drop = FALSE]
 rmat_full_nato0_tri[630, 498, drop = FALSE]
 
-##
+
 
 
 # Speed of cor. ncore8 actually slightly slows down, likely NA related.
+# ------------------------------------------------------------------------------
 
 
 res <- microbenchmark::microbenchmark(
@@ -254,7 +323,6 @@ res <- microbenchmark::microbenchmark(
   F4 = get_cor_mat(ct_mat2, lower_tri = FALSE, ncores = 8),
   times = 10
 )
-
 
 
 # Pearson vs Spearman

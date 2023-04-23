@@ -69,7 +69,7 @@ get_cor_mat <- function(mat,
 
 under_min_count_to_na <- function(mat, min_count = 20) {
   
-  na_genes <- apply(mat, 2, function(x) sum(x != 0)) <= min_count
+  na_genes <- apply(mat, 2, function(x) sum(x != 0)) < min_count
   mat[, na_genes] <- NA
   return(mat)
 }
@@ -403,9 +403,10 @@ all_RSR_aggregate6 <- function(mat,
 
 # Average Z-score
 all_zscore_aggregate <- function(mat,
-                                  meta,
-                                  min_cell = 20,
-                                  ...) {
+                                 meta,
+                                 min_cell = 20,
+                                 ...) {
+  
   
   stopifnot(c("Cell_type", "ID") %in% colnames(meta))
   
@@ -451,6 +452,40 @@ all_zscore_aggregate <- function(mat,
   
   return(agg_list)
 }
+
+
+
+# Get the cell type cors for given genes
+
+all_celltype_cor <- function(mat,
+                             meta,
+                             min_cell = 20,
+                             gene1,
+                             gene2) {
+  
+  
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta))
+  
+  cts <- unique(meta$Cell_type)
+
+  cor_l <- lapply(cts, function(ct) {
+    
+    ct_mat <- t(mat[c(gene1, gene2), filter(meta, Cell_type == ct)$ID])
+    
+    if (sum(ct_mat[, 1] != 0) < min_cell || sum(ct_mat[, 2] != 0) < min_cell) {
+      return(NA)
+    }
+    
+    WGCNA::cor(ct_mat[, gene1], ct_mat[, gene2])
+
+  })
+  names(cor_l) <- cts
+  
+  cor_vec <- sort(unlist(cor_l), decreasing = TRUE)
+
+  return(cor_vec)
+}
+
 
 
 
