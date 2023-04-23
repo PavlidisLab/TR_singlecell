@@ -25,12 +25,14 @@ colrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
 }
 
 
+
 # Rank matrix rows such that 1=best. Return as same dimension as input.
 
 rowrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
   rank_mat <- apply(-mat, 1, rank, ties.method = ties_arg, na.last = na_arg)
   return(t(rank_mat))
 }
+
 
 
 # TODO: 
@@ -42,6 +44,7 @@ allrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
   rownames(rmat) <- colnames(rmat) <- rownames(mat)
   return(rmat)
 }
+
 
 
 # TODO:
@@ -63,6 +66,18 @@ get_cor_mat <- function(mat,
 }
 
 
+
+# Replace upper tri of mat with lower tri.
+
+lowertri_to_symm <- function(mat, na_diag = TRUE) {
+  
+  mat[upper.tri(mat)] <-  t(mat)[upper.tri(mat)]
+  if (na_diag) diag(mat) <- NA
+  return(mat)
+}
+
+
+
 # If a col of mat has fewer than min_count elements that are non-zero, set that
 # col to NAs. This is done to produce an NA during correlation, instead of 
 # allowing values resulting from fewer observations.
@@ -73,6 +88,7 @@ under_min_count_to_na <- function(mat, min_count = 20) {
   mat[, na_genes] <- NA
   return(mat)
 }
+
 
 
 # Return a gene x gene matrix of 0s used to track coexpression aggregation
@@ -101,6 +117,7 @@ init_agg_mat <- function(row_genes, col_genes = NULL) {
 
 
 
+
 # 
 
 cor_and_rank <- function(mat,
@@ -125,10 +142,12 @@ cor_and_rank <- function(mat,
 
 
 
+
 # Rank sum rank from Harris et al., 2021 (Jesse Gillis) 
 # https://pubmed.ncbi.nlm.nih.gov/34015329/
 # Rank coexpression (1=best) across cell types. Set NAs to network mean. Sum 
 # the cell-type ranks, and then rank order these sums (1=best).
+
 
 
 # 1: Column rank where NAs cors are set to 0.
@@ -203,6 +222,7 @@ all_RSR_aggregate2 <- function(mat,
     cmat <- get_cor_mat(ct_mat, lower_tri = FALSE)
     cmat[is.na(cmat)] <- 0
     # diag(cmat) <- NA
+    diag(cmat) <- 1
     cmat[upper.tri(cmat)] <- NA
     
     rmat <- allrank_mat(cmat)
@@ -211,9 +231,10 @@ all_RSR_aggregate2 <- function(mat,
   }
   
   amat <- allrank_mat(-amat)
-  
+
   return(amat)
 }
+
 
 
 
@@ -490,64 +511,64 @@ all_celltype_cor <- function(mat,
 
 
 
-binary_threshold <- function(mat, threshold) {
-  
-  # Threshold by pval
-  
-  binmat <- mclapply(1:ncol(cmat$p), function(x) {
-    
-    vec <- cmat$p[, x]
-    passes <- names(sort(vec)[1:thresh])
-    vec <- ifelse(names(vec) %in% passes, 1, 0)
-    return(vec)
-    
-  }, mc.cores = ncore)
-  
-  binmat <- do.call(cbind, binmat)
-  
-}
-
-
-
-all_threshold_aggregate <- function(mat,
-                                    meta, 
-                                    min_cell = 20, 
-                                    cor_method = "pearson",
-                                    threshold = 0,
-                                    ...) {
-  
-  stopifnot(c("Cell_type", "ID") %in% colnames(meta))
-  cts <- unique(meta$Cell_type)
-  genes <- rownames(mat)
-  amat <- init_agg_mat(row_genes = genes)
-  
-  for (ct in cts) {
-    
-    message(paste(ct, Sys.time()))
-    
-    cells <- filter(meta, Cell_type == ct)$ID
-    ct_mat <- t(mat[, cells])
-    na_genes <- apply(ct_mat, 2, function(x) sum(x != 0)) <= min_cell
-    ct_mat[, na_genes] <- NA
-    
-    if (sum(is.na(ct_mat)) == length(ct_mat)) {
-      message(paste(ct, "all NAs"))
-      next()
-    }
-    
-    cmat <- WGCNA::corAndPvalue(
-      x = mat, 
-      method = cor_method, 
-      use = "pairwise.complete.obs", 
-      alternative = "greater")
-    
-    # threshold
-    
-    # amat <- amat + rmat
-    
-  }
-  
-  # amat <- colrank_mat(-amat)
-  
-  return(amat)
-}
+# binary_threshold <- function(mat, threshold) {
+#   
+#   # Threshold by pval
+#   
+#   binmat <- mclapply(1:ncol(cmat$p), function(x) {
+#     
+#     vec <- cmat$p[, x]
+#     passes <- names(sort(vec)[1:thresh])
+#     vec <- ifelse(names(vec) %in% passes, 1, 0)
+#     return(vec)
+#     
+#   }, mc.cores = ncore)
+#   
+#   binmat <- do.call(cbind, binmat)
+#   
+# }
+# 
+# 
+# 
+# all_threshold_aggregate <- function(mat,
+#                                     meta, 
+#                                     min_cell = 20, 
+#                                     cor_method = "pearson",
+#                                     threshold = 0,
+#                                     ...) {
+#   
+#   stopifnot(c("Cell_type", "ID") %in% colnames(meta))
+#   cts <- unique(meta$Cell_type)
+#   genes <- rownames(mat)
+#   amat <- init_agg_mat(row_genes = genes)
+#   
+#   for (ct in cts) {
+#     
+#     message(paste(ct, Sys.time()))
+#     
+#     cells <- filter(meta, Cell_type == ct)$ID
+#     ct_mat <- t(mat[, cells])
+#     na_genes <- apply(ct_mat, 2, function(x) sum(x != 0)) <= min_cell
+#     ct_mat[, na_genes] <- NA
+#     
+#     if (sum(is.na(ct_mat)) == length(ct_mat)) {
+#       message(paste(ct, "all NAs"))
+#       next()
+#     }
+#     
+#     cmat <- WGCNA::corAndPvalue(
+#       x = mat, 
+#       method = cor_method, 
+#       use = "pairwise.complete.obs", 
+#       alternative = "greater")
+#     
+#     # threshold
+#     
+#     # amat <- amat + rmat
+#     
+#   }
+#   
+#   # amat <- colrank_mat(-amat)
+#   
+#   return(amat)
+# }
