@@ -144,7 +144,7 @@ rowrank2 <- rowrank_mat(na_mat)
 rowrank3 <- rowrank_mat(mat, ties_arg = "random")
 rowrank4 <- rowrank_mat(na_mat, ties_arg = "random")
 rowrank5 <- rowrank_mat(mat, na_arg = "last")
-rowrank6 <- rowrank_mat(na_mat, na_arg = "last")
+# rowrank6 <- rowrank_mat(na_mat, na_arg = "last")
 
 assertthat::are_equal(dim(mat), dim(rowrank1))
 
@@ -205,6 +205,23 @@ rsr5 <- all_RSR_aggregate5(mat, meta)
 rsr6 <- all_RSR_aggregate6(mat, meta)
 
 z1 <- all_zscore_aggregate(mat, meta)
+
+# The all rank matrices are lower tri (NAs in upper), fill out for comparison
+rsr_full2 <- lowertri_to_symm(rsr2, na_diag = FALSE)
+rsr_full4 <- lowertri_to_symm(rsr4, na_diag = FALSE)
+rsr_full6 <- lowertri_to_symm(rsr6, na_diag = FALSE)
+
+
+identical(rsr_full2[1, ], rsr_full2[, 1])
+
+
+# Comparing all rank with column rank when setting cors to 0
+summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], rsr_full2[,x], method = "spearman")))
+which.min(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], rsr_full2[,x], method = "spearman")))
+plot(rsr_full2[, 225], rsr1[, 225])
+
+
+
 
 
 summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], rsr3[,x])))
