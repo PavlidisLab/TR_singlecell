@@ -4,10 +4,10 @@ source("R/utils/functions.R")
 source("R/utils/agg_functions.R")
 
 
-sc_dir_hg <- "/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata/"
-dat_path <- file.path(sc_dir_hg, "GSE180928/GSE180928_filtered_cell_counts.csv")
-meta_path <- file.path(sc_dir_hg, "GSE180928/GSE180928_metadata.csv")
-out_path <- "/space/scratch/amorin/R_objects/20_04_2023_GSE180928.RDS"
+sc_dir <- "/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata/GSE180928"
+dat_path <- file.path(sc_dir, "GSE180928_filtered_cell_counts.csv")
+meta_path <- file.path(sc_dir, "GSE180928_metadata.csv")
+out_path <- "/space/scratch/amorin/R_objects/GSE180928_mat_and_meta.RDS"
 
 
 if (!file.exists(out_path)) {
@@ -18,18 +18,18 @@ if (!file.exists(out_path)) {
   rownames(dat) <- dat$X
   dat$X <- NULL
   colnames(dat) <- str_replace_all(colnames(dat), "\\.", "_")
-  dat <- as.matrix(dat)
+  mat <- as.matrix(dat)
   
   
   meta <- meta %>% 
     dplyr::rename(ID = X, Cell_type = Cluster) %>% 
     mutate(ID = str_replace_all(ID, "-", "_"))
   
-  stopifnot(all(colnames(dat) %in% meta$ID))
+  stopifnot(all(colnames(mat) %in% meta$ID))
   
-  dat <- dat[, meta$ID]
+  mat <- mat[, meta$ID]
   
-  saveRDS(list(dat, meta), file = out_path)
+  saveRDS(list(mat, meta), file = out_path)
   
 } else {
   
