@@ -1,5 +1,7 @@
 library(WGCNA)
 library(tidyverse)
+library(parallel)
+library(cowplot)
 source("R/utils/functions.R")
 source("R/utils/agg_functions.R")
 
@@ -149,16 +151,16 @@ rowrank5 <- rowrank_mat(mat, na_arg = "last")
 assertthat::are_equal(dim(mat), dim(rowrank1))
 
 
-head(sort(mat[1, ], decreasing = TRUE))
-head(sort(rowrank1[1, ], decreasing = FALSE))
-head(sort(rowrank2[1, ], decreasing = FALSE))
-
-rowrank1[1:5, 1:5]
-rowrank2[1:5, 1:5]
-rowrank3[1:5, 1:5]
-rowrank4[1:5, 1:5]
-rowrank5[1:5, 1:5]
-rowrank6[1:5, 1:5]
+# head(sort(mat[1, ], decreasing = TRUE))
+# head(sort(rowrank1[1, ], decreasing = FALSE))
+# head(sort(rowrank2[1, ], decreasing = FALSE))
+# 
+# rowrank1[1:5, 1:5]
+# rowrank2[1:5, 1:5]
+# rowrank3[1:5, 1:5]
+# rowrank4[1:5, 1:5]
+# rowrank5[1:5, 1:5]
+# rowrank6[1:5, 1:5]
 
 
 
@@ -168,8 +170,8 @@ rowrank6[1:5, 1:5]
 
 colrank1 <- colrank_mat(t(mat)) # default is min
 
-colrank1[1:5, 1:5]
-t(mat)[1:5, 1:5]
+# colrank1[1:5, 1:5]
+# t(mat)[1:5, 1:5]
 
 
 # Check cor and rank
@@ -194,6 +196,12 @@ t(mat)[1:5, 1:5]
 
 
 # Check RSR and Zscore
+# 1: Col rank NA cors to 0
+# 2: All rank NA cors to 0
+# 3: Col rank NA cors to mean
+# 4: All rank NA cors to mean
+# 5: Col rank NA cors to last
+# 6: All rank NA cors to last
 # ------------------------------------------------------------------------------
 
 
@@ -206,58 +214,132 @@ rsr6 <- all_RSR_aggregate6(mat, meta)
 
 z1 <- all_zscore_aggregate(mat, meta)
 
+
+# rsr1 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_RSR1.RDS")
+# rsr2 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_RSR2.RDS")
+# rsr3 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_RSR3.RDS")
+# z1 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_Z1.RDS")
+
+
 # The all rank matrices are lower tri (NAs in upper), fill out for comparison
+
 rsr_full2 <- lowertri_to_symm(rsr2, na_diag = FALSE)
 rsr_full4 <- lowertri_to_symm(rsr4, na_diag = FALSE)
 rsr_full6 <- lowertri_to_symm(rsr6, na_diag = FALSE)
 
 
-identical(rsr_full2[1, ], rsr_full2[, 1])
-
-
-# Comparing all rank with column rank when setting cors to 0
-summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], rsr_full2[,x], method = "spearman")))
-which.min(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], rsr_full2[,x], method = "spearman")))
-plot(rsr_full2[, 225], rsr1[, 225])
+stopifnot(identical(rsr_full2[1, ], rsr_full2[, 1]))
 
 
 
+# Retrieve the column wise correlations between two aggregation matrices
 
 
-summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], rsr3[,x])))
-summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], rsr5[,x])))
-summary(sapply(1:ncol(rsr4), function(x) cor(rsr6[,x], rsr5[,x], use = "pairwise.complete.obs")))
-summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], z1$Avg_all[,x])))
-summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], z1$Avg_nonNA[,x])))
+plot_scatter <- function(mat1, mat2, ix) {
+  
+  p <- data.frame(Mat1 = mat1[, ix], Mat2 = mat2[, ix]) %>% 
+    ggplot(aes(x = Mat1, y = Mat2)) +
+    geom_point(shape = 21, alpha = 0.6) + 
+    ggtitle(rownames(mat1)[ix]) +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 25),
+          plot.title = element_text(size = 20))
+  
+  return(p)
+}
 
 
+cor_summary <- function(mat1, mat2, ncores = 8) {
+  
+  cor_l <- mclapply(1:ncol(mat1), function(x) {
+    cor(mat1[, x], mat2[, x], method = "spearman")
+  }, mc.cores = ncores)
+  
+  min_ix = which.min(unlist(cor_l))
+
+  p <- plot_scatter(mat1, mat2, min_ix)
+  
+  return(list(
+    Summary = summary(unlist(cor_l)),
+    Min_ix = min_ix,
+    Min_plot = p
+  ))
+}
+
+
+
+
+# Comparing all rank with column rank when setting NA cors to 0
+
+summ_1vs2 <- cor_summary(mat1 = rsr1, mat2 = rsr_full2)
+p_1vs2_a <- plot_scatter(mat1 = rsr1, mat2 = rsr_full2, ix = which(rownames(rsr1) == "ASCL1"))
+p_1vs2_a <- p_1vs2_a + xlab("Column rank") + ylab("All rank")
+p_1vs2_b <- summ_1vs2$Min_plot + xlab("Column rank") + ylab("All rank")
+p_1vs2 <- plot_grid(p_1vs2_a, p_1vs2_b)
+
+
+# Comparing all rank with column rank when setting NA ranks to mean
+summ_3vs4 <- cor_summary(mat1 = rsr3, mat2 = rsr_full4)
+
+
+# Comparing all rank with column rank when setting NA ranks to last
+summ_5vs6 <- cor_summary(mat1 = rsr5, mat2 = rsr_full6)
+
+
+# Comparing all rank setting NA cor to 0 with NA rank to mean rank 
+summ_2vs4 <- cor_summary(mat1 = rsr2, mat2 = rsr_full4)
+
+
+# Comparing col rank setting NA cor to 0 with NA rank to mean rank 
+summ_1vs3 <- cor_summary(mat1 = rsr1, mat2 = rsr3)
+
+
+
+
+# Comparing col rank setting NA cor to 0 with NA rank to Z score
+summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], z1$Avg_all[,x], method = "spearman")))
+summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], z1$Avg_nonNA[,x], method = "spearman")))
+which.min(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], z1$Avg_all[,x], method = "spearman")))
+which.min(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], z1$Avg_nonNA[,x], method = "spearman")))
+plot(rsr1[, 177], z1$Avg_all[, 177])
+plot(rsr1[, 763], z1$Avg_nonNA[, 763])
+head(sort(z1$Avg_all[177, ], decreasing = TRUE))  # unusually low Zscore 
+
+
+# Comparing Z score average by all CTs or just by non-NA CTs
+summary(sapply(1:ncol(z1$Avg_all), function(x) cor(z1$Avg_all[, x], z1$Avg_nonNA[, x], method = "spearman")))
+which.min(sapply(1:ncol(z1$Avg_all), function(x) cor(rsr1[,x], z1$Avg_all[,x], method = "spearman")))
+plot(z1$Avg_nonNA[, 177], z1$Avg_all[, 177])
+
+
+# Relationship between Zscores and count NAs
+summary(sapply(1:ncol(z1$Avg_all), function(x) cor(z1$NA_mat[, x], z1$Avg_all[, x], method = "spearman")))
+summary(sapply(1:ncol(z1$Avg_nonNA), function(x) cor(z1$NA_mat[, x], z1$Avg_nonNA[, x], method = "spearman")))
+which.max(sapply(1:ncol(z1$Avg_all), function(x) cor(z1$NA_mat[, x], z1$Avg_all[, x], method = "spearman")))
+which.max(sapply(1:ncol(z1$Avg_nonNA), function(x) cor(z1$NA_mat[, x], z1$Avg_nonNA[, x], method = "spearman")))
+plot(z1$Avg_all[, 461], z1$Avg_nonNA[, 461])
+
+
+
+# Single dataframe of all rankings for demo gene
+gene <- "ASCL1"
 
 rank_df <- data.frame(
   Symbol = rownames(rsr1),
-  RSR1 = rsr1[, "ASCL1"],
-  RSR2 = rsr2[, "ASCL1"],
-  RSR3 = rsr3[, "ASCL1"],
-  RSR4 = rsr4[, "ASCL1"],
-  RSR5 = rsr5[, "ASCL1"],
-  RSR6 = rsr6[, "ASCL1"],
-  Z_all = z1$Avg_all[, "ASCL1"],
-  Z_nonNA = z1$Avg_nonNA[, "ASCL1"]
+  RSR1 = rsr1[, gene],
+  RSR2 = rsr_full2[, gene],
+  # RSR3 = rsr3[, gene],
+  # RSR4 = rsr_full4[, gene],
+  # RSR5 = rsr5[, gene],
+  # RSR6 = rsr_full6[, gene],
+  Z_all = z1$Avg_all[, gene],
+  Z_nonNA = z1$Avg_nonNA[, gene]
 )
 
 
-plot(rsr1[,1], z1$Avg_all[,1])
-plot(rsr1[,1], z1$Avg_nonNA[,1])
-cor(rsr1[,1], z1$Avg_nonNA[,1], method = "spearman")
-cor(rsr1[,1], z1$Avg_nonNA[,1], method = "spearman")
 
-summary(sapply(1:ncol(z1$Avg_all), function(x) cor(z1$NA_mat[, x], z1$Avg_all[, x], method = "spearman")))
-summary(sapply(1:ncol(z1$Avg_all), function(x) cor(z1$NA_mat[, x], z1$Avg_nonNA[, x], method = "spearman")))
-
-
-
-
-# z1$Avg_all[1:5, 1:5]
-# z1$Avg_nonNA[1:5, 1:5]
+# Examining individual cell type cors
 all_celltype_cor(mat, meta, gene1 = "ASCL1", gene2 = "OLIG1")
 
 
