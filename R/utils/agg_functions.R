@@ -179,6 +179,7 @@ all_RSR_aggregate1 <- function(mat,
     cmat <- get_cor_mat(ct_mat, lower_tri = FALSE)
     cmat[is.na(cmat)] <- 0
     # diag(cmat) <- NA
+    
     rmat <- colrank_mat(cmat)
     amat <- amat + rmat
     
@@ -266,6 +267,7 @@ all_RSR_aggregate3 <- function(mat,
     
     cmat <- get_cor_mat(ct_mat, lower_tri = FALSE)
     # diag(cmat) <- NA
+    
     rmat <- colrank_mat(cmat, na_arg = "keep")
     rmat <- na_to_mean(rmat)
     amat <- amat + rmat
@@ -308,9 +310,11 @@ all_RSR_aggregate4 <- function(mat,
     #
     cmat <- get_cor_mat(ct_mat, lower_tri = FALSE)
     cmat[upper.tri(cmat)] <- NA
+    diag(cmat) <- 1
     
     rmat <- allrank_mat(cmat, na_arg = "keep")
-    rmat[lower.tri(rmat) & is.na(rmat)] <- mean(rmat[lower.tri(rmat)], na.rm = TRUE)
+    mean_rank <- mean(rmat[lower.tri(rmat)], na.rm = TRUE)
+    rmat[lower.tri(rmat) & is.na(rmat)] <- mean_rank
   
     amat <- amat + rmat
     
@@ -399,6 +403,7 @@ all_RSR_aggregate6 <- function(mat,
     
     cmat <- get_cor_mat(ct_mat, lower_tri = FALSE)
     cmat[upper.tri(cmat)] <- NA
+    diag(cmat) <- 1
     
     rmat <- allrank_mat(cmat, na_arg = "keep")
     
