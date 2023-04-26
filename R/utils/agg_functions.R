@@ -4,19 +4,6 @@ source("R/utils/functions.R")
 
 
 
-
-# TODO: ranksumrank function
-# TODO: need to distinguish core agg function from apply over all
-# TODO: binthresh function
-# TODO: minrank function (should return best cell type and value as well)
-# TODO: does `...` with col_subset declared work?
-# TODO: aggregate mat symmetric?
-# TODO: col subset is clumsy, actually needed?
-# TODO: be explicit about shape of input mat (is t() burried bad?)
-# TODO: col/rowrank sign confusing?
-
-
-
 # Rank matrix columns such that 1=best. Return as same dimension as input.
 
 colrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
