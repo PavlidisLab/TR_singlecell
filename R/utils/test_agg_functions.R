@@ -2,65 +2,24 @@ library(WGCNA)
 library(tidyverse)
 library(parallel)
 library(cowplot)
-source("R/utils/functions.R")
-source("R/utils/agg_functions.R")
+source("R/utils/dev_aggregate_functions.R")
 
+dat <- readRDS("/space/scratch/amorin/R_objects/GSE180928_mat_and_meta.RDS")
+mat <- dat[[1]]
+meta <- dat[[2]]
 
-sc_dir_hg <- "/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata/"
-dat_path <- file.path(sc_dir_hg, "GSE180928/GSE180928_filtered_cell_counts.csv")
-meta_path <- file.path(sc_dir_hg, "GSE180928/GSE180928_metadata.csv")
-out_path <- "/space/scratch/amorin/R_objects/20_04_2023_GSE180928.RDS"
-
-
-if (!file.exists(out_path)) {
-  
-  dat <- read.delim(file.path(sc_dir_hg, "GSE180928/GSE180928_filtered_cell_counts.csv"), sep = ",")
-  meta <- read.delim(file.path(sc_dir_hg, "GSE180928/GSE180928_metadata.csv"), sep = ",")
-  
-  rownames(dat) <- dat$X
-  dat$X <- NULL
-  colnames(dat) <- str_replace_all(colnames(dat), "\\.", "_")
-  dat <- as.matrix(dat)
-  
-  
-  meta <- meta %>% 
-    dplyr::rename(ID = X, Cell_type = Cluster) %>% 
-    mutate(ID = str_replace_all(ID, "-", "_"))
-  
-  stopifnot(all(colnames(dat) %in% meta$ID))
-  
-  dat <- dat[, meta$ID]
-  
-  saveRDS(list(dat, meta), file = out_path)
-  
-} else {
-  
-  dat <- readRDS(out_path)
-  meta <- dat[[2]]
-  dat <- dat[[1]]
-  
-}
-
-
-stopifnot(identical(colnames(dat), meta$ID))
+stopifnot(identical(colnames(mat), meta$ID))
 
 cts <- unique(meta$Cell_type)
 tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
 genes <- rownames(dat)
 
-
 # Min count of non-zero expressing cells to keep gene for correlating
 min_cell <- 20
 
-# Threshold topn n position for binarizing
-thresh <- floor(nrow(dat) * 0.005)
-thresh <- thresh + 1  # +1 for the moment to account for keeping self cor
-
-
 # Subset for speed of testing
-mat <- dat[5001:6000, ]
+mat <- mat[5001:6000, ]
 meta_sub <- filter(meta, Cell_type %in% cts[1:2])
-
 
 
 
@@ -71,26 +30,26 @@ meta_sub <- filter(meta, Cell_type %in% cts[1:2])
 genes <- rownames(mat)
 amat1 <- init_agg_mat(row_genes = genes)
 # amat2 <- init_agg_mat(row_genes = genes, col_genes = str_to_upper(tfs))
+stopifnot(all(amat1 == 0))
 
 
 
-
-# Subset to cell type and check min to NA. Transpose so genes are columns
+# Subset to cell type and check min to NA. Transposes mat so genes are columns
 # ------------------------------------------------------------------------------
 
 
 ct <- cts[1]
-ct_mat <- t(mat[, filter(meta, Cell_type == ct)$ID])
+ct_mat <- ct_mat <- subset_and_filter(mat, meta, cell_type = ct, min_count = min_cell)
 
-na_mat <- under_min_count_to_na(ct_mat)
+na_gene <- genes[which(is.na(ct_mat), arr.ind = TRUE)[, "col"][1]]
 
-na_gene <- genes[which(is.na(na_mat), arr.ind = TRUE)[, "col"][1]]
+stopifnot(
+  sum(mat[na_gene, filter(meta, Cell_type == ct)$ID] != 0) < min_cell)
 
-stopifnot(sum(ct_mat[, na_gene] != 0) < min_cell)
-stopifnot(sum(is.na(na_mat)) > sum(is.na(ct_mat)))
+stopifnot(
+  sum(is.na(mat[na_gene, filter(meta, Cell_type == ct)$ID])) < sum(is.na(ct_mat)))
 
 
-# na_mat[1:5, 1:5]
 # ct_mat[1:5, 1:5]
 
 
@@ -172,27 +131,6 @@ colrank1 <- colrank_mat(t(mat)) # default is min
 
 # colrank1[1:5, 1:5]
 # t(mat)[1:5, 1:5]
-
-
-# Check cor and rank
-# ------------------------------------------------------------------------------
-
-
-# cr1 <- cor_and_rank(mat, na_arg = "last")
-# cr2 <- cor_and_rank(na_mat, na_arg = "last")
-# cr3 <- cor_and_rank(mat, na_arg = "mean")
-# cr4 <- cor_and_rank(na_mat, na_arg = "mean")
-# cr5 <- cor_and_rank(mat, ties_arg = "min")
-# cr6 <- cor_and_rank(na_mat, ties_arg = "random")
-# 
-# cr1[1:5, 1:5]
-# cr2[1:5, 1:5]
-# cr3[1:5, 1:5]
-# cr4[1:5, 1:5]
-# cr5[1:5, 1:5]
-# cr6[1:5, 1:5]
-# 
-# identical(cr1, cr2)
 
 
 # Check RSR and Zscore
