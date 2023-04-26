@@ -31,6 +31,9 @@ if (!file.exists(out_path)) {
   
   saveRDS(list(mat, meta), file = out_path)
   
+  rm(dat)
+  gc()
+  
 } else {
   
   dat <- readRDS(out_path)

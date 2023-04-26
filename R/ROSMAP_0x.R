@@ -43,11 +43,16 @@ if (!file.exists(out_path)) {
   mat <- mat[common_genes$Ensembl_ID, meta$ID]
   rownames(mat) <- common_genes$Symbol
   
-  # zero_genes <- names(which(apply(mat, 1, function(x) sum(x != 0)) == 0))
-  # keep_genes <- unique(setdiff(rownames(mat), zero_genes))
-  # mat <- mat[keep_genes, ]
+  zero_genes <- names(which(apply(mat, 1, function(x) sum(x != 0)) == 0))
+  keep_genes <- unique(setdiff(rownames(mat), zero_genes))
+  keep_genes <- keep_genes[keep_genes != ""]
+  
+  mat <- mat[keep_genes, ]
 
   saveRDS(list(mat, meta), file = out_path)
+  
+  rm(dat)
+  gc()
   
 } else {
   

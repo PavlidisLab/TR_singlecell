@@ -37,12 +37,14 @@ if (!file.exists(out_path)) {
     filter(ID %in% intersect(colnames(dat), ID)) %>% 
     dplyr::rename(Cell_type = X7.clust_all)
   
-  
   common_genes <- intersect(pc$Symbol, rownames(dat))
 
   mat <- dat[common_genes, meta$ID]
   
   saveRDS(list(mat, meta), file = out_path)
+  
+  rm(dat)
+  gc()
   
 } else {
   
