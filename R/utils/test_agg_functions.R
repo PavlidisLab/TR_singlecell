@@ -57,18 +57,18 @@ stopifnot(
 # ------------------------------------------------------------------------------
 
 
-cmat1 <- get_cor_mat(t(mat))
-cmat2 <- get_cor_mat(t(mat), lower_tri = FALSE)
-cmat3 <- get_cor_mat(na_mat)
-cmat4 <- get_cor_mat(na_mat, lower_tri = FALSE)
-
-all(is.na(cmat3[na_gene, ]))
-table(!is.na(cmat2[na_gene, ]))
-
-cmat1[1:5, 1:5]
-cmat2[1:5, 1:5]
-cmat3[1:5, 1:5]
-cmat4[1:5, 1:5]
+# cmat1 <- get_cor_mat(t(mat))
+# cmat2 <- get_cor_mat(t(mat), lower_tri = FALSE)
+# cmat3 <- get_cor_mat(na_mat)
+# cmat4 <- get_cor_mat(na_mat, lower_tri = FALSE)
+# 
+# all(is.na(cmat3[na_gene, ]))
+# table(!is.na(cmat2[na_gene, ]))
+# 
+# cmat1[1:5, 1:5]
+# cmat2[1:5, 1:5]
+# cmat3[1:5, 1:5]
+# cmat4[1:5, 1:5]
 
 
 # Check ranking of each element of matrix
@@ -143,20 +143,22 @@ colrank1 <- colrank_mat(t(mat)) # default is min
 # ------------------------------------------------------------------------------
 
 
-rsr1 <- all_RSR_aggregate1(mat, meta)
-rsr2 <- all_RSR_aggregate2(mat, meta)
-rsr3 <- all_RSR_aggregate3(mat, meta)
-rsr4 <- all_RSR_aggregate4(mat, meta)
-rsr5 <- all_RSR_aggregate5(mat, meta)
-rsr6 <- all_RSR_aggregate6(mat, meta)
+# rsr1 <- all_RSR_aggregate1(mat, meta)
+# rsr2 <- all_RSR_aggregate2(mat, meta)
+# rsr3 <- all_RSR_aggregate3(mat, meta)
+# rsr4 <- all_RSR_aggregate4(mat, meta)
+# rsr5 <- all_RSR_aggregate5(mat, meta)
+# rsr6 <- all_RSR_aggregate6(mat, meta)
+# z1 <- all_zscore_aggregate(mat, meta)
 
-z1 <- all_zscore_aggregate(mat, meta)
 
-
-# rsr1 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_RSR1.RDS")
-# rsr2 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_RSR2.RDS")
-# rsr3 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_RSR3.RDS")
-# z1 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_Z1.RDS")
+rsr1 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_RSR1.RDS")
+rsr2 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_RSR2.RDS")
+rsr3 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_RSR3.RDS")
+rsr4 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_RSR4.RDS")
+rsr5 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_RSR5.RDS")
+rsr6 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_RSR6.RDS")
+z1 <- readRDS("/space/scratch/amorin/R_objects/GSE180928_Z1.RDS")
 
 
 # The all rank matrices are lower tri (NAs in upper), fill out for comparison
@@ -219,6 +221,7 @@ p_1vs2 <- plot_grid(p_1vs2_a, p_1vs2_b)
 
 # Comparing all rank with column rank when setting NA ranks to mean
 summ_3vs4 <- cor_summary(mat1 = rsr3, mat2 = rsr_full4)
+plot_scatter(rsr3, rsr_full4, ix = which(rownames(rsr1) == "ASCL1")) + ylab("All rank NA rank to mean") + xlab("Col rank NA rank to mean")
 
 
 # Comparing all rank with column rank when setting NA ranks to last
@@ -226,37 +229,38 @@ summ_5vs6 <- cor_summary(mat1 = rsr5, mat2 = rsr_full6)
 
 
 # Comparing all rank setting NA cor to 0 with NA rank to mean rank 
-summ_2vs4 <- cor_summary(mat1 = rsr2, mat2 = rsr_full4)
+summ_2vs4 <- cor_summary(mat1 = rsr_full2, mat2 = rsr_full4)
+plot_scatter(rsr_full2, rsr_full4, ix = which(rownames(rsr1) == "ASCL1")) + ylab("All rank NA rank to mean") + xlab("All rank NA cor to 0")
 
 
 # Comparing col rank setting NA cor to 0 with NA rank to mean rank 
 summ_1vs3 <- cor_summary(mat1 = rsr1, mat2 = rsr3)
-
-
+plot_scatter(rsr1, rsr3, ix = which(rownames(rsr1) == "ASCL1")) + ylab("Col rank NA rank to mean") + xlab("Col rank NA cor to 0")
 
 
 # Comparing col rank setting NA cor to 0 with NA rank to Z score
-summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], z1$Avg_all[,x], method = "spearman")))
-summary(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], z1$Avg_nonNA[,x], method = "spearman")))
-which.min(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], z1$Avg_all[,x], method = "spearman")))
-which.min(sapply(1:ncol(rsr1), function(x) cor(rsr1[,x], z1$Avg_nonNA[,x], method = "spearman")))
-plot(rsr1[, 177], z1$Avg_all[, 177])
-plot(rsr1[, 763], z1$Avg_nonNA[, 763])
-head(sort(z1$Avg_all[177, ], decreasing = TRUE))  # unusually low Zscore 
+summ_1vsZall <- cor_summary(mat1 = rsr1, mat2 = z1$Avg_all)
+summ_1vsZnonNA <- cor_summary(mat1 = rsr1, mat2 = z1$Avg_nonNA)
+plot_scatter(rsr1, z1$Avg_all, ix = which(rownames(rsr1) == "ASCL1")) + ylab("Zscore_all") + xlab("Col rank NA cor to 0")
+plot_scatter(rsr1, z1$Avg_nonNA, ix = which(rownames(rsr1) == "ASCL1")) + ylab("Zscore_nonNA") + xlab("Col rank NA cor to 0")
+
+
+
+
+# Comparing all rank setting NA cor to 0 with NA rank to Z score
+summ_2vsZall <- cor_summary(mat1 = rsr_full2, mat2 = z1$Avg_all)
+summ_2vsZnonNA <- cor_summary(mat1 = rsr_full2, mat2 = z1$Avg_nonNA)
+plot_scatter(rsr_full2, z1$Avg_all, ix = which(rownames(rsr1) == "ASCL1")) + ylab("Zscore_all") + xlab("All rank NA cor to 0")
+plot_scatter(rsr_full2, z1$Avg_nonNA, ix = which(rownames(rsr1) == "ASCL1")) + ylab("Zscore_nonNA") + xlab("All rank NA cor to 0")
 
 
 # Comparing Z score average by all CTs or just by non-NA CTs
-summary(sapply(1:ncol(z1$Avg_all), function(x) cor(z1$Avg_all[, x], z1$Avg_nonNA[, x], method = "spearman")))
-which.min(sapply(1:ncol(z1$Avg_all), function(x) cor(rsr1[,x], z1$Avg_all[,x], method = "spearman")))
-plot(z1$Avg_nonNA[, 177], z1$Avg_all[, 177])
+summ_ZallvsZnonNA <- cor_summary(mat1 = z1$Avg_nonNA, z1$Avg_all)
 
 
 # Relationship between Zscores and count NAs
-summary(sapply(1:ncol(z1$Avg_all), function(x) cor(z1$NA_mat[, x], z1$Avg_all[, x], method = "spearman")))
-summary(sapply(1:ncol(z1$Avg_nonNA), function(x) cor(z1$NA_mat[, x], z1$Avg_nonNA[, x], method = "spearman")))
-which.max(sapply(1:ncol(z1$Avg_all), function(x) cor(z1$NA_mat[, x], z1$Avg_all[, x], method = "spearman")))
-which.max(sapply(1:ncol(z1$Avg_nonNA), function(x) cor(z1$NA_mat[, x], z1$Avg_nonNA[, x], method = "spearman")))
-plot(z1$Avg_all[, 461], z1$Avg_nonNA[, 461])
+summ_ZallvsnNA <- cor_summary(mat1 = z1$NA_mat, z1$Avg_all)
+summ_ZnonNAvsnNA <- cor_summary(mat1 = z1$NA_mat, z1$Avg_nonNA)
 
 
 
@@ -267,10 +271,10 @@ rank_df <- data.frame(
   Symbol = rownames(rsr1),
   RSR1 = rsr1[, gene],
   RSR2 = rsr_full2[, gene],
-  # RSR3 = rsr3[, gene],
-  # RSR4 = rsr_full4[, gene],
-  # RSR5 = rsr5[, gene],
-  # RSR6 = rsr_full6[, gene],
+  RSR3 = rsr3[, gene],
+  RSR4 = rsr_full4[, gene],
+  RSR5 = rsr5[, gene],
+  RSR6 = rsr_full6[, gene],
   Z_all = z1$Avg_all[, gene],
   Z_nonNA = z1$Avg_nonNA[, gene]
 )
