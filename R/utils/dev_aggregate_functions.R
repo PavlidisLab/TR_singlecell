@@ -327,18 +327,15 @@ all_RSR_aggregate5 <- function(mat,
     
     message(paste(ct, Sys.time()))
     
-    # Subset cell type counts and transpose matrix (genes as columns) for cor
-    ct_mat <- t(mat[, filter(meta, Cell_type == ct)$ID])
-    ct_mat <- under_min_count_to_na(ct_mat, min_cell)
+    ct_mat <- subset_and_filter(mat, meta, cell_type = ct, min_count = min_cell)
     
     if (sum(is.na(ct_mat)) == length(ct_mat)) {
       message(paste(ct, "skipped due to insufficient counts"))
       next()
     }
     
-    #
+
     cmat <- get_cor_mat(ct_mat, lower_tri = FALSE)
-    # diag(cmat) <- NA
     
     # na_arg = TRUE results in placing NAs in random order after last non-NA rank
     # rmat <- colrank_mat(cmat, na_arg = TRUE)
