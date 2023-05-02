@@ -17,4 +17,12 @@ meta <- dat@meta.data %>%
   dplyr::rename(Cell_type = cell_type) %>% 
   rownames_to_column(var = "ID")
 
-mat <- as.matrix(GetAssayData(dat, slot = "data"))
+mat_norm <- as.matrix(GetAssayData(dat, slot = "data"))
+mat_counts <- as.matrix(GetAssayData(dat, slot = "counts"))
+
+avg_norm <- rowMeans(mat_norm)
+avg_counts <- rowMeans(mat_counts)
+
+avg_df <- data.frame(ID = rownames(mat_norm),
+                     Count = avg_counts, 
+                     Norm = avg_norm)
