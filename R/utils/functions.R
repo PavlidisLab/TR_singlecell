@@ -263,19 +263,19 @@ all_au_perf <- function(rank_df,
 # ------------------------------------------------------------------------------
 
 
-# Rank matrix columns such that 1=best.
+# Rank matrix columns such that 1=best. Return as same dimension as input.
 
-colrank_mat <- function(mat) {
-  rank_mat <- apply(-mat, 2, rank, ties.method = "min", na.last = "keep")
+colrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
+  rank_mat <- apply(-mat, 2, rank, ties.method = ties_arg, na.last = na_arg)
   return(rank_mat)
 }
 
 
-# Rank matrix rows such that 1=best.
+# Rank matrix rows such that 1=best. Return as same dimension as input.
 
-rowrank_mat <- function(mat) {
-  rank_mat <- apply(-mat, 1, rank, ties.method = "min", na.last = "keep")
-  return(rank_mat)
+rowrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
+  rank_mat <- apply(-mat, 1, rank, ties.method = ties_arg, na.last = na_arg)
+  return(t(rank_mat))
 }
 
 
@@ -303,29 +303,63 @@ na_to_zero <- function(mat) {
 }
 
 
+# Set NAs in matrix to the length of the longest dimension.
+# TODO: may be unecessary, could be handled by rank itself
 
-# Rank sum rank from Harris et al., 2021 (Jesse Gillis) 
-# https://pubmed.ncbi.nlm.nih.gov/34015329/
-# Rank coexpression (1=best) across cell types. Set NAs to network mean. Sum 
-# the cell-type ranks, and then rank order these sums (1=best).
+# na_to_last <- function(mat) {
+#   mat[is.na(mat)] <- max(nrow(mat), nrow(ncol(mat)))
+#   return(mat)
+# }
 
 
-aggregate_cor <- function(cmat_list, impute_na = TRUE, ncores = 1) {
+# # Rank sum rank from Harris et al., 2021 (Jesse Gillis) 
+# # https://pubmed.ncbi.nlm.nih.gov/34015329/
+# # Rank coexpression (1=best) across cell types. Set NAs to network mean. Sum 
+# # the cell-type ranks, and then rank order these sums (1=best).
+# 
+# 
+# aggregate_cor <- function(cmat_list, impute_na = TRUE, ncores = 1) {
+#   
+#   # Convert cors to ranks (1=best)
+#   rank_list <- mclapply(cmat_list, colrank_mat, mc.cores = ncores)
+#   
+#   # Set NAs
+#   if (impute_na) {
+#     rank_list <- lapply(rank_list, na_to_mean)
+#   }
+#   
+#   # Sum list of rank matrices into a single matrix
+#   # https://stackoverflow.com/questions/42628385/sum-list-of-matrices-with-nas
+#   sum_rank <- apply(simplify2array(rank_list), 1:2, sum, na.rm = TRUE)
+#   
+#   # Convert sum of ranks into a final rank (1=best)
+#   final_rank <- colrank_mat(-sum_rank)
+#   
+#   return(final_rank)
+# }
+
+
+
+# Gives a matrix with ENSEMBL IDs as rownames, return the matrix with the 
+# corresponding gene symbols as rownames. Blank gene symbols are removed
+
+ensembl_to_symbol <- function(mat, ensembl_df) {
   
-  # Convert cors to ranks (1=best)
-  rank_list <- mclapply(cmat_list, colrank_mat, mc.cores = ncores)
+  stopifnot(c("Gene_ID", "Symbol") %in% colnames(ensembl_df))
   
-  # Set NAs
-  if (impute_na) {
-    rank_list <- lapply(rank_list, na_to_mean)
-  }
+  ids <- intersect(pc$Gene_ID, rownames(mat))
   
-  # Sum list of rank matrices into a single matrix
-  # https://stackoverflow.com/questions/42628385/sum-list-of-matrices-with-nas
-  sum_rank <- apply(simplify2array(rank_list), 1:2, sum, na.rm = TRUE)
+  if (length(ids) == 0) stop("No common ENSEMBL IDs in rownames of matrix")
   
-  # Convert sum of ranks into a final rank (1=best)
-  final_rank <- colrank_mat(-sum_rank)
+  common_genes <- data.frame(
+    ID = ids,
+    Symbol = pc$Symbol[match(ids, pc$Gene_ID)]) %>% 
+    filter(Symbol != "")
   
-  return(final_rank)
+  # dupl_genes <- common_genes$Symbol[which(duplicated(common_genes$Symbol))]
+  
+  mat <- mat[common_genes$ID, ]
+  rownames(mat) <- common_genes$Symbol
+  
+  return(mat)
 }

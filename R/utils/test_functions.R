@@ -48,3 +48,12 @@ assertthat::assert_that(ix2_a != ix2_b)
 # abline(v = log10(avg_all[ix1_a]), col = "red", lw = 2)
 # abline(v = log10(avg_all[ix1_a]), col = "black", lty = 3, lw = 3)
 
+
+
+# Ensembl ID matching
+# mat1 <- mat_norm
+# mat2 <- mat_norm
+# rownames(mat1) <- 1:nrow(mat1)
+# tt1 <- ensembl_to_symbol(mat1, pc)
+# tt2 <- ensembl_to_symbol(mat2, pc)
+# tt2[1:5, 1:5]
