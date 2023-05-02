@@ -11,12 +11,7 @@ out_path <- paste0("/space/scratch/amorin/R_objects/", id, "_mat_and_meta.RDS")
 pc <- read.delim("/home/amorin/Data/Metadata/refseq_select_hg38.tsv", stringsAsFactors = FALSE)
 
 
-# Ensembl IDs to gene symbols
-common_ens_ids <- intersect(pc$Gene_ID, rownames(mat))
 
-common_genes <- data.frame(
-  Ensembl_ID = common_ens_ids,
-  Symbol = pc$Symbol[match(common_ens_ids, pc$Gene_ID)])
 
 
 # TODO: a warning if 0 is not min
