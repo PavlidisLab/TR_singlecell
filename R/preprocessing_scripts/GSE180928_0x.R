@@ -11,21 +11,34 @@ out_path <- paste0("/space/scratch/amorin/R_objects/", id, "_mat_and_meta.RDS")
 pc <- read.delim("/home/amorin/Data/Metadata/refseq_select_hg38.tsv", stringsAsFactors = FALSE)
 
 
+# This is for cellxgene data
+meta <- dat@meta.data
+mat <- GetAssayData(dat, slot = "counts")
+plot(meta$nCount_RNA, meta$nFeature_RNA)
+meta["GCGCGATCATACGCCG-alexsc", "nFeature_RNA"]
+sum(mat[, "GCGCGATCATACGCCG-alexsc"] != 0)
+rna_complexity <- log10(meta$nFeature_RNA) / log10(meta$nCount_RNA)
+plot(density(rna_complexity))
+filter_ix_numi <- which(meta$nCount_RNA < 500)
+filter_ix_ngene <- which(meta$nFeature_RNA < 250)
+filter_ix_complexity <- which(rna_complexity < 0.8)
+#
 
 
 
-# TODO: a warning if 0 is not min
-# TODO: this is costly - rowsums. If 0 not min, then use apply with min (with flag)
-zero_genes <- names(which(apply(mat, 1, function(x) sum(x != 0)) == 0))
-zero_genes <- which(rowSums(mat) == 0)
-keep_genes <- unique(setdiff(rownames(mat), zero_genes))
-keep_genes <- keep_genes[keep_genes != ""]
+# Add metadata columns corresponding to the count of UMIs per cell, the count
+# of non-zero genes, and the RNA complexity/novelty score
+# https://hbctraining.github.io/scRNA-seq_online/lessons/04_SC_quality_control.html
+
+umi_counts <- colSums(mat)
+gene_counts <- colSums(mat > 0)
+complexity <- log10(gene_counts) / log10(umi_counts)
 
 
-cell_counts <- colSums(mat)
-cell_log_counts <- colSums(log10(mat + 1))
-gene_counts <- rowSums(mat)
-gene_log_counts <- rowSums(log10(mat + 1))
+mat[1:5, 1:10]
+hist(umi_counts, breaks = 100)
+hist(gene_counts, breaks = 100)
+plot(density(complexity))
 
 
 # TODO: filter logic by focusing on the lowest counts?
