@@ -363,3 +363,38 @@ ensembl_to_symbol <- function(mat, ensembl_df) {
   
   return(mat)
 }
+
+
+
+# Assumes that mat is a gene x cell count matrix. Filters the matrix for unique
+# gene symbols in pcoding_df, and fills the missing genes as 0.
+
+get_pcoding_only <- function(mat, pcoding_df) {
+  
+  stopifnot("Symbol" %in% colnames(pcoding_df))
+  
+  common <- intersect(rownames(mat), unique(pc$Symbol))
+  
+  if (length(common) == 0) stop("No common symbols in rownames of mat")
+  
+  pc_mat <- matrix(0, nrow = n_distinct(pc$Symbol), ncol = ncol(mat))
+  colnames(pc_mat) <- colnames(mat)
+  rownames(pc_mat) <- unique(pc$Symbol)
+  pc_mat[common, ] <-  mat[common, ]
+  
+  return(pc_mat)
+}
+
+
+
+# Assumes that mat is a gene x cell count matrix. Filters the matrix of genes 
+# that are not detected (nonzero) in at least min_count cells
+
+filter_low_expressed_genes <- function(mat, min_count = 20) {
+  
+  mat <- mat > 0
+  counts <- rowSums(mat)
+  keep <- which(counts >= min_count)
+  
+  return(mat[keep, ])
+}
