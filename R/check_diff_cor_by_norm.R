@@ -1,3 +1,6 @@
+## Looking at the difference in gene-gene correlation when generated from raw
+## UMI counts vs the cell x gene pre-processing (rankit tranformation on genes)
+
 library(WGCNA)
 library(tidyverse)
 library(Matrix)
@@ -13,7 +16,14 @@ pc <- read.delim("/home/amorin/Data/Metadata/ensembl_human_protein_coding_105.ts
 
 # TODO: load and compare the RSR matrices generated from norm vs raw
 rsr_norm <- readRDS("/space/scratch/amorin/R_objects/GSE216019_RSR2.RDS")
-rsr_raw <- readRDS("/space/scratch/amorin/R_objects/GSE216019_RSR2.RDS")
+rsr_raw <- readRDS("/space/scratch/amorin/R_objects/GSE216019_RAW_RSR2.RDS")
+
+# These are the gene-gene cor matrices generated across all cells
+# Pearson/Spearman cor, and using raw counts or cxg (rankit) normalization
+allcor_pcor_counts <- readRDS("/space/scratch/amorin/R_objects/GSE216019_pcor_all_counts.RDS")
+allcor_pcor_norm <- readRDS("/space/scratch/amorin/R_objects/GSE216019_pcor_all_norm.RDS")
+allcor_scor_counts <- readRDS("/space/scratch/amorin/R_objects/GSE216019_scor_all_counts.RDS")
+allcor_scor_norm <- readRDS("/space/scratch/amorin/R_objects/GSE216019_scor_all_norm.RDS")
 
 
 dat <- readRDS(dat_path)
@@ -26,6 +36,23 @@ meta <- dat@meta.data %>%
 # Get raw count and normalized matrices. Transpose for genes as columns.
 mat_norm <- t(ensembl_to_symbol(as.matrix(GetAssayData(dat, slot = "data")), pc))
 mat_counts <- t(ensembl_to_symbol(as.matrix(GetAssayData(dat, slot = "counts")), pc))
+
+
+
+
+# demo norm vs counts
+gene <- "ENSMUSG00000029580"
+hist(mat_counts[gene, ], breaks = 100)
+hist(mat_norm[gene, ], breaks = 100)
+plot(mat_counts[gene, ], mat_norm[gene, ])
+cor(mat_counts[gene, ], mat_norm[gene, ], method = "spearman")
+which.max(meta$total_counts)
+
+hist(mat_counts[, which.max(meta$nCount_RNA)], breaks = 100)
+hist(mat_norm[, which.max(meta$nCount_RNA)], breaks = 100)
+hist(mat_counts[, which.min(meta$nCount_RNA)], breaks = 100)
+hist(mat_norm[, which.min(meta$nCount_RNA)], breaks = 100)
+#
 
 
 # No expression
