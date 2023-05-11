@@ -10,43 +10,47 @@ source("R/utils/agg_functions.R")
 id <- "GSE216019"
 sc_dir <- paste0("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/amorin_sc_datases/Human/", id)
 dat_path <- file.path(sc_dir, paste0(id, ".RDS"))
-out_path <- paste0("/space/scratch/amorin/R_objects/", id, "_mat_and_meta.RDS")
 pc <- read.delim("/home/amorin/Data/Metadata/ensembl_human_protein_coding_105.tsv", stringsAsFactors = FALSE)
 
-
-# TODO: load and compare the RSR matrices generated from norm vs raw
+# These are the rank sum rank aggregate matrices using all rank
 rsr_norm <- readRDS("/space/scratch/amorin/R_objects/GSE216019_RSR2.RDS")
-rsr_raw <- readRDS("/space/scratch/amorin/R_objects/GSE216019_RAW_RSR2.RDS")
+rsr_counts <- readRDS("/space/scratch/amorin/R_objects/GSE216019_RAW_RSR2.RDS")
 
 # These are the gene-gene cor matrices generated across all cells
 # Pearson/Spearman cor, and using raw counts or cxg (rankit) normalization
-allcor_pcor_counts <- readRDS("/space/scratch/amorin/R_objects/GSE216019_pcor_all_counts.RDS")
-allcor_pcor_norm <- readRDS("/space/scratch/amorin/R_objects/GSE216019_pcor_all_norm.RDS")
-allcor_scor_counts <- readRDS("/space/scratch/amorin/R_objects/GSE216019_scor_all_counts.RDS")
-allcor_scor_norm <- readRDS("/space/scratch/amorin/R_objects/GSE216019_scor_all_norm.RDS")
+all_pcor_counts <- readRDS("/space/scratch/amorin/R_objects/GSE216019_pcor_all_counts.RDS")
+all_pcor_norm <- readRDS("/space/scratch/amorin/R_objects/GSE216019_pcor_all_norm.RDS")
+# all_scor_counts <- readRDS("/space/scratch/amorin/R_objects/GSE216019_scor_all_counts.RDS")
+# all_scor_norm <- readRDS("/space/scratch/amorin/R_objects/GSE216019_scor_all_norm.RDS")
 
+# Load cxg dat, and extract meta, raw counts, and normalized 
 
 dat <- readRDS(dat_path)
+
 
 meta <- dat@meta.data %>% 
   dplyr::rename(Cell_type = cell_type) %>% 
   rownames_to_column(var = "ID")
 
 
-# Get raw count and normalized matrices. Transpose for genes as columns.
-mat_norm <- t(ensembl_to_symbol(as.matrix(GetAssayData(dat, slot = "data")), pc))
-mat_counts <- t(ensembl_to_symbol(as.matrix(GetAssayData(dat, slot = "counts")), pc))
+mat_norm <- GetAssayData(dat, slot = "data") %>% 
+  as.matrix() %>% 
+  ensembl_to_symbol(pc) %>% 
+  get_pcoding_only(pc)
+  
 
-
+mat_counts <- GetAssayData(dat, slot = "counts") %>% 
+  as.matrix() %>% 
+  ensembl_to_symbol(pc) %>% 
+  get_pcoding_only(pc)
 
 
 # demo norm vs counts
-gene <- "ENSMUSG00000029580"
+gene <- "ACTB"
 hist(mat_counts[gene, ], breaks = 100)
 hist(mat_norm[gene, ], breaks = 100)
 plot(mat_counts[gene, ], mat_norm[gene, ])
 cor(mat_counts[gene, ], mat_norm[gene, ], method = "spearman")
-which.max(meta$total_counts)
 
 hist(mat_counts[, which.max(meta$nCount_RNA)], breaks = 100)
 hist(mat_norm[, which.max(meta$nCount_RNA)], breaks = 100)
@@ -55,24 +59,106 @@ hist(mat_norm[, which.min(meta$nCount_RNA)], breaks = 100)
 #
 
 
-# No expression
+# Comparing all cor
+
+genes <- colnames(all_pcor_counts)
+genes <- genes[genes != ""]
 
 
-# Average across all cells
-
-avg_df <- data.frame(Symbol = colnames(mat_norm),
-                     Count = colMeans(mat_counts),
-                     Norm = colMeans(mat_norm))
-
-avg_df$Count_rank <- rank(avg_df$Count) / nrow(avg_df)
-avg_df$Norm_rank <- rank(avg_df$Norm) / nrow(avg_df)
+diag(all_pcor_counts) <- NA
+diag(all_pcor_norm) <- NA
 
 
-cor(avg_df$Count, avg_df$Norm, method = "spearman")
-# cor(avg_df$Count_rank, avg_df$Norm_rank)
+all_pcor_l <- lapply(genes, function(x) {
+  cor(all_pcor_counts[, x], all_pcor_norm[, x], method = "spearman", use = "pairwise.complete.obs")
+})
+names(all_pcor_l) <- genes
 
-plot(avg_df$Count, avg_df$Norm)
-plot(avg_df$Count_rank, avg_df$Norm_rank)
+
+summary(unlist(all_pcor_l))
+plot(density(unlist(all_pcor_l), na.rm = TRUE))
+which.min(all_pcor_l)
+
+
+tfs <- c("ASCL1", "HES1", "MECP2", "MEF2C", "NEUROD1", "PAX6", "RUNX1", "TCF4")
+unlist(all_pcor_l)[tfs]
+
+
+gene <- "RPL41"
+all_pcor_l[[gene]]
+
+gene_counts_df <- data.frame(Counts = mat_counts[gene, ], Norm = mat_norm[gene, ])
+plot(gene_counts_df$Counts, gene_counts_df$Norm)
+
+gene_cor_df <- data.frame(Symbol = rownames(all_pcor_counts),
+                          Counts = all_pcor_counts[, gene],
+                          Norm = all_pcor_norm[, gene])
+
+gene_cor_df$Diff <- abs(gene_cor_df$Counts - gene_cor_df$Norm)
+
+plot(gene_cor_df$Counts, gene_cor_df$Norm)
+
+
+
+plot(mat_counts["MECP2", ], mat_counts["RPL41", ])
+cor(mat_counts["MECP2", ], mat_counts["RPL41", ])
+
+plot(mat_norm["MECP2", ], mat_norm["RPL41", ])
+cor(mat_norm["MECP2", ], mat_norm["RPL41", ])
+
+
+
+# Comparing RSR
+
+
+rsr_counts <- lowertri_to_symm(rsr_counts)
+rsr_norm <- lowertri_to_symm(rsr_norm)
+
+
+genes <- colnames(rsr_counts)
+genes <- genes[genes != ""]
+
+
+all_rsr_l <- lapply(genes, function(x) {
+  cor(rsr_counts[, x], rsr_norm[, x], method = "spearman", use = "pairwise.complete.obs")
+})
+
+
+
+gene <- "ASCL1"
+plot(rsr_counts[, gene], rsr_norm[, gene])
+cor(rsr_counts[, gene], rsr_norm[, gene], method = "spearman", use = "pairwise.complete.obs")
+
+
+summary(unlist(all_rsr_l))
+
+
+
+# Average exprs across all cells
+
+avg_df <- data.frame(Symbol = rownames(mat_norm),
+                     Avg_count = rowMeans(mat_counts),
+                     Avg_norm = rowMeans(mat_norm))
+
+avg_df$Avg_count_rank <- rank(avg_df$Avg_count) / nrow(avg_df)
+avg_df$Avg_norm_rank <- rank(avg_df$Avg_norm) / nrow(avg_df)
+
+
+cor(avg_df$Avg_count, avg_df$Avg_norm, method = "spearman")
+plot(avg_df$Avg_count, avg_df$Avg_norm)
+plot(avg_df$Avg_count_rank, avg_df$Avg_norm_rank)
+
+
+avg_df <- data.frame(Count_norm_cor = unlist(all_pcor_l)) %>% 
+  rownames_to_column(var = "Symbol") %>% 
+  left_join(avg_df, by = "Symbol")
+
+
+plot(avg_df$Count_norm_cor, avg_df$Avg_count)
+plot(avg_df$Count_norm_cor, avg_df$Avg_norm)
+
+plot(avg_df$Count_norm_cor, avg_df$Avg_count)
+
 
 
 # Showing relationship of gene cor using raw counts or normalized. Want to show
