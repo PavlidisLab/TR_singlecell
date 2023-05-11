@@ -6,7 +6,7 @@ source("R/utils/functions.R")
 
 # Rank matrix columns such that 1=best. Return as same dimension as input.
 
-colrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
+colrank_mat <- function(mat, ties_arg = "random", na_arg = "keep") {
   rank_mat <- apply(-mat, 2, rank, ties.method = ties_arg, na.last = na_arg)
   return(rank_mat)
 }
@@ -15,7 +15,7 @@ colrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
 
 # Rank matrix rows such that 1=best. Return as same dimension as input.
 
-rowrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
+rowrank_mat <- function(mat, ties_arg = "random", na_arg = "keep") {
   rank_mat <- apply(-mat, 1, rank, ties.method = ties_arg, na.last = na_arg)
   return(t(rank_mat))
 }
@@ -24,7 +24,7 @@ rowrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
 
 # TODO: 
 
-allrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
+allrank_mat <- function(mat, ties_arg = "random", na_arg = "keep") {
   
   rmat <- rank(-mat, ties.method = ties_arg, na.last = na_arg)
   rmat <- matrix(rmat, nrow = nrow(mat), ncol = ncol(mat))
@@ -41,8 +41,14 @@ get_cor_mat <- function(mat,
                         lower_tri = FALSE,
                         ncores = 1) {
   
-  cmat <- WGCNA::cor(
-    mat, method = cor_method, use = "pairwise.complete.obs", nThreads = ncores)
+  if (cor_method == "bicor") {
+    cmat <- WGCNA::bicor(
+      mat, use = "pairwise.complete.obs", nThreads = ncores)
+    
+  } else {
+    cmat <- WGCNA::cor(
+      mat, method = cor_method, use = "pairwise.complete.obs", nThreads = ncores)
+  }
   
   if (lower_tri) {
     diag(cmat) <- NA
@@ -65,8 +71,8 @@ lowertri_to_symm <- function(mat, na_diag = TRUE) {
 
 
 
-# If a col of mat has fewer than min_count elements that are non-zero, set that
-# col to NAs. This is done to produce an NA during correlation, instead of 
+# If a col of mat has fewer than min_count non-zero elements, set that col to
+# all NAs. This is done to produce an NA during correlation, instead of 
 # allowing values resulting from fewer observations.
 
 under_min_count_to_na <- function(mat, min_count = 20) {
@@ -79,7 +85,7 @@ under_min_count_to_na <- function(mat, min_count = 20) {
 
 
 
-# Subset mat to cell_type and set under min count genes to NA
+# Subset mat to cell_type, set under min count genes to NA, and transpose.
 # Expects mat is genes x cells, and will return a cells x genes mat for corr.
 
 subset_and_filter <- function(mat, meta, cell_type, min_count = 20) {
@@ -96,6 +102,7 @@ subset_and_filter <- function(mat, meta, cell_type, min_count = 20) {
 # Return a gene x gene matrix of 0s used to track coexpression aggregation
 # across cell types. Rows are the full set of provided genes, while columns
 # are an optional subset of genes.
+# TODO: reconsider mat instead of row_genes as input
 
 init_agg_mat <- function(row_genes, col_genes = NULL) {
   
@@ -133,7 +140,7 @@ init_agg_mat <- function(row_genes, col_genes = NULL) {
 all_RSR_aggregate1 <- function(mat,
                                meta,
                                min_cell = 20,
-                               ...) {
+                               standardize = TRUE) {
   
   stopifnot(c("Cell_type", "ID") %in% colnames(meta))
   
@@ -161,7 +168,13 @@ all_RSR_aggregate1 <- function(mat,
     
   }
   
-  amat <- colrank_mat(-amat, na_arg = "last", ties_arg = "min")
+  if (standardize) {
+    amat <- colrank_mat(amat)
+    ngene <- ncol(amat)
+    amat <- apply(amat, 2, function(x) x/ngene)
+  } else {
+    amat <- colrank_mat(-amat)
+  }
   
   return(amat)
 }
@@ -180,7 +193,7 @@ all_RSR_aggregate1 <- function(mat,
 all_RSR_aggregate2 <- function(mat,
                                meta,
                                min_cell = 20,
-                               ...) {
+                               standardize = TRUE) {
   
   stopifnot(c("Cell_type", "ID") %in% colnames(meta))
   
@@ -210,7 +223,11 @@ all_RSR_aggregate2 <- function(mat,
     
   }
   
-  amat <- allrank_mat(-amat)
+  if (standardize) {
+    amat <- colrank_mat(amat) / length(amat)
+  } else {
+    amat <- colrank_mat(-amat)
+  }
 
   return(amat)
 }
@@ -225,8 +242,7 @@ all_RSR_aggregate2 <- function(mat,
 
 all_RSR_aggregate3 <- function(mat,
                                meta,
-                               min_cell = 20,
-                               ...) {
+                               min_cell = 20) {
   
   stopifnot(c("Cell_type", "ID") %in% colnames(meta))
   
@@ -254,7 +270,7 @@ all_RSR_aggregate3 <- function(mat,
     
   }
   
-  amat <- colrank_mat(-amat, na_arg = "last", ties_arg = "min")
+  amat <- colrank_mat(-amat)
   
   return(amat)
 }
@@ -271,8 +287,7 @@ all_RSR_aggregate3 <- function(mat,
 
 all_RSR_aggregate4 <- function(mat,
                                meta,
-                               min_cell = 20,
-                               ...) {
+                               min_cell = 20) {
   
   stopifnot(c("Cell_type", "ID") %in% colnames(meta))
   
@@ -313,8 +328,7 @@ all_RSR_aggregate4 <- function(mat,
 # 5: Col rank where NA rank sent to last
 all_RSR_aggregate5 <- function(mat,
                                meta,
-                               min_cell = 20,
-                               ...) {
+                               min_cell = 20) {
   
   stopifnot(c("Cell_type", "ID") %in% colnames(meta))
   
@@ -348,7 +362,7 @@ all_RSR_aggregate5 <- function(mat,
     
   }
   
-  amat <- colrank_mat(-amat, na_arg = "last", ties_arg = "min")
+  amat <- colrank_mat(-amat)
   
   return(amat)
 }
@@ -358,8 +372,7 @@ all_RSR_aggregate5 <- function(mat,
 # 6: All rank where NA rank sent to last
 all_RSR_aggregate6 <- function(mat,
                                meta,
-                               min_cell = 20,
-                               ...) {
+                               min_cell = 20) {
   
   stopifnot(c("Cell_type", "ID") %in% colnames(meta))
   
@@ -372,9 +385,7 @@ all_RSR_aggregate6 <- function(mat,
     
     message(paste(ct, Sys.time()))
     
-    # Subset cell type counts and transpose matrix (genes as columns) for cor
-    ct_mat <- t(mat[, filter(meta, Cell_type == ct)$ID])
-    ct_mat <- under_min_count_to_na(ct_mat, min_cell)
+    ct_mat <- subset_and_filter(mat, meta, cell_type = ct, min_count = min_cell)
     
     if (sum(is.na(ct_mat)) == length(ct_mat)) {
       message(paste(ct, "skipped due to insufficient counts"))
@@ -410,8 +421,7 @@ all_RSR_aggregate6 <- function(mat,
 # Average Z-score
 all_zscore_aggregate <- function(mat,
                                  meta,
-                                 min_cell = 20,
-                                 ...) {
+                                 min_cell = 20) {
   
   
   stopifnot(c("Cell_type", "ID") %in% colnames(meta))
@@ -426,22 +436,20 @@ all_zscore_aggregate <- function(mat,
     
     message(paste(ct, Sys.time()))
     
-    # Subset cell type counts and transpose matrix (genes as columns) for cor
-    ct_mat <- t(mat[, filter(meta, Cell_type == ct)$ID])
-    ct_mat <- under_min_count_to_na(ct_mat, min_cell)
+    ct_mat <- subset_and_filter(mat, meta, cell_type = ct, min_count = min_cell)
     
     if (sum(is.na(ct_mat)) == length(ct_mat)) {
       message(paste(ct, "skipped due to insufficient counts"))
       next()
     }
     
-    cmat <- get_cor_mat(ct_mat, lower_tri = FALSE, ncores = 8)
+    cmat <- get_cor_mat(ct_mat, lower_tri = FALSE)
     
     na_ix <- which(is.na(cmat), arr.ind = TRUE)
     na_mat[na_ix] <- na_mat[na_ix] + 1
     
     cmat[is.na(cmat)] <- 0
-    # diag(cmat) <- NA
+    diag(cmat) <- 1
   
     zmat <- scale(cmat)
     zmat[is.na(zmat)] <- 0
