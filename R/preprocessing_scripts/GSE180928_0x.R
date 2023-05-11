@@ -12,16 +12,16 @@ pc <- read.delim("/home/amorin/Data/Metadata/refseq_select_hg38.tsv", stringsAsF
 
 
 # This is for cellxgene data
-meta <- dat@meta.data
-mat <- GetAssayData(dat, slot = "counts")
-plot(meta$nCount_RNA, meta$nFeature_RNA)
-meta["GCGCGATCATACGCCG-alexsc", "nFeature_RNA"]
-sum(mat[, "GCGCGATCATACGCCG-alexsc"] != 0)
-rna_complexity <- log10(meta$nFeature_RNA) / log10(meta$nCount_RNA)
-plot(density(rna_complexity))
-filter_ix_numi <- which(meta$nCount_RNA < 500)
-filter_ix_ngene <- which(meta$nFeature_RNA < 250)
-filter_ix_complexity <- which(rna_complexity < 0.8)
+# meta <- dat@meta.data
+# mat <- GetAssayData(dat, slot = "counts")
+# plot(meta$nCount_RNA, meta$nFeature_RNA)
+# meta["GCGCGATCATACGCCG-alexsc", "nFeature_RNA"]
+# sum(mat[, "GCGCGATCATACGCCG-alexsc"] != 0)
+# rna_complexity <- log10(meta$nFeature_RNA) / log10(meta$nCount_RNA)
+# plot(density(rna_complexity))
+# filter_ix_numi <- which(meta$nCount_RNA < 500)
+# filter_ix_ngene <- which(meta$nFeature_RNA < 250)
+# filter_ix_complexity <- which(rna_complexity < 0.8)
 #
 
 
@@ -80,11 +80,13 @@ if (!file.exists(out_path)) {
   dat <- read.delim(dat_path, sep = ",")
   meta <- read.delim(meta_path, sep = ",")
   
-  # First column is gene symbols, move to rownames and clean col names
+  # Preparing count matrix
   rownames(dat) <- dat$X
   dat$X <- NULL
   colnames(dat) <- str_replace_all(colnames(dat), "\\.", "_")
+  
   mat <- as.matrix(dat)
+  mat <- get_pcoding_only(mat, pc)
   
   # Ready metadata
   meta <- meta %>% 
@@ -93,9 +95,7 @@ if (!file.exists(out_path)) {
   
   stopifnot(all(colnames(mat) %in% meta$ID))
   
-  # Only protein coding genes
-  common_genes <- intersect(pc$Symbol, rownames(mat))
-  mat <- mat[common_genes, meta$ID]
+  
   
   saveRDS(list(mat, meta), file = out_path)
   
