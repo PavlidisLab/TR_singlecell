@@ -374,6 +374,7 @@ get_pcoding_only <- function(mat, pcoding_df) {
   stopifnot("Symbol" %in% colnames(pcoding_df))
   
   common <- intersect(rownames(mat), unique(pc$Symbol))
+  common <- common[common != ""]
   
   if (length(common) == 0) stop("No common symbols in rownames of mat")
   
@@ -383,6 +384,61 @@ get_pcoding_only <- function(mat, pcoding_df) {
   pc_mat[common, ] <-  mat[common, ]
   
   return(pc_mat)
+}
+
+
+
+# This adds columns to metadata: the number of total UMI counts for each 
+# cell/column of mat, the number of non-zero expressing genes, and the RNA
+# novelty/compexity, which is the ratio of the log10 gene counts to log10 umi 
+# counts. It additionally adds ratio of mitochondrial if available. 
+# https://hbctraining.github.io/scRNA-seq_online/lessons/04_SC_quality_control.html
+
+add_count_info <- function(mat, meta) {
+  
+  mt_genes <- rownames(mat)[str_detect(str_to_lower(rownames(mat)), "^mt-")]
+  
+  meta <- meta %>% 
+    mutate(
+      UMI_counts = colSums(mat),
+      Gene_counts = colSums(mat > 0),
+      RNA_novelty = log10(Gene_counts) / log10(UMI_counts)
+    )
+  
+  if (length(mt_genes) > 0) {
+    mt_ratio <- colSums(mat[mt_genes, , drop = FALSE]) / meta$UMI_counts
+    meta$MT_ratio = mt_ratio
+  }
+  
+  return(meta)
+}
+
+
+
+# This removes from mat cells that fail any of the filters as laid out in 
+# https://hbctraining.github.io/scRNA-seq_online/lessons/04_SC_quality_control.html
+
+rm_low_qc_cells <- function(mat, 
+                            meta,
+                            min_counts = 500,
+                            min_genes = 250,
+                            min_novelty = 0.8,
+                            max_mt_ratio = 0.2) {
+  
+  keep_id <- meta %>% 
+    filter(
+      UMI_counts >= min_counts,
+      Gene_counts >= min_genes,
+      RNA_novelty > min_novelty) %>% 
+    pull(ID)
+  
+  if ("MT_ratio" %in% colnames(meta)) {
+    keep_id <- intersect(keep_id, filter(meta, MT_ratio < max_mt_ratio)$ID)
+  }
+  
+  if (length(keep_id) == 0) stop("No remaining cells after filtering")
+  
+  return(mat[, keep_id])
 }
 
 

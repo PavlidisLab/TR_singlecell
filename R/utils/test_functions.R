@@ -50,6 +50,30 @@ assertthat::assert_that(ix2_a != ix2_b)
 
 
 
+# Add count info to metadata
+# head(meta)
+# meta <- add_count_info(mat, meta)
+# head(meta)
+# 
+# 
+# mat2 <- mat
+# meta2 <- meta
+# mat2 <- rbind(mat2, "MT-1" = runif(ncol(mat2), min = 0, max = 300))
+# mat2[19213:19214, 1:10]
+# meta2 <- add_count_info(mat2, meta2)
+# head(meta2)
+
+
+# Remove low QC cells
+# dim(mat)
+# mat <- rm_low_qc_cells(mat, meta)
+# dim(mat)
+# 
+# dim(mat2)
+# mat <- rm_low_qc_cells(mat2, meta2)
+# dim(mat2)
+
+
 # Ensembl ID matching
 # mat1 <- mat_norm
 # mat2 <- mat_norm
