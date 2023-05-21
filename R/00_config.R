@@ -1,11 +1,7 @@
 ## Setting up paths and global variables
+## TODO: pcoding download and common filter needs to be formalized
 ## -----------------------------------------------------------------------------
 
-# library(future)
-
-# Prepare future:: parallel and increase memory max size for Seurat
-# plan("multisession", workers = 8)
-# options(future.globals.maxSize = 2097152000)
 
 # Cores for parallel::
 ncore <- 8
@@ -19,6 +15,13 @@ amat_dir <- "~/scratch/R_objects/"
 
 # 1:1 orthologous protein coding genes
 pc_ortho_path <- "/space/grp/amorin/Metadata/hg_mm_1to1_ortho_genes_DIOPT-v8.tsv"
+
+# Pcoding paths
+ref_hg_path <- "/space/grp/amorin/Metadata/refseq_select_hg38.tsv"
+ref_mm_path <- "/space/grp/amorin/Metadata/refseq_select_mm10.tsv"
+ens_hg_path <- "/space/grp/amorin/Metadata/ensembl_human_protein_coding_105.tsv"
+ens_mm_path <- "/space/grp/amorin/Metadata/ensembl_mouse_protein_coding_105.tsv"
+
 
 # TR-target rankings from genomics evidence
 evidence_path <- "/space/scratch/amorin/R_objects/ranked_target_list_Apr2022.RDS"
