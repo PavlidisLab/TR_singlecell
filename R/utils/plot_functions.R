@@ -40,6 +40,65 @@ plot_perf <- function(df,
 }
 
 
+
+# For QC plots for count matrices
+# ------------------------------------------------------------------------------
+
+
+qc_hist <- function(meta, xvar, xline, xlab, ylab, log10_xvar = TRUE) {
+  
+  if (log10_xvar) {
+    meta[, xvar] <- log10(meta[, xvar])
+    xline <- log10(xline)
+  }
+  
+  ggplot(meta, aes(x = !!sym(xvar))) +
+    geom_histogram(bins = 50) +
+    geom_vline(xintercept = xline, colour = "red") +
+    xlab(xlab) +
+    ylab(ylab) +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20),
+          plot.margin = margin(10, 20, 10, 10))
+}
+
+
+
+all_hist <- function(meta) {
+  
+  pa <- qc_hist(meta, xvar = "UMI_counts", xline = 500, xlab = "Column (cell)-wise counts", ylab = "log10 UMI counts")
+  pb <- qc_hist(meta, xvar = "Gene_counts", xline = 250, xlab = "Row (gene)-wise counts", ylab = "log10 Gene counts")
+  pc <- qc_hist(meta, xvar = "RNA_novelty", xline = 0.8, xlab = "Column (cell)-wise counts", ylab = "log10 Gene counts / log10 UMI counts", log10_xvar = FALSE)
+  
+  p <- cowplot::plot_grid(pa, pb, pc, nrow = 2, bac)
+  
+  if ("MT_ratio" %in% colnames(meta)) {
+    pd <- qc_hist(meta, xvar = "MT_ratio", xline = 0.2, xlab = "Column (cell)-wise counts", ylab = "Ratio of mitochondrial counts", log10_xvar = FALSE)
+    p <- p + pd
+  }
+  
+  return(p)
+}
+
+
+
+qc_scatter <- function(meta) {
+  
+  ggplot(meta, aes(x = log10(Gene_counts), y = log10(UMI_counts))) +
+    geom_point() +
+    geom_vline(xintercept = log10(250), colour = "red") +
+    geom_hline(yintercept = log10(500), colour = "red") +
+    xlab("log10 Gene counts") +
+    ylab("log10 UMI counts") +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20))
+  
+}
+
+
+
 # Plot functions interacting with Seurat object
 # ------------------------------------------------------------------------------
 
