@@ -26,8 +26,10 @@ stopifnot(identical(colnames(mat), meta$ID))
 mat <- t(mat)
 
 
-cmat <- WGCNA::cor(
-  mat, method = "spearman", use = "pairwise.complete.obs", nThreads = ncore)
+# cmat <- WGCNA::cor(
+#   mat, method = "spearman", use = "pairwise.complete.obs", nThreads = ncore)
+
+cmat <- stats::cor(mat, method = "spearman", use = "pairwise.complete.obs")
 
 
 saveRDS(cmat, "/space/scratch/amorin/R_objects/GSE216019_scor_all_counts.RDS")
