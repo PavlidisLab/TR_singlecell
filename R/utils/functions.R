@@ -1,9 +1,161 @@
 ## Project functions
-## TODO: sample_expression_level() impl requires subset (costly) - try pre-format input mat
 ## -----------------------------------------------------------------------------
 
 library(parallel)
+library(tidyverse)
 library(Seurat)
+library(WGCNA)
+
+
+# Single cell coexpression aggregation
+# ------------------------------------------------------------------------------
+
+
+
+# Rank matrix columns such that 1=best. Return as same dimension as input.
+
+colrank_mat <- function(mat, ties_arg = "random", na_arg = "keep") {
+  rank_mat <- apply(-mat, 2, rank, ties.method = ties_arg, na.last = na_arg)
+  return(rank_mat)
+}
+
+
+
+# Rank matrix rows such that 1=best. Return as same dimension as input.
+
+rowrank_mat <- function(mat, ties_arg = "random", na_arg = "keep") {
+  rank_mat <- apply(-mat, 1, rank, ties.method = ties_arg, na.last = na_arg)
+  return(t(rank_mat))
+}
+
+
+
+# Rank the entire matrix jointly such that 1=best. Return as same dimension as input.
+
+allrank_mat <- function(mat, ties_arg = "random", na_arg = "keep") {
+  
+  rank_mat <- rank(-mat, ties.method = ties_arg, na.last = na_arg)
+  rank_mat <- matrix(rank_mat, nrow = nrow(mat), ncol = ncol(mat))
+  rownames(rank_mat) <- colnames(rank_mat) <- rownames(mat)
+  
+  return(rank_mat)
+}
+
+
+
+# Generate column-wise correlation of mat, with arguments for whether to return
+# the full symmetric matrix or a lower triangular with NAs on diagonal and upper.
+
+get_cor_mat <- function(mat, 
+                        cor_method = "pearson",
+                        lower_tri = FALSE,
+                        ncores = 1) {
+  
+  if (cor_method == "bicor") {
+    cmat <- WGCNA::bicor(
+      mat, use = "pairwise.complete.obs", nThreads = ncores)
+    
+  } else {
+    cmat <- WGCNA::cor(
+      mat, method = cor_method, use = "pairwise.complete.obs", nThreads = ncores)
+  }
+  
+  if (lower_tri) {
+    diag(cmat) <- NA
+    cmat[upper.tri(cmat)] <- NA
+  }
+  
+  return(cmat)
+}
+
+
+
+# Replace upper tri of mat with lower tri.
+
+lowertri_to_symm <- function(mat, na_diag = TRUE) {
+  
+  mat[upper.tri(mat)] <-  t(mat)[upper.tri(mat)]
+  if (na_diag) diag(mat) <- NA
+  return(mat)
+}
+
+
+
+# If a col of mat has fewer than min_count non-zero elements, set that col to
+# all NAs. This is done to produce an NA during correlation, instead of 
+# allowing values resulting from fewer observations.
+
+under_min_count_to_na <- function(mat, min_count = 20) {
+  
+  na_genes <- apply(mat, 2, function(x) sum(x != 0)) < min_count
+  mat[, na_genes] <- NA
+  return(mat)
+}
+
+
+
+# Subset mat to cell_type, set under min count genes to NA, and transpose.
+# Expects mat is genes x cells, and will return a cells x genes mat for corr.
+
+subset_and_filter <- function(mat, meta, cell_type, min_count = 20) {
+  
+  ct_mat <- t(mat[, filter(meta, Cell_type == ct)$ID])
+  ct_mat <- under_min_count_to_na(ct_mat, min_count)
+  stopifnot(all(rownames(ct_mat) %in% meta$ID))
+  return(ct_mat)
+}
+
+
+
+# Return a gene x gene matrix of 0s used to track coexpression aggregation
+# across cell types. Rows are the full set of provided genes, while columns
+# are an optional subset of genes.
+# TODO: reconsider mat instead of row_genes as input
+
+init_agg_mat <- function(row_genes, col_genes = NULL) {
+  
+  if (!is.null(col_genes)) {
+    
+    stopifnot(all(col_genes %in% row_genes))
+    
+    amat <- matrix(0, nrow = length(row_genes), ncol = length(col_genes))
+    rownames(amat) <- row_genes
+    colnames(amat) <- col_genes
+    
+  } else {
+    
+    amat <- matrix(0, nrow = length(row_genes), ncol = length(row_genes))
+    rownames(amat) <- colnames(amat) <- row_genes
+    
+  }
+  
+  return(amat)
+}
+
+
+
+
+# Set NAs in matrix to the average value of the matrix
+
+na_to_mean <- function(mat) {
+  mat[is.na(mat)] <- mean(mat, na.rm = TRUE)
+  return(mat)
+}
+
+
+# Set NAs in matrix to 0
+
+na_to_zero <- function(mat) {
+  mat[is.na(mat)] <- 0
+  return(mat)
+}
+
+
+
+
+
+
+
 
 
 # Misc helpers
@@ -65,6 +217,7 @@ max_cor_df <- function(cmat_list, tf) {
 
 
 # Working with Seurat object
+# TODO: sample_expression_level() impl requires subset (costly) - try pre-format input mat
 # ------------------------------------------------------------------------------
 
 
@@ -259,84 +412,10 @@ all_au_perf <- function(rank_df,
 }
 
 
-# Single cell coexpression aggregation
+
+
+# Functions for QC/preprocessing count matrices and metadata
 # ------------------------------------------------------------------------------
-
-
-# Rank matrix columns such that 1=best. Return as same dimension as input.
-
-colrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
-  rank_mat <- apply(-mat, 2, rank, ties.method = ties_arg, na.last = na_arg)
-  return(rank_mat)
-}
-
-
-# Rank matrix rows such that 1=best. Return as same dimension as input.
-
-rowrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
-  rank_mat <- apply(-mat, 1, rank, ties.method = ties_arg, na.last = na_arg)
-  return(t(rank_mat))
-}
-
-
-# Count NAs for each element of a list of matrices
-
-count_nas <- function(cmat_list) {
-  mat <- apply(simplify2array(cmat_list), 1:2, function(x) sum(is.na(x)))
-  return(mat)
-}
-
-
-# Set NAs in matrix to the average value of the matrix
-
-na_to_mean <- function(mat) {
-  mat[is.na(mat)] <- mean(mat, na.rm = TRUE)
-  return(mat)
-}
-
-
-# Set NAs in matrix to 0
-
-na_to_zero <- function(mat) {
-  mat[is.na(mat)] <- 0
-  return(mat)
-}
-
-
-# Set NAs in matrix to the length of the longest dimension.
-# TODO: may be unecessary, could be handled by rank itself
-
-# na_to_last <- function(mat) {
-#   mat[is.na(mat)] <- max(nrow(mat), nrow(ncol(mat)))
-#   return(mat)
-# }
-
-
-# # Rank sum rank from Harris et al., 2021 (Jesse Gillis) 
-# # https://pubmed.ncbi.nlm.nih.gov/34015329/
-# # Rank coexpression (1=best) across cell types. Set NAs to network mean. Sum 
-# # the cell-type ranks, and then rank order these sums (1=best).
-# 
-# 
-# aggregate_cor <- function(cmat_list, impute_na = TRUE, ncores = 1) {
-#   
-#   # Convert cors to ranks (1=best)
-#   rank_list <- mclapply(cmat_list, colrank_mat, mc.cores = ncores)
-#   
-#   # Set NAs
-#   if (impute_na) {
-#     rank_list <- lapply(rank_list, na_to_mean)
-#   }
-#   
-#   # Sum list of rank matrices into a single matrix
-#   # https://stackoverflow.com/questions/42628385/sum-list-of-matrices-with-nas
-#   sum_rank <- apply(simplify2array(rank_list), 1:2, sum, na.rm = TRUE)
-#   
-#   # Convert sum of ranks into a final rank (1=best)
-#   final_rank <- colrank_mat(-sum_rank)
-#   
-#   return(final_rank)
-# }
 
 
 
@@ -457,3 +536,18 @@ filter_low_expressed_genes <- function(mat, min_count = 20) {
   
   return(mat[keep, ])
 }
+
+
+
+
+# Old/unused but kept for reference
+# ------------------------------------------------------------------------------
+
+
+# Count NAs for each element of a list of matrices
+# No longer used as correlation is generated iteratively, not in a full list
+
+# count_nas <- function(cmat_list) {
+#   mat <- apply(simplify2array(cmat_list), 1:2, function(x) sum(is.na(x)))
+#   return(mat)
+# }
