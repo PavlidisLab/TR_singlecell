@@ -410,6 +410,9 @@ add_count_info <- function(mat, meta) {
     meta$MT_ratio = mt_ratio
   }
   
+  # Remove cell x gene features of this type, if present
+  meta[, c("nFeature_RNA", "nCount_RNA")] <- NULL
+  
   return(meta)
 }
 
