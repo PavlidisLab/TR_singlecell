@@ -71,7 +71,7 @@ all_hist <- function(meta) {
   pb <- qc_hist(meta, xvar = "Gene_counts", xline = 250, xlab = "Row (gene)-wise counts", ylab = "log10 Gene counts")
   pc <- qc_hist(meta, xvar = "RNA_novelty", xline = 0.8, xlab = "Column (cell)-wise counts", ylab = "log10 Gene counts / log10 UMI counts", log10_xvar = FALSE)
   
-  p <- cowplot::plot_grid(pa, pb, pc, nrow = 2, bac)
+  p <- cowplot::plot_grid(pa, pb, pc, nrow = 2)
   
   if ("MT_ratio" %in% colnames(meta)) {
     pd <- qc_hist(meta, xvar = "MT_ratio", xline = 0.2, xlab = "Column (cell)-wise counts", ylab = "Ratio of mitochondrial counts", log10_xvar = FALSE)
