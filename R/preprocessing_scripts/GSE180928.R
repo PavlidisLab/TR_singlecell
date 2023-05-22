@@ -44,7 +44,7 @@ if (!file.exists(processed_path)) {
          filename = file.path(out_dir, paste0(id, "_QC_histograms.png")))
   
   ggsave(p2, device = "png", dpi = 300, height = 8, width = 8,
-         filename = file.path(out_dir, paste0(id, "QC_scatter.png")))
+         filename = file.path(out_dir, paste0(id, "_QC_scatter.png")))
   
   # Remove cells failing QC, keep only protein coding genes, and normalize
   
