@@ -73,6 +73,9 @@ if (!file.exists(processed_path)) {
 stopifnot(identical(colnames(mat), meta$ID))
 
 
+mat <- as.matrix(mat)
+
+
 rsr1 <- all_RSR_aggregate1(mat, meta)
 saveRDS(rsr1, file = "/space/scratch/amorin/R_objects/GSE180928_RSR1.RDS")
 
