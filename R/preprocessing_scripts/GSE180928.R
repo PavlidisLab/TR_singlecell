@@ -3,8 +3,9 @@
 
 library(WGCNA)
 library(tidyverse)
+source("R/00_config.R")
 source("R/utils/functions.R")
-source("R/utils/agg_functions.R")
+source("R/utils/plot_functions.R")
 
 id <- "GSE180928"
 sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata", id)
@@ -12,7 +13,7 @@ dat_path <- file.path(sc_dir, paste0(id, "_filtered_cell_counts.csv"))
 meta_path <- file.path(sc_dir, paste0(id, "_metadata.csv"))
 out_dir <- file.path("/space/scratch/amorin/TR_singlecell", id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta.RDS"))
-pc <- read.delim("/home/amorin/Data/Metadata/refseq_select_hg38.tsv", stringsAsFactors = FALSE)
+pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 
 
 if (!file.exists(processed_path)) {
