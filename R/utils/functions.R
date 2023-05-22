@@ -1,4 +1,5 @@
 ## Project functions
+## TODO: init_agg_mat() reconsider mat instead of row_genes as input
 ## -----------------------------------------------------------------------------
 
 library(parallel)
@@ -110,7 +111,6 @@ subset_and_filter <- function(mat, meta, cell_type, min_count = 20) {
 # Return a gene x gene matrix of 0s used to track coexpression aggregation
 # across cell types. Rows are the full set of provided genes, while columns
 # are an optional subset of genes.
-# TODO: reconsider mat instead of row_genes as input
 
 init_agg_mat <- function(row_genes, col_genes = NULL) {
   
@@ -134,15 +134,6 @@ init_agg_mat <- function(row_genes, col_genes = NULL) {
 
 
 
-
-# Set NAs in matrix to the average value of the matrix
-
-na_to_mean <- function(mat) {
-  mat[is.na(mat)] <- mean(mat, na.rm = TRUE)
-  return(mat)
-}
-
-
 # Set NAs in matrix to 0
 
 na_to_zero <- function(mat) {
@@ -151,10 +142,145 @@ na_to_zero <- function(mat) {
 }
 
 
+# Set diag in matrix to 1
+
+diag_to_one <- function(mat) {
+  diag(mat) <- 1
+  return(mat)
+}
+
+
+# Set upper triangle to NA
+
+upper_to_na <- function(mat) {
+  mat[upper.tri(mat)] <- NA
+  return(mat)
+}
 
 
 
+# Rank sum rank aggregation from Jesse Gillis's group.
+# https://pubmed.ncbi.nlm.nih.gov/27165153/
+# https://pubmed.ncbi.nlm.nih.gov/25717192/
+# https://pubmed.ncbi.nlm.nih.gov/34015329/
+# A gene-gene correlation matrix is generated for each cell type (defined in
+# meta), and these correlations are ranked, summed, and then re-ranked such
+# that 1=best. Genes with counts under the min_count threshold for a given cell
+# type are set to NA, to produce NA cor. Then, NA cors are set to 0 before 
+# ranking. The output is a gene-gene matrix representing the rank of correlation
+# aggregated across cell types.
 
+
+# Here, ranking is done column-wise such that each column/gene vector is ranked
+# only within that vector. Standardize controls whether the final ranks should
+# be kept in their original integer order, or standardized to be [0, 1]
+
+RSR_colrank <- function(mat,
+                        meta,
+                        min_cell = 20,
+                        standardize = TRUE) {
+  
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta))
+  
+  cts <- unique(meta$Cell_type)
+  genes <- rownames(mat)
+  
+  amat <- init_agg_mat(row_genes = genes)
+  
+  for (ct in cts) {
+    
+    message(paste(ct, Sys.time()))
+    
+    # Get count matrix for current cell type, coercing low count genes to NAs
+    
+    ct_mat <- subset_and_filter(mat, meta, ct, min_cell)
+    
+    if (sum(is.na(ct_mat)) == length(ct_mat)) {
+      message(paste(ct, "skipped due to insufficient counts"))
+      next()
+    }
+    
+    # Get cell-type cor matrix: full symmetric for ranking, NA cors to 0, and
+    # diag (self-cor) coerced to 1
+    
+    cmat <- ct_mat %>% 
+      get_cor_mat(lower_tri = FALSE) %>% 
+      na_to_zero() %>% 
+      diag_to_one()
+    
+    # Column-wise rank the correlations and add to aggregate matrix
+    
+    rmat <- colrank_mat(cmat)
+    amat <- amat + rmat
+    
+  }
+  
+  if (standardize) {
+    amat <- colrank_mat(amat)
+    ngene <- length(genes)
+    amat <- apply(amat, 2, function(x) x/ngene)
+  } else {
+    amat <- colrank_mat(-amat)
+  }
+  
+  return(amat)
+}
+
+
+
+# Here, ranking is done for the entire matrix jointly. Standardize controls 
+# whether the final ranks should be kept in their original integer order, or 
+# standardized to be [0, 1]
+
+RSR_allrank <- function(mat,
+                        meta,
+                        min_cell = 20,
+                        standardize = TRUE) {
+  
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta))
+  
+  cts <- unique(meta$Cell_type)
+  genes <- rownames(mat)
+  
+  amat <- init_agg_mat(row_genes = genes)
+  
+  for (ct in cts) {
+    
+    message(paste(ct, Sys.time()))
+    
+    # Get count matrix for current cell type, coercing low count genes to NAs
+    
+    ct_mat <- subset_and_filter(mat, meta, ct, min_cell)
+    
+    if (sum(is.na(ct_mat)) == length(ct_mat)) {
+      message(paste(ct, "skipped due to insufficient counts"))
+      next()
+    }
+    
+    # Get cell-type cor matrix: full symmetric, NA cors to 0, diag (self-cor)
+    # coerced to 1, then to triangular to prevent double ranking symmetric matrix
+    
+    cmat <- ct_mat %>% 
+      get_cor_mat(lower_tri = FALSE) %>% 
+      na_to_zero() %>% 
+      diag_to_one() %>% 
+      upper_to_na()
+
+    # Rank the tri matrix and add to aggregate matrix
+    
+    rmat <- allrank_mat(cmat)
+    amat <- amat + rmat
+    
+  }
+  
+  if (standardize) {
+    amat <- allrank_mat(amat) / sum(!is.na(amat))
+  } else {
+    amat <- allrank_mat(-amat)
+  }
+  
+  return(amat)
+}
 
 
 
@@ -551,3 +677,13 @@ filter_low_expressed_genes <- function(mat, min_count = 20) {
 #   mat <- apply(simplify2array(cmat_list), 1:2, function(x) sum(is.na(x)))
 #   return(mat)
 # }
+
+
+# Set NAs in matrix to the average value of the matrix
+# Sticking with setting NA cors to 0 - extremely similar result
+
+# na_to_mean <- function(mat) {
+#   mat[is.na(mat)] <- mean(mat, na.rm = TRUE)
+#   return(mat)
+# }
+
