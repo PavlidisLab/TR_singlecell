@@ -23,8 +23,7 @@ if (!file.exists(processed_path)) {
   # Extract count matrix
   
   mat <- as.matrix(GetAssayData(dat, slot = "counts"))
-  mat_data <- as.matrix(GetAssayData(dat, slot = "data"))
-  
+
   # Ready metadata
   
   meta <- dat@meta.data %>% 
@@ -41,7 +40,7 @@ if (!file.exists(processed_path)) {
          filename = file.path(out_dir, paste0(id, "_QC_histograms.png")))
   
   ggsave(p2, device = "png", dpi = 300, height = 8, width = 8,
-         filename = file.path(out_dir, paste0(id, "QC_scatter.png")))
+         filename = file.path(out_dir, paste0(id, "_QC_scatter.png")))
   
   # Remove cells failing QC, keep only protein coding genes, and normalize
   
@@ -61,11 +60,14 @@ if (!file.exists(processed_path)) {
   
 } else {
   
-  dat <- readRDS(out_path)
+  dat <- readRDS(processed_path)
   meta <- dat[[2]]
   mat <- dat[[1]]
   
 }
+
+
+stopifnot(identical(colnames(mat), meta$ID))
 
 
 rsr1 <- all_RSR_aggregate1(mat, meta)
