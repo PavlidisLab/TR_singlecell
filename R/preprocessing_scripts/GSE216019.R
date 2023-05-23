@@ -13,6 +13,9 @@ sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_fi
 dat_path <- file.path(sc_dir, paste0(id, ".RDS"))
 out_dir <- file.path("/space/scratch/amorin/TR_singlecell", id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta.RDS"))
+allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.RDS"))
+colrank_path <- file.path(out_dir, paste0(id, "_RSR_colrank.RDS"))
+zcor_path <- file.path(out_dir, paste0(id, "_fishersZ.RDS"))
 pc <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 
 
@@ -73,12 +76,19 @@ stopifnot(identical(colnames(mat), meta$ID))
 mat <- as.matrix(mat)
 
 
+if (!file.exists(allrank_path)) {
+  rsr_all <- RSR_allrank(mat, meta)
+  saveRDS(rsr_all, allrank_path)
+}
 
-rsr1 <- all_RSR_aggregate1(mat, meta)
-saveRDS(rsr1, file = paste0("/space/scratch/amorin/R_objects/", id, "_RSR1.RDS"))
 
-z1 <- all_zscore_aggregate(mat, meta)
-saveRDS(z1, file = paste0("/space/scratch/amorin/R_objects/", id, "_Z1.RDS"))
+if (!file.exists(colrank_path)) {
+  rsr_col <- RSR_colrank(mat, meta)
+  saveRDS(rsr_col, colrank_path)
+}
 
-rsr2 <- all_RSR_aggregate2(mat, meta)
-saveRDS(rsr2, file = paste0("/space/scratch/amorin/R_objects/", id, "_RSR2.RDS"))
+
+if (!file.exists(zcor_path)) {
+  zcor <- fishersZ_aggregate(mat, meta)
+  saveRDS(zcor, zcor_path)
+}
