@@ -73,7 +73,7 @@ get_cor_mat <- function(mat,
 
 # Replace upper tri of mat with lower tri.
 
-lowertri_to_symm <- function(mat, na_diag = TRUE) {
+lowertri_to_symm <- function(mat, na_diag = FALSE) {
   
   mat[upper.tri(mat)] <-  t(mat)[upper.tri(mat)]
   if (na_diag) diag(mat) <- NA
