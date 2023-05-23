@@ -6,6 +6,7 @@ library(parallel)
 library(tidyverse)
 library(Seurat)
 library(WGCNA)
+library(DescTools)
 
 
 # Single cell coexpression aggregation
@@ -280,6 +281,64 @@ RSR_allrank <- function(mat,
   }
   
   return(amat)
+}
+
+
+
+# Here, correlations are transformed using Fisher' Z transformation, and these 
+# are then averaged across cell types. A list of three matrices are returned: 
+# the average calculated across all cell types, the average using only non-NA 
+# observations, and a matrix tracking the count of NAs for each gene-gene pair 
+# across cell types.
+# https://bookdown.org/mwheymans/bookmi/pooling-correlation-coefficients-1.html
+
+fishersZ_aggregate <- function(mat,
+                               meta,
+                               min_cell = 20) {
+  
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta))
+  
+  cts <- unique(meta$Cell_type)
+  genes <- rownames(mat)
+  
+  amat <- init_agg_mat(row_genes = genes)
+  na_mat <- amat  # matrix of 0s for tracking NA gene-gene cor pairs
+  
+  for (ct in cts) {
+    
+    message(paste(ct, Sys.time()))
+    
+    ct_mat <- subset_and_filter(mat, meta, ct, min_cell)
+    
+    if (sum(is.na(ct_mat)) == length(ct_mat)) {
+      message(paste(ct, "skipped due to insufficient counts"))
+      next()
+    }
+    
+    # Generate cor matrix, and count NAs before setting to 0
+    
+    cmat <- get_cor_mat(ct_mat, lower_tri = FALSE)
+    
+    na_ix <- which(is.na(cmat), arr.ind = TRUE)
+    na_mat[na_ix] <- na_mat[na_ix] + 1
+    
+    cmat <- cmat %>% 
+      na_to_zero() %>% 
+      diag_to_one()
+    
+    # Fisher's z transformation and add result to aggregate matrix
+    
+    zmat <- DescTools::FisherZ(cmat)
+    amat <- amat + zmat
+    
+  }
+  
+  agg_list <- list(
+    Avg_all = (amat / length(cts)),
+    Avg_nonNA = (amat / (length(cts) - na_mat)),
+    NA_mat = na_mat)
+  
+  return(agg_list)
 }
 
 
