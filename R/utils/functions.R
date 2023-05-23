@@ -343,6 +343,39 @@ fishersZ_aggregate <- function(mat,
 
 
 
+# Get correlation of gene1 and gene2 across cell types represented in meta
+
+all_celltype_cor <- function(mat,
+                             meta,
+                             min_cell = 20,
+                             gene1,
+                             gene2) {
+  
+  
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta))
+  
+  cts <- unique(meta$Cell_type)
+  
+  cor_l <- lapply(cts, function(ct) {
+    
+    ct_mat <- t(mat[c(gene1, gene2), filter(meta, Cell_type == ct)$ID])
+    
+    if (sum(ct_mat[, 1] != 0) < min_cell || sum(ct_mat[, 2] != 0) < min_cell) {
+      return(NA)
+    }
+    
+    WGCNA::cor(ct_mat[, gene1], ct_mat[, gene2])
+    
+  })
+  names(cor_l) <- cts
+  
+  cor_vec <- sort(unlist(cor_l), decreasing = TRUE)
+  
+  return(cor_vec)
+}
+
+
+
 # Misc helpers
 # ------------------------------------------------------------------------------
 
