@@ -3,10 +3,10 @@
 ## -----------------------------------------------------------------------------
 
 library(parallel)
+library(DescTools)
 library(tidyverse)
 library(Seurat)
 library(WGCNA)
-library(DescTools)
 
 
 # Single cell coexpression aggregation
@@ -101,7 +101,8 @@ under_min_count_to_na <- function(mat, min_count = 20) {
 
 subset_and_filter <- function(mat, meta, cell_type, min_count = 20) {
   
-  ct_mat <- t(mat[, filter(meta, Cell_type == ct)$ID])
+  ids <- dplyr::filter(meta, Cell_type == cell_type)$ID
+  ct_mat <- t(mat[, ids])
   ct_mat <- under_min_count_to_na(ct_mat, min_count)
   stopifnot(all(rownames(ct_mat) %in% meta$ID))
   return(ct_mat)
@@ -257,18 +258,18 @@ RSR_allrank <- function(mat,
       message(paste(ct, "skipped due to insufficient counts"))
       next()
     }
-    
+
     # Get cell-type cor matrix: full symmetric, NA cors to 0, diag (self-cor)
     # coerced to 1, then to triangular to prevent double ranking symmetric matrix
-    
-    cmat <- ct_mat %>% 
-      get_cor_mat(lower_tri = FALSE) %>% 
-      na_to_zero() %>% 
-      diag_to_one() %>% 
+
+    cmat <- ct_mat %>%
+      get_cor_mat(lower_tri = FALSE) %>%
+      na_to_zero() %>%
+      diag_to_one() %>%
       upper_to_na()
 
     # Rank the tri matrix and add to aggregate matrix
-    
+
     rmat <- allrank_mat(cmat)
     amat <- amat + rmat
     
