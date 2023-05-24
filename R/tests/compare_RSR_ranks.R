@@ -1,4 +1,15 @@
 ## This script looks to compare the rankings from coexpression aggregation
+## -----------------------------------------------------------------------------
+
+library(tidyverse)
+source("R/00_config.R")
+source("R/utils/functions.R")
+source("R/utils/plot_functions.R")
+
+dat <- readRDS("/space/scratch/amorin/TR_singlecell/GSE180928/GSE180928_clean_mat_and_meta.RDS")
+rsr_all <- readRDS("/space/scratch/amorin/TR_singlecell/GSE180928/GSE180928_RSR_allrank.RDS")
+rsr_col <- readRDS("/space/scratch/amorin/TR_singlecell/GSE180928/GSE180928_RSR_colrank.RDS")
+zcor <- readRDS("/space/scratch/amorin/TR_singlecell/GSE180928/GSE180928_fishersZ.RDS")
 
 
 # TODO: replace with proper output
@@ -26,41 +37,3 @@ cor(amat_colrank_std[, gene], amat_allrank_nostd[, gene], method = "spearman", u
 plot(amat_colrank_std[, gene], amat_allrank_nostd[, gene])
 
 
-
-
-#
-cmat_col1
-rmat_col1
-amat_col1
-
-cmat_col2
-rmat_col2
-amat_col2
-
-amat_col_std
-amat_col_nostd
-
-plot(amat_col_std[, 1], amat_col_nostd[, 1])
-
-
-cmat_all1
-rmat_all1
-amat_all1
-
-cmat_all2
-rmat_all2
-amat_all2
-
-amat_all_std
-amat_all_nostd
-
-amat_all_std_full <- lowertri_to_symm(amat_all_std)
-amat_all_nostd_full <- lowertri_to_symm(amat_all_nostd)
-
-plot(amat_all_std_full[, gene], amat_all_nostd_full[, gene])
-plot(amat_all_std_full[, gene], amat_col_std[, gene])
-
-amat_all_std[1:5, 1:5]
-
-cmat_col1[1:5, 1:5]
-cmat_all1[1:5, 1:5]
