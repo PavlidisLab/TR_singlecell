@@ -25,7 +25,7 @@ if (!file.exists(processed_path)) {
   
   # Extract count matrix
   
-  mat <- as.matrix(GetAssayData(dat, slot = "counts"))
+  mat <- GetAssayData(dat, slot = "counts")
 
   # Ready metadata
   
@@ -56,7 +56,7 @@ if (!file.exists(processed_path)) {
   
   stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
   
-  saveRDS(list(mat, meta), file = processed_path)
+  saveRDS(list(Mat = mat, Meta = meta), file = processed_path)
   
   rm(dat)
   gc()

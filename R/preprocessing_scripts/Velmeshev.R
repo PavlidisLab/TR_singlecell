@@ -21,24 +21,23 @@ zcor_path <- file.path(out_dir, paste0(id, "_fishersZ.RDS"))
 pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 
 
+
 if (!file.exists(processed_path)) {
   
   # Count matrix, metadata, and genes need to be loaded individually
   
-  dat <- as.matrix(Matrix::readMM(dat_path))
+  mat <- Matrix::readMM(dat_path)
   meta <- read.delim(meta_path, stringsAsFactors = FALSE)
   genes <- read.delim(genes_path, header = FALSE, stringsAsFactors = FALSE)
   
-  meta <- meta %>% 
-    dplyr::rename(ID = cell, Cell_type = cluster)
-  
-  mat <- dat
-  colnames(mat) <- meta$ID
+  colnames(mat) <- meta$cell
   rownames(mat) <- genes$V2
   
   # Ready metadata
   
-  meta <- add_count_info(mat, meta)
+  meta <- meta %>% 
+    dplyr::rename(ID = cell, Cell_type = cluster) %>% 
+    add_count_info(mat = mat)
   
   # QC plots
   
@@ -61,9 +60,8 @@ if (!file.exists(processed_path)) {
   
   stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
   
-  saveRDS(list(mat, meta), file = processed_path)
+  saveRDS(list(Mat = mat, Meta = meta), file = processed_path)
   
-  rm(dat)
   gc()
   
 } else {

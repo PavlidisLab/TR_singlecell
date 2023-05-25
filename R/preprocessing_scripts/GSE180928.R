@@ -29,7 +29,7 @@ if (!file.exists(processed_path)) {
   rownames(dat) <- dat$X
   dat$X <- NULL
   colnames(dat) <- str_replace_all(colnames(dat), "\\.", "_")
-  mat <- as.matrix(dat)
+  mat <- Matrix(dat, sparse = TRUE)
   
   # Ready metadata
   
@@ -59,7 +59,7 @@ if (!file.exists(processed_path)) {
   
   stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
   
-  saveRDS(list(mat, meta), file = processed_path)
+  saveRDS(list(Mat = mat, Meta = meta), file = processed_path)
   
   rm(dat)
   gc()
