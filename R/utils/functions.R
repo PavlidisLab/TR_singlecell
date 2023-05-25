@@ -7,6 +7,7 @@ library(DescTools)
 library(tidyverse)
 library(Seurat)
 library(WGCNA)
+library(Matrix)
 
 
 # Single cell coexpression aggregation
@@ -664,22 +665,23 @@ ensembl_to_symbol <- function(mat, ensembl_df) {
 
 
 
-# Assumes that mat is a gene x cell count matrix. Filters the matrix for unique
-# gene symbols in pcoding_df, and fills the missing genes as 0.
+# Assumes that mat is sparse gene x cell count matrix. Filters the matrix for 
+# unique gene symbols in pcoding_df, and fills the missing genes as 0s. 
 
 get_pcoding_only <- function(mat, pcoding_df) {
   
   stopifnot("Symbol" %in% colnames(pcoding_df))
   
-  common <- intersect(rownames(mat), unique(pc$Symbol))
-  common <- common[common != ""]
+  genes <- unique(pcoding_df$Symbol)
+  common <- intersect(rownames(mat), genes)
+  missing <- setdiff(genes, rownames(mat))
   
   if (length(common) == 0) stop("No common symbols in rownames of mat")
   
-  pc_mat <- matrix(0, nrow = n_distinct(pc$Symbol), ncol = ncol(mat))
-  colnames(pc_mat) <- colnames(mat)
-  rownames(pc_mat) <- unique(pc$Symbol)
-  pc_mat[common, ] <-  mat[common, ]
+  pc_mat <- mat[common, ]
+  pc_mat <- rbind(pc_mat, Matrix(0, nrow = length(missing), ncol = ncol(mat)))
+  rownames(pc_mat) <- c(common, missing)
+  pc_mat <- pc_mat[genes, ]
   
   return(pc_mat)
 }
