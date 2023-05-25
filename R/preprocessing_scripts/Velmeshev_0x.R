@@ -1,22 +1,33 @@
+## Process count matrix and get aggregate correlation for Velmeshev 2019
+## -----------------------------------------------------------------------------
+
 library(WGCNA)
 library(tidyverse)
-library(Matrix)
+library(Seurat)
+source("R/00_config.R")
 source("R/utils/functions.R")
-source("R/utils/agg_functions.R")
+source("R/utils/plot_functions.R")
 
-sc_dir <- "/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/jules_garreau_sc_datasets/Velmeshev/"
+id <- "Velmeshev"
+sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/jules_garreau_sc_datasets/", id)
 dat_path <- file.path(sc_dir, "matrix.mtx")
 meta_path <- file.path(sc_dir, "meta.txt")
 genes_path <- file.path(sc_dir, "genes.tsv")
-out_path <- "/space/scratch/amorin/R_objects/Velmeshev_mat_and_meta.RDS"
-pc <- read.delim("/home/amorin/Data/Metadata/refseq_select_hg38.tsv", stringsAsFactors = FALSE)
+out_dir <- file.path("/space/scratch/amorin/TR_singlecell", id)
+processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta.RDS"))
+allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.RDS"))
+colrank_path <- file.path(out_dir, paste0(id, "_RSR_colrank.RDS"))
+zcor_path <- file.path(out_dir, paste0(id, "_fishersZ.RDS"))
+pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 
 
-if (!file.exists(out_path)) {
+if (!file.exists(processed_path)) {
+  
+  # Count matrix, metadata, and genes need to be loaded individually
   
   dat <- as.matrix(Matrix::readMM(dat_path))
-  meta <- read.delim(meta_path)
-  genes <- read.delim(genes_path, header = FALSE)
+  meta <- read.delim(meta_path, stringsAsFactors = FALSE)
+  genes <- read.delim(genes_path, header = FALSE, stringsAsFactors = FALSE)
   
   meta <- meta %>% 
     dplyr::rename(ID = cell, Cell_type = cluster)
@@ -25,35 +36,64 @@ if (!file.exists(out_path)) {
   colnames(mat) <- meta$ID
   rownames(mat) <- genes$V2
   
-  stopifnot(identical(colnames(mat), meta$ID))
+  # Ready metadata
   
-  common_genes <- intersect(pc$Symbol, genes$V2)
+  meta <- add_count_info(mat, meta)
   
-  mat <- mat[common_genes, meta$ID]
-
-  zero_genes <- names(which(apply(mat, 1, function(x) sum(x != 0)) == 0))
-  keep_genes <- unique(setdiff(rownames(mat), zero_genes))
-  mat <- mat[keep_genes, ]
+  # QC plots
   
-  saveRDS(list(mat, meta), file = out_path)
+  p1 <- all_hist(meta)
+  p2 <- qc_scatter(meta)
+  
+  ggsave(p1, device = "png", dpi = 300, height = 12, width = 16, bg = "white",
+         filename = file.path(out_dir, paste0(id, "_QC_histograms.png")))
+  
+  ggsave(p2, device = "png", dpi = 300, height = 8, width = 8,
+         filename = file.path(out_dir, paste0(id, "_QC_scatter.png")))
+  
+  # Remove cells failing QC, keep only protein coding genes, and normalize
+  
+  mat <- rm_low_qc_cells(mat, meta) %>%
+    get_pcoding_only(pcoding_df = pc) %>% 
+    Seurat::LogNormalize(., verbose = FALSE)
+  
+  meta <- filter(meta, ID %in% colnames(mat))
+  
+  stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
+  
+  saveRDS(list(mat, meta), file = processed_path)
   
   rm(dat)
   gc()
   
 } else {
   
-  dat <- readRDS(out_path)
+  dat <- readRDS(processed_path)
   meta <- dat[[2]]
   mat <- dat[[1]]
   
 }
 
 
-rsr1 <- all_RSR_aggregate1(mat, meta)
-saveRDS(rsr1, file = "/space/scratch/amorin/R_objects/Velmeshev_RSR1.RDS")
+stopifnot(identical(colnames(mat), meta$ID))
 
-z1 <- all_zscore_aggregate(mat, meta)
-saveRDS(z1, file = "/space/scratch/amorin/R_objects/Velmeshev_Z1.RDS")
 
-rsr2 <- all_RSR_aggregate2(mat, meta)
-saveRDS(rsr2, file = "/space/scratch/amorin/R_objects/Velmeshev_RSR2.RDS")
+mat <- as.matrix(mat)
+
+
+if (!file.exists(allrank_path)) {
+  rsr_all <- RSR_allrank(mat, meta)
+  saveRDS(rsr_all, allrank_path)
+}
+
+
+# if (!file.exists(colrank_path)) {
+#   rsr_col <- RSR_colrank(mat, meta)
+#   saveRDS(rsr_col, colrank_path)
+# }
+# 
+# 
+# if (!file.exists(zcor_path)) {
+#   zcor <- fishersZ_aggregate(mat, meta)
+#   saveRDS(zcor, zcor_path)
+# }
