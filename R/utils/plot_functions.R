@@ -76,6 +76,7 @@ all_hist <- function(meta) {
   if ("MT_ratio" %in% colnames(meta)) {
     pd <- qc_hist(meta, xvar = "MT_ratio", xline = 0.2, xlab = "Column (cell)-wise counts", ylab = "Ratio of mitochondrial counts", log10_xvar = FALSE)
     p <- p + pd
+    p <- cowplot::plot_grid(pa, pb, pc, pd, nrow = 2)
   }
   
   return(p)
