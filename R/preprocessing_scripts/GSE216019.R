@@ -9,8 +9,8 @@ source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 
 id <- "GSE216019"
-sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/amorin_sc_datases/Human/", id)
-dat_path <- file.path(sc_dir, paste0(id, ".RDS"))
+sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/amorin_sc_datasets", id)
+dat_path <- file.path(sc_dir, paste0(id, "_cellxgene_seurat.RDS"))
 out_dir <- file.path("/space/scratch/amorin/TR_singlecell", id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta.RDS"))
 allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.RDS"))
