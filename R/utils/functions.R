@@ -688,6 +688,21 @@ get_pcoding_only <- function(mat, pcoding_df) {
 
 
 
+# Given a vector of genes that have either common gene symbols or ensembl
+# ids, return a subst of gene_vec only containing the mitochondrial genes. 
+# Assumes gene_vec has only mouse or human symbols/ensembl IDs
+
+get_mt_genes <- function(gene_vec,
+                         mt_path = "/home/amorin/Data/Metadata/mitochondrial_genes_all.tsv") {
+  
+  mt_table <- read.delim(mt_path, stringsAsFactors = FALSE)
+  mt_genes <- gene_vec[gene_vec %in% c(mt_table$Gene_stable_ID, mt_table$Gene_name)]
+  
+  return(mt_genes)
+}
+
+
+
 # This adds columns to metadata: the number of total UMI counts for each 
 # cell/column of mat, the number of non-zero expressing genes, and the RNA
 # novelty/compexity, which is the ratio of the log10 gene counts to log10 umi 
@@ -696,7 +711,7 @@ get_pcoding_only <- function(mat, pcoding_df) {
 
 add_count_info <- function(mat, meta) {
   
-  mt_genes <- rownames(mat)[str_detect(str_to_lower(rownames(mat)), "^mt-")]
+  mt_genes <- get_mt_genes(rownames(mat))
   
   meta <- meta %>% 
     mutate(
