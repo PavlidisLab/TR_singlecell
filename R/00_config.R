@@ -1,5 +1,6 @@
 ## Setting up paths and global variables
 ## TODO: pcoding download and common filter needs to be formalized
+## TODO: mito gene was manually downloaded from biomart... doc this https://www.biostars.org/p/310641/
 ## -----------------------------------------------------------------------------
 
 
