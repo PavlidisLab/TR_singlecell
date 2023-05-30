@@ -29,7 +29,7 @@ if (!file.exists(processed_path)) {
   rownames(dat) <- dat$X
   dat$X <- NULL
   colnames(dat) <- str_replace_all(colnames(dat), "\\.", "_")
-  mat <- Matrix(dat, sparse = TRUE)
+  mat <- Matrix(as.matrix(dat), sparse = TRUE)
   
   # Ready metadata
   
