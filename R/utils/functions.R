@@ -690,7 +690,7 @@ get_pcoding_only <- function(mat, pcoding_df) {
 
 # Given a vector of genes that have either common gene symbols or ensembl
 # ids, return a subst of gene_vec only containing the mitochondrial genes. 
-# Assumes gene_vec has only mouse or human symbols/ensembl IDs
+# Assumes gene_vec has only mouse or human symbols/ensembl IDs.
 
 get_mt_genes <- function(gene_vec,
                          mt_path = "/home/amorin/Data/Metadata/mitochondrial_genes_all.tsv") {
