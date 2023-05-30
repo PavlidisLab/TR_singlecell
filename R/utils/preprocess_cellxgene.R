@@ -5,7 +5,7 @@ source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 
-args <- commandArgs(trailingOnly=TRUE)
+args <- commandArgs(trailingOnly = TRUE)
 id <- args[1]
 species <- args[2]
 
