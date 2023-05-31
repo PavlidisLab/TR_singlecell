@@ -349,12 +349,14 @@ fishersZ_aggregate <- function(mat,
 
 all_celltype_cor <- function(mat,
                              meta,
-                             min_cell = 20,
                              gene1,
-                             gene2) {
+                             gene2,
+                             min_cell = 20,
+                             cor_method = "pearson") {
   
   
-  stopifnot(c("Cell_type", "ID") %in% colnames(meta))
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta),
+            c(gene1, gene2) %in% rownames(mat))
   
   cts <- unique(meta$Cell_type)
   
@@ -366,7 +368,7 @@ all_celltype_cor <- function(mat,
       return(NA)
     }
     
-    WGCNA::cor(ct_mat[, gene1], ct_mat[, gene2])
+    WGCNA::cor(ct_mat[, gene1], ct_mat[, gene2], method = cor_method)
     
   })
   names(cor_l) <- cts
