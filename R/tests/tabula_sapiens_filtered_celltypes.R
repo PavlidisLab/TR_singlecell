@@ -90,5 +90,6 @@ plot_grid(p2, p4)
 # Notes that pancreatic acinar cell are expected to have low RNA complexity
 
 
-
+# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8599307/
+# Talks about mt filtering
 
