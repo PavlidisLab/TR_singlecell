@@ -34,7 +34,7 @@ if (!file.exists(processed_path)) {
   # Ready metadata
   
   meta <- meta %>% 
-    dplyr::rename(ID = X, Cell_type = Cluster) %>% 
+    dplyr::rename(ID = X, Cell_type = Lineage) %>% 
     mutate(ID = str_replace_all(ID, "-", "_")) %>% 
     add_count_info(mat = mat)
   
