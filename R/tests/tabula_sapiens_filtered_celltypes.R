@@ -1,3 +1,7 @@
+## This script looks at which cell types in the Tabula Sapiens dataset are 
+## impacted by the different QC steps
+## -----------------------------------------------------------------------------
+
 library(Seurat)
 library(UpSetR)
 library(cowplot)
