@@ -66,8 +66,8 @@ if (!file.exists(processed_path)) {
   
   stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
   
-  message(paste0("Count matrix dim: ", dim(mat),
-                 "Unique cell types: ", n_distinct(meta$Cell_type)))
+  message(paste0("Count of cells: ", ncol(mat),
+                 "Count unique cell types: ", n_distinct(meta$Cell_type)))
   
   saveRDS(list(Mat = mat, Meta = meta), file = processed_path)
   
