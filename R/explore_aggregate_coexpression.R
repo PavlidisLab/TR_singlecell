@@ -1,26 +1,34 @@
+##
+## -----------------------------------------------------------------------------
+
 library(tidyverse)
 library(Seurat)
 library(pheatmap)
 library(RColorBrewer)
-source("R/utils/agg_functions.R")
+library(googlesheets4)
+source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
+# 
+dat_meta <- read_sheet(gsheets_id, sheet = "Main", trim_ws = TRUE)
+
+#
 pc_ortho <- read.delim(pc_ortho_path)
 
 # Ranked targets from paper
 evidence_l <- readRDS(evidence_path)
-tfs_mm <- names(rank_l$Mouse)
-tfs_hg <- names(rank_l$Human)
-
+tfs_mm <- names(evidence_l$Mouse)
+tfs_hg <- names(evidence_l$Human)
 
 # IDs for scRNA-seq datasets
-ids_hg <- c("Velmeshev", "ROSMAP", "GSE180928", "GSE216019")
-ids_mm <- c("Posner2022", "MKA")
+ids_hg <- filter(dat_meta, Species == "Human")$ID
+ids_mm <- filter(dat_meta, Species == "Mouse")$ID
+ids <- union(ids_hg, ids_mm)
 
 # Load aggregate matrix into list
 
-rsr1_hg <- lapply(ids_hg, function(x) readRDS(paste0(amat_dir, x, "_RSR1.RDS")))
+rsr1_hg <- lapply(ids_hg, function(x) readRDS(file.path(amat_dir, x, paste0(x, "_RSR_allrank.RDS"))))
 names(rsr1_hg) <- ids_hg
 
 rsr1_mm <- lapply(ids_mm, function(x) readRDS(paste0(amat_dir, x, "_RSR1.RDS")))
