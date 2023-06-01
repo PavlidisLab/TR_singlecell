@@ -17,6 +17,7 @@ amat_dir <- "/space/scratch/amorin/TR_singlecell/"
 # 1:1 orthologous protein coding genes
 pc_ortho_path <- "/space/grp/amorin/Metadata/hg_mm_1to1_ortho_genes_DIOPT-v8.tsv"
 
+
 # Pcoding paths
 ref_hg_path <- "/space/grp/amorin/Metadata/refseq_select_hg38.tsv"
 ref_mm_path <- "/space/grp/amorin/Metadata/refseq_select_mm10.tsv"
@@ -27,11 +28,15 @@ ens_mm_path <- "/space/grp/amorin/Metadata/ensembl_mouse_protein_coding_105.tsv"
 # TR-target rankings from genomics evidence
 evidence_path <- "/space/scratch/amorin/R_objects/ranked_target_list_Apr2022.RDS"
 
+
 # Gsheets ID for TRsc datasets
 gsheets_id <- "1SQx_rFdBNBwOEdChaHkbQY1vStcbuA3fF0CZk6YECEc"
 
 
-# Human Protein Atlas
+# Local copy of meta
+sc_meta_path <- "/space/grp/amorin/Metadata/single_cell_dataset_meta.tsv"
 
+
+# Human Protein Atlas
 expr_mat_l_path <- "/home/amorin/scratch/R_objects/HPA_expression_mat_list.RDS"
 cor_mat_l_path <- "/home/amorin/scratch/R_objects/HPA_cor_mat_list.RDS"
