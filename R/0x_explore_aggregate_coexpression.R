@@ -7,7 +7,7 @@ library(WGCNA)
 library(parallel)
 library(pheatmap)
 library(RColorBrewer)
-library(googlesheets4)
+library(cowplot)
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
@@ -60,8 +60,6 @@ gene_vec_to_mat <- function(agg_l, gene) {
 
 
 gene <- "RPL3"
-
-
 
 
 gene_mat <- gene_vec_to_mat(agg_hg, gene)
@@ -126,7 +124,98 @@ max_pair_mm <- max_pair_l(agg_mm, ncore)
 
 
 dat_files <- list.files(amat_dir, pattern = "_clean_mat_and_meta.RDS", recursive = TRUE, full.names = TRUE)
-# dat_l <- lapply(dat_files, readRDS)
-ct_cors <- all_celltype_cor(mat, meta, gene1 = gene1, gene2 = gene2)
+dat <- readRDS("/space/scratch/amorin/TR_singlecell/Tabula_Sapiens/Tabula_Sapiens_clean_mat_and_meta.RDS")
+mat <- dat$Mat
+meta <- dat$Meta
+gene1 <- "RPL13"
+gene2 <- "RPS18"
+ct_cors <- all_celltype_cor(mat, meta, gene1, gene2)
 
 
+plot_scatter <- function(df, cell_type) {
+  
+  ggplot(df, aes(x = df[, 1], y = df[, 2])) + 
+    geom_point(size = 2.5, shape = 21, fill = "#756bb1", alpha = 0.3) +
+    geom_smooth(method = "lm", formula = y ~ x, colour = "black") +
+    xlab(colnames(df)[1]) +
+    ylab(colnames(df)[2]) +
+    # ggtitle(paste0(x, ": ", round(cor_l[[x]][tf, gene], 3))) +
+    ggtitle(cell_type) +
+    theme_classic() +
+    theme(plot.title = element_text(size = 15),
+          axis.title = element_text(size = 20),
+          axis.text = element_text(size = 15))
+}
+
+
+cor_heatmap <- function(cor_vec, cell_size = 10) {
+  
+  pheatmap(t(cor_vec),
+           cluster_rows = FALSE,
+           cluster_cols = FALSE,
+           cellwidth = cell_size,
+           cellheight = cell_size)
+}
+
+
+
+all_celltype_scatter <- function(mat,
+                                 meta,
+                                 gene1,
+                                 gene2,
+                                 min_cell = 20,
+                                 cor_method = "pearson") {
+  
+  
+  
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta),
+            c(gene1, gene2) %in% rownames(mat))
+  
+  cts <- unique(meta$Cell_type)
+  
+  plot_l <- lapply(cts, function(ct) {
+    
+    ct_mat <- t(mat[c(gene1, gene2), filter(meta, Cell_type == ct)$ID])
+    
+    # if (sum(ct_mat[, 1] != 0) < min_cell || sum(ct_mat[, 2] != 0) < min_cell) {
+    #   return(NA)
+    # } else {
+    # WGCNA::cor(ct_mat[, gene1], ct_mat[, gene2], method = cor_method)
+    # }
+    
+    p <- plot_scatter(data.frame(ct_mat), cell_type = ct)
+    
+  })
+  names(plot_l) <- cts
+  
+  plot_l <- plot_l[!is.na(plot_l)]
+  
+  # plot_l <- cowplot::plot_grid(plotlist = plot_l)
+  
+  # cor_vec <- sort(unlist(cor_l), decreasing = TRUE)
+  
+  return(plot_l)
+}
+
+
+# ct_cors <- all_celltype_cor(mat, meta, gene1, gene2)
+ct_scatter_l <- all_celltype_scatter(mat, meta, gene1, gene2)
+ct_scatter_plot <- plot_grid(plotlist = ct_scatter_l)
+ct_heatmap_h <- cor_heatmap(ct_cors)
+ct_heatmap_v <- cor_heatmap(t(ct_cors))
+
+px1_h <- plot_grid(ct_scatter_l[[names(ct_cors[1])]], ct_heatmap$gtable, nrow = 2)
+px2_h <- plot_grid(ct_scatter_plot, ct_heatmap$gtable, nrow = 2)
+px1_v <-  plot_grid(ct_scatter_l[[names(ct_cors[1])]], ct_heatmap_v$gtable, ncol = 2)
+px2_v <-  plot_grid(ct_scatter_l[[names(ct_cors[1])]], ct_heatmap_v$gtable, ncol = 2)
+
+
+ct_scatter_plot_3 <- plot_grid(
+  plotlist = c(ct_scatter_l[names(ct_cors)[1]],
+               ct_scatter_l[names(ct_cors)[floor(length(ct_cors) / 2)]],
+               ct_scatter_l[names(ct_cors)[length(ct_cors)]]),
+  ncol = 1)
+
+
+px3_v <- plot_grid(ct_scatter_plot_3, ct_heatmap_v$gtable, ncol = 2)
+px3_h <- plot_grid(ct_scatter_plot_3, ct_heatmap_h$gtable, nrow = 2, rel_heights = c(2, 1))
