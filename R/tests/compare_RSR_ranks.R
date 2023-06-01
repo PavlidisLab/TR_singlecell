@@ -38,6 +38,7 @@ cor_l <- sort(unlist(cor_l))
 
 
 cor_summ <- summary(cor_l)
+hist(cor_l, breaks = 100, cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5, main = "Agreement between column and all ranking")
 best_cor <- cor_l[length(cor_l)] 
 worst_cor <- cor_l[1] # comparing noise
 
@@ -61,13 +62,6 @@ names(expr_ct_counts) <- genes
 
 na_mean <- rowMeans(na_mat)
 
-# Example of cor that disagrees even though there are typically expressed in
-# the same cell type and so have fewer NAs. Randomly pick from top 10 min NA genes
-
-na_mean[names(best_cor)]
-set.seed(12)
-# hi_exprs <- sample(names(head(sort(na_mean), 10)), 1)
-
 na_df <- data.frame(
   Symbol = genes,
   NA_mean = na_mean[genes],
@@ -76,19 +70,33 @@ na_df <- data.frame(
 )
 
 
+px1 <- ggplot(na_df, aes(x = Expr_counts, y = RSR_cor)) +
+  geom_point(shape = 21, size = 2.5) +
+  xlab("Count of cell types with at least 20 expressing cells") +
+  ylab("Spearman's correlation between column and all ranking") +
+  ggtitle("Agreement between column and all ranking") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20))
+
+
 plot(na_df$NA_mean, na_df$RSR_cor)
 plot(na_df$Expr_counts, na_df$RSR_cor)
 
+# Lowest cor between RSR all/col among maximally expressed genes
 
 diff_cor <- na_df %>% 
-  filter(NA_mean == min(NA_mean)) %>% 
+  filter(Expr_counts == max(Expr_counts)) %>% 
   slice_min(RSR_cor, n = 1)
 
+
+# Organize the ranks for a given gene
 
 # gene <- names(worst_cor)
 # gene <- names(best_cor)
 # gene <- diff_cor$Symbol
-gene <- "MECP2"
+gene <- "ASCL1"
 
 
 rank_df <- data.frame(
@@ -102,23 +110,46 @@ rank_df <- data.frame(
 
 
 cor(select_if(rank_df, is.numeric), use = "pairwise.complete.obs", method = "spearman")
-na_mean[gene]
-plot(rank_df$RSR_all, rank_df$RSR_col)
+
+
+px2 <- ggplot(rank_df, aes(x = RSR_all, y = RSR_col)) +
+  geom_point(shape = 21, size = 2.5) +
+  xlab("All ranking") +
+  ylab("Column ranking") +
+  ggtitle(gene) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20))
+  
 
 
 # Here, splitting the ranks into 10 bins, decreasing by column or all rank. 
 # Then correlating the ranks in each bin to show how the random ranking
 # of NA->0 cor appears
 
+n_bins <- 50
 a1 <- arrange(rank_df, desc(RSR_all)) %>% filter(Symbol != gene)
-a2 <- split(a1, cut(1:nrow(a1), 10))
-a3 <- lapply(a2, function(x) cor(x$RSR_all, x$RSR_col, method = "spearman"))
+a2 <- split(a1, cut(1:nrow(a1), n_bins))
+a3 <- unlist(lapply(a2, function(x) cor(x$RSR_all, x$RSR_col, method = "spearman")))
 
 
 # Assume that dip is noise from random ranking of NA cor -> 0, while raise in
 # last bin is for preserved negative correlation. Or is it ~all NAs resulting
 # in blocky similarity?
-plot(unlist(a3))
+
+
+px3 <- data.frame(Scor = a3, k = 1:n_bins) %>% 
+  ggplot(aes(x = k, y = Scor)) +
+  geom_point(shape = 21, size = 2.5) +
+  xlab("K bins in decreasing order of all ranking") +
+  ylab("Spearman's correlation between column and all ranking") +
+  ggtitle(gene) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20))
+
 
 
 
@@ -147,3 +178,19 @@ cor(select_if(sub_all, is.numeric), method = "spearman")
 cor(select_if(sub_col, is.numeric), method = "spearman")
 plot(sub_all$RSR_all, sub_all$RSR_col)
 plot(sub_col$RSR_all, sub_col$RSR_col)
+
+
+# Looking at rank correlation of a given gene relative to the rest of gene
+# vectors within all rank. This is distinct than the best aggregate cor pair.
+# It considers which gene's rankings most align with the given gene.
+
+top_cor <- lapply(genes, function(x) cor(rsr_all[, gene], rsr_all[, x], method = "spearman"))
+names(top_cor) <- genes
+top_cor <- sort(unlist(top_cor), decreasing = TRUE)
+top_cor <- top_cor[names(top_cor) != gene]
+rsr_all[gene, names(top_cor[1])]
+plot(rsr_all[, gene], rsr_all[, names(top_cor[1])])
+
+tt <- data.frame(Symbol = names(top_cor),
+                 Gene_vec_cor = top_cor, 
+                 Aggregate_rank = rsr_all[names(top_cor), gene])
