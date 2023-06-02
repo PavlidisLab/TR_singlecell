@@ -59,7 +59,7 @@ gene_vec_to_mat <- function(agg_l, gene) {
 }
 
 
-gene <- "RPL3"
+gene <- "RPL13"
 
 
 gene_mat <- gene_vec_to_mat(agg_hg, gene)
@@ -104,6 +104,152 @@ rmat_hg <- rank_similarity_matrix(agg_hg, gene, ncores = ncore)
 
 
 
+# TODO:
+
+get_au_perf <- function(rank_df, label_col, measure = NULL) {
+  
+  stopifnot(label_col %in% colnames(rank_df), measure %in% c("AUROC", "AUPRC"))
+  
+  # positives/has evidence=1 negatives/no known evidence=0 
+  labels <- as.factor(as.numeric(rank_df[[label_col]]))
+  
+  # convert ranks to monotonically decreasing scores representing rank importance
+  scores <- 1/(1:length(labels))
+  
+  pred <- ROCR::prediction(predictions = scores, labels = labels)
+  
+  if (measure == "AUROC") {
+    perf <- ROCR::performance(pred, measure = "auc")@y.values[[1]]
+  } else {
+    perf <- ROCR::performance(pred, measure = "aucpr")@y.values[[1]]
+  }
+  
+  return(perf)
+}
+
+
+
+
+### Isolating inner comparison of two experiments and one gene
+
+k <- 1000  # length(genes_hg)
+# x <- sort(agg_hg$GSE180928[, gene], decreasing = TRUE)
+x <- sort(agg_hg$GSE180928[, gene], decreasing = TRUE)[1:(k+1)]
+x <- x[names(x) != gene]
+y <- sort(agg_hg$GSE216019[, gene], decreasing = TRUE)[1:(k+1)]
+y <- y[names(y) != gene]
+
+
+rank_df <- data.frame(
+  Symbol = names(x),
+  Rank = 1:length(x),
+  Label = names(x) %in% names(y)
+  # Label = factor(names(x) %in% names(y), levels = c(TRUE, FALSE))
+)
+
+perf_df <- get_perf_df(rank_df, label_col = "Label", measure = "PR")
+perf <- get_au_perf(rank_df, label_col = "Label", measure = "AUPRC")
+##
+
+
+### Isolating comparison of one gene list versus the top k of all other genes
+auprc_l <- lapply(genes_hg, function(i) {
+  
+  x <- sort(agg_hg$GSE180928[, gene], decreasing = TRUE)
+  x <- x[names(x) != gene]
+  y <- sort(agg_hg$GSE216019[, i], decreasing = TRUE)[1:(k+1)]
+  y <- y[names(y) != gene]
+  
+  rank_df <- data.frame(
+    Symbol = names(x),
+    Rank = 1:length(x),
+    Label = names(x) %in% names(y)
+  )
+  
+  perf <- get_au_perf(rank_df, label_col = "Label", measure = "AUPRC")
+  
+})
+
+names(auprc_l) <- genes_hg
+auprc_l <- sort(unlist(auprc_l), decreasing = TRUE)
+which(names(auprc_l) == gene)
+hist(unlist(auprc_l), breaks = 100)
+abline(v = auprc_l[gene], col = "red")
+##
+
+
+### Isolating comparison of top k of one gene list versus the top k of all other genes
+auprc_l2 <- lapply(genes_hg, function(i) {
+  
+  x <- sort(agg_hg$GSE180928[, gene], decreasing = TRUE)[1:(k+1)]
+  x <- x[names(x) != gene]
+  y <- sort(agg_hg$GSE216019[, i], decreasing = TRUE)[1:(k+1)]
+  y <- y[names(y) != gene]
+  
+  rank_df <- data.frame(
+    Symbol = names(x),
+    Rank = 1:length(x),
+    Label = factor(names(x) %in% names(y), levels = c(TRUE, FALSE))
+  )
+  
+  # if (all(!rank_df$Label)) return(0)
+  
+  perf <- get_au_perf(rank_df, label_col = "Label", measure = "AUPRC")
+  perf <- get_perf_df(rank_df, label_col = "Label", measure = "PR")
+  
+})
+
+names(auprc_l2) <- genes_hg
+auprc_l2 <- sort(unlist(auprc_l2), decreasing = TRUE)
+which(names(auprc_l2) == gene)
+hist(unlist(auprc_l2), breaks = 100)
+abline(v = auprc_l2[gene], col = "red")
+##
+
+
+## Compare the two lists
+cor(auprc_l, auprc_l2[names(auprc_l)], method = "spearman")
+
+
+
+## Into a function
+rank_auprc_matrix <- function(agg_l, gene, k) {
+  
+  ids <- names(agg_l)
+  genes <- rownames(agg_l[[1]])
+  
+  stopifnot(length(ids) > 0, gene %in% genes)
+  
+  rank_auprc_mat <- matrix(1, nrow = length(agg_l), ncol = length(agg_l))
+  rownames(rank_auprc_mat) <- colnames(rank_auprc_mat) <- ids
+  
+  for (i in ids) {
+    for (j in ids) {
+      if (i == j) {
+        next
+      }
+      
+      x <- sort(agg_hg[[i]][, gene], decreasing = TRUE)[1:(k+1)]
+      x <- x[names(x) != gene]
+      y <- sort(agg_hg$GSE216019[, i], decreasing = TRUE)[1:(k+1)]
+      y <- y[names(y) != gene]
+      
+      rank_df <- data.frame(
+        Symbol = names(x),
+        Rank = 1:length(x),
+        Label = names(x) %in% names(y)
+      )
+      
+      if (all(!rank_df$Label)) return(0)
+      
+      perf <- get_au_perf(rank_df, label_col = "Label", measure = "AUPRC")
+    }
+  }
+  
+  return(rank_cor_mat)
+  
+}
+##
 
 # Using ribosomal genes as a sanity check
 lapply(agg_hg, function(x) head(sort(x[, "RPL3"], decreasing = TRUE)))
