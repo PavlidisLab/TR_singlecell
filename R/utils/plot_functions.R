@@ -100,39 +100,49 @@ qc_scatter <- function(meta) {
 
 
 
+# Correlation plots
+# ------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
 # Plot functions interacting with Seurat object
 # ------------------------------------------------------------------------------
 
 
-# TODO:
+# Old, typically not working directly with Seurat object
 
-plot_scatter <- function(sdat, 
-                         gene1, 
-                         gene2, 
-                         assay = "RNA", 
-                         slot = "data",
-                         jitter = TRUE) {
-  
-  stopifnot(assay %in% Assays(sdat), slot %in% slotNames(sdat@assays[[assay]]))
-  
-  counts <- GetAssayData(object = sdat@assays[[assay]], slot = slot)
-  
-  plot_df <- data.frame(t(as.matrix(counts[c(gene1, gene2), ])))
-  
-  p <- ggplot(plot_df, aes(x = !!sym(gene1), y = !!sym(gene2)))
-  
-  if (jitter) {
-    p <- p + geom_jitter(shape = 21, size = 2.4)
-  } else {
-    p <- p + geom_point(shape = 21, size = 2.4)
-  }
-  
-  p <- p + 
-    xlab(gene1) +
-    ylab(gene2) +
-    theme_classic() +
-    theme(axis.title = element_text(size = 25),
-          axis.text = element_text(size = 20))
-  
-  return(p)
-}
+# plot_scatter <- function(sdat, 
+#                          gene1, 
+#                          gene2, 
+#                          assay = "RNA", 
+#                          slot = "data",
+#                          jitter = TRUE) {
+#   
+#   stopifnot(assay %in% Assays(sdat), slot %in% slotNames(sdat@assays[[assay]]))
+#   
+#   counts <- GetAssayData(object = sdat@assays[[assay]], slot = slot)
+#   
+#   plot_df <- data.frame(t(as.matrix(counts[c(gene1, gene2), ])))
+#   
+#   p <- ggplot(plot_df, aes(x = !!sym(gene1), y = !!sym(gene2)))
+#   
+#   if (jitter) {
+#     p <- p + geom_jitter(shape = 21, size = 2.4)
+#   } else {
+#     p <- p + geom_point(shape = 21, size = 2.4)
+#   }
+#   
+#   p <- p + 
+#     xlab(gene1) +
+#     ylab(gene2) +
+#     theme_classic() +
+#     theme(axis.title = element_text(size = 25),
+#           axis.text = element_text(size = 20))
+#   
+#   return(p)
+# }
