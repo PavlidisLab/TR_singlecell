@@ -3,6 +3,7 @@
 ## -----------------------------------------------------------------------------
 
 library(parallel)
+library(ROCR)
 library(DescTools)
 library(tidyverse)
 library(Seurat)
@@ -438,6 +439,7 @@ max_cor_df <- function(cmat_list, tf) {
 }
 
 
+
 # Working with Seurat object
 # TODO: sample_expression_level() impl requires subset (costly) - try pre-format input mat
 # ------------------------------------------------------------------------------
@@ -531,17 +533,33 @@ sample_expression_level <- function(sdat, targets, rank_window = 200) {
 # ------------------------------------------------------------------------------
 
 
-# TODO:
+# This uses the ROCR package to return a df of either precision and recall (PR) 
+# or true and false positive rate (ROC) calculated for each prediction in rank_df.
+# Label_col assumed to be value that can be represented as binary for 0=negative
+# and 1=positive. 
+# Score_col assumed to be numeric value where higher positive values carry more
+# importance.
 
-get_perf_df <- function(rank_df, label_col, measure = NULL) {
+get_perf_df <- function(rank_df,
+                        label_col,
+                        score_col = NULL,
+                        measure) {
   
-  stopifnot(label_col %in% colnames(rank_df), measure %in% c("ROC", "PR"))
+  stopifnot(c(label_col, score_col) %in% colnames(rank_df),
+            measure %in% c("ROC", "PR"))
   
-  # positives/has evidence=1 negatives/no known evidence=0 
-  labels <- as.factor(as.numeric(rank_df[[label_col]]))
+  # Negatives as 0, positives as 1
+  labels <- factor(as.numeric(rank_df[[label_col]]),
+                   levels = c(0, 1),
+                   ordered = TRUE)
   
-  # convert ranks to monotonically decreasing scores representing rank importance
-  scores <- 1/(1:length(labels))
+  # If no scores column provided, assume row order as measure of importance
+  scores <- if (is.null(score_col)) {
+    message("No scores provided, using row order of rank_df as relative importance")
+    1 / (1:length(labels))
+  } else {
+    rank_df[[score_col]]
+  }
   
   pred <- ROCR::prediction(predictions = scores, labels = labels)
   
@@ -559,17 +577,33 @@ get_perf_df <- function(rank_df, label_col, measure = NULL) {
 }
 
 
-# TODO:
+# This uses the ROCR package to return either the area under the PR curve (AUPRC)
+# or area under ROC (AUROC) for every prediction made in rank_df.
+# Label_col assumed to be value that can be represented as binary for 0=negative
+# and 1=positive. 
+# Score_col assumed to be numeric value where higher positive values carry more
+# importance.
 
-get_au_perf <- function(rank_df, label_col, measure = NULL) {
+get_au_perf <- function(rank_df,
+                        label_col,
+                        score_col = NULL,
+                        measure) {
   
-  stopifnot(label_col %in% colnames(rank_df), measure %in% c("AUROC", "AUPRC"))
+  stopifnot(c(label_col, score_col) %in% colnames(rank_df),
+            measure %in% c("AUROC", "AUPRC"))
   
-  # positives/has evidence=1 negatives/no known evidence=0 
-  labels <- as.factor(as.numeric(rank_df[[label_col]]))
+  # Negatives as 0, positives as 1
+  labels <- factor(as.numeric(rank_df[[label_col]]),
+                   levels = c(0, 1),
+                   ordered = TRUE)
   
-  # convert ranks to monotonically decreasing scores representing rank importance
-  scores <- 1/(1:length(labels))
+  # If no scores column provided, assume row order as measure of importance
+  scores <- if (is.null(score_col)) {
+    message("No scores provided, using row order of rank_df as relative importance")
+    1 / (1:length(labels))
+  } else {
+    rank_df[[score_col]]
+  }
   
   pred <- ROCR::prediction(predictions = scores, labels = labels)
   
@@ -586,52 +620,52 @@ get_au_perf <- function(rank_df, label_col, measure = NULL) {
 
 # TODO:
 
-all_perf_df <- function(rank_df,
-                        keep_cols,
-                        label_col,
-                        measure = NULL) {
-  
-  
-  stopifnot(label_col %in% colnames(rank_df), measure %in% c("ROC", "PR"))
- 
-  perf_l <- lapply(keep_cols, function(x) {
-    
-    get_perf_df(
-      rank_df = dplyr::arrange(rank_df, !!sym(x)),
-      label_col,
-      measure) %>%
-      mutate(Group = x)
-  })
-  
-  perf_df <- do.call(rbind, perf_l) %>% 
-    mutate(Group = factor(Group, levels = keep_cols))
-   
-  return(perf_df)
-}
-
-
-# TODO:
-
-all_au_perf <- function(rank_df,
-                        keep_cols,
-                        label_col,
-                        measure = NULL) {
-  
-  
-  stopifnot(label_col %in% colnames(rank_df), measure %in% c("AUROC", "AUPRC"))
-  
-  perf_l <- lapply(keep_cols, function(x) {
-    
-    get_au_perf(
-      rank_df = dplyr::arrange(rank_df, !!sym(x)),
-      label_col,
-      measure)
-  })
-  
-  names(perf_l) <- keep_cols
-  
-  return(perf_l)
-}
+# all_perf_df <- function(rank_df,
+#                         keep_cols,
+#                         label_col,
+#                         measure = NULL) {
+#   
+#   
+#   stopifnot(label_col %in% colnames(rank_df), measure %in% c("ROC", "PR"))
+#  
+#   perf_l <- lapply(keep_cols, function(x) {
+#     
+#     get_perf_df(
+#       rank_df = dplyr::arrange(rank_df, !!sym(x)),
+#       label_col,
+#       measure) %>%
+#       mutate(Group = x)
+#   })
+#   
+#   perf_df <- do.call(rbind, perf_l) %>% 
+#     mutate(Group = factor(Group, levels = keep_cols))
+#    
+#   return(perf_df)
+# }
+# 
+# 
+# # TODO:
+# 
+# all_au_perf <- function(rank_df,
+#                         keep_cols,
+#                         label_col,
+#                         measure = NULL) {
+#   
+#   
+#   stopifnot(label_col %in% colnames(rank_df), measure %in% c("AUROC", "AUPRC"))
+#   
+#   perf_l <- lapply(keep_cols, function(x) {
+#     
+#     get_au_perf(
+#       rank_df = dplyr::arrange(rank_df, !!sym(x)),
+#       label_col,
+#       measure)
+#   })
+#   
+#   names(perf_l) <- keep_cols
+#   
+#   return(perf_l)
+# }
 
 
 
