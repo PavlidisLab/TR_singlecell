@@ -2,6 +2,8 @@
 ## one aggregated correlation matrix and all other gene vectors from another
 ## network. The main idea idea is to find the rank position of the gene of
 ## interest with itself in another network.
+## TODO: function argument of main call
+## TODO: lapply call of main either made into a function or reduced to relevant only
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -42,46 +44,299 @@ genes_mm <- rownames(agg_mm[[1]])
 
 
 
-
-gene <- "RPL13"  # "RPL13"
-
-
-gene_mat <- gene_vec_to_mat(agg_hg, gene)
+# Functions
+# ------------------------------------------------------------------------------
 
 
-# Correlation of gene's rankings across studies
+#
 
-gene_rank_cor <- cor(gene_mat, method = "spearman", use = "pairwise.complete.obs")
+which_ranked_cor <- function(rank_vec, 
+                             rank_mat, 
+                             gene,
+                             cor_method = "spearman",
+                             ncores = 1) {
+  
+  rank_cor <-  WGCNA::cor(x = rank_vec, 
+                          y = rank_mat,
+                          method = cor_method,
+                          nThreads = ncores)
+  
+  rank_cor <- sort(rank_cor[1, ], decreasing = TRUE)
+  rank_ix <- which(names(rank_cor) == gene)
+  
+  return(list(Rank = rank_ix, List = rank_cor))
+}
 
 
 
 
+#
 
-rank_similarity_matrix <- function(agg_l, gene, ncores = 1) {
+which_ranked_auprc <- function(rank_vec, 
+                               rank_mat, 
+                               gene, 
+                               k = 1000,
+                               ncores = 1) {
+  
+  genes <- rownames(rank_mat)
+  x <- sort(rank_vec, decreasing = TRUE)
+  x <- x[names(x) != gene]
+  
+  auprc_l <- mclapply(genes, function(g) {
+    
+    y <- sort(rank_mat[, g], decreasing = TRUE)[1:(k+1)]
+    y <- y[names(y) != g]
+
+    rank_df <- data.frame(
+      Symbol = names(x),
+      Rank = x,
+      Label = names(x) %in% names(y)
+    )
+    
+    if (all(rank_df$Label)) return(1)
+    if (all(!rank_df$Label)) return(0)
+    
+    get_au_perf(rank_df, label_col = "Label", score_col = "Rank", measure = "AUPRC")
+    
+  }, mc.cores = ncores)
+  names(auprc_l) <- genes
+  
+  rank_auprc <- sort(unlist(auprc_l), decreasing = TRUE)
+  rank_ix <- which(names(rank_auprc) == gene)
+  
+  return(list(Rank = rank_ix, List = rank_cor))
+}
+
+
+
+#
+
+which_ranked_intersect <- function(rank_vec,
+                                   rank_mat,
+                                   gene,
+                                   k = 1000,
+                                   ncores = 1) {
+  
+  genes <- rownames(rank_mat)
+  x <- sort(rank_vec, decreasing = TRUE)[1:(k+1)]
+  x <- x[names(x) != gene]
+  
+  intersect_l <- mclapply(genes, function(i) {
+    
+    y <- sort(rank_mat[, i], decreasing = TRUE)[1:(k+1)]
+    y <- y[names(y) != i]
+
+    length(intersect(names(x), names(y)))
+    
+  }, mc.cores = ncores)
+  names(intersect_l) <- genes
+  
+  rank_intersect <- sort(unlist(intersect_l), decreasing = TRUE)
+  rank_ix <- which(names(rank_intersect) == gene)
+  
+  return(list(Rank = rank_ix, List = rank_intersect))
+}
+
+
+
+
+# Return an n x n matrix where n is equal to the count of aggregate matrices
+# in agg_l. For the given gene
+
+rank_similarity_matrix <- function(agg_l, 
+                                   gene, 
+                                   msr,  # AUPRC|Intersect|Cor
+                                   k = 1000,
+                                   ncores = 1) {
   
   ids <- names(agg_l)
   genes <- rownames(agg_l[[1]])
   
   stopifnot(length(ids) > 0, gene %in% genes)
   
-  rank_cor_mat <- matrix(1, nrow = length(agg_l), ncol = length(agg_l))
-  rownames(rank_cor_mat) <- colnames(rank_cor_mat) <- ids
+  rank_mat <- matrix(1, nrow = length(agg_l), ncol = length(agg_l))
+  rownames(rank_mat) <- colnames(rank_mat) <- ids
   
   for (i in ids) {
     for (j in ids) {
       if (i == j) {
         next
       }
-      rank_cor <-  WGCNA::cor(x = agg_l[[i]][, gene], y = agg_l[[j]], nThreads = ncores) 
-      rank_cor <- sort(rank_cor[1, ], decreasing = TRUE)
-      rank_cor_mat[i, j] <- which(names(rank_cor) == gene)
+      
+      rank_ix <- if (msr == "AUPRC") {
+        
+        which_ranked_auprc(
+          rank_vec = agg_l[[i]][, gene],
+          rank_mat = agg_l[[j]],
+          gene = gene,
+          k = k,
+          ncores = ncores)$Rank
+        
+      } else if (msr == "Intersect") {
+        
+        which_ranked_intersect(
+          rank_vec = agg_l[[i]][, gene],
+          rank_mat = agg_l[[j]],
+          gene = gene,
+          k = k,
+          ncores = ncores)$Rank
+        
+      } else {
+        
+        which_ranked_cor(
+          rank_vec = agg_l[[i]][, gene],
+          rank_mat = agg_l[[j]],
+          gene = gene,
+          ncores = ncores)$Rank
+      }
+
+      rank_mat[i, j] <- rank_ix
     }
   }
   
-  return(rank_cor_mat)
+  return(rank_mat)
 }
 
 
 
-rmat_hg <- rank_similarity_matrix(agg_hg, gene, ncores = ncore)
-# rmat_mm <- rank_similarity_matrix(agg_mm, gene, ncores = ncore)
+# Calling over numerous genes - very slow
+# ------------------------------------------------------------------------------
+
+
+tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
+
+test_genes_hg <- Reduce(intersect, list(str_to_upper(tfs), ribo_genes$Symbol_hg, gene_hg))
+test_genes_mm <- Reduce(intersect, list(str_to_title(tfs), ribo_genes$Symbol_mm, gene_mm))
+
+outfile_int_hg <- "/space/scratch/amorin/R_objects/03-06-2023_aggregate_vector_comparison_intersect_human.RDS"
+outfile_auprc_hg <- "/space/scratch/amorin/R_objects/03-06-2023_aggregate_vector_comparison_auprc_human.RDS"
+outfile_cor_hg <- "/space/scratch/amorin/R_objects/03-06-2023_aggregate_vector_comparison_cor_human.RDS"
+outfile_int_mm <- "/space/scratch/amorin/R_objects/03-06-2023_aggregate_vector_comparison_intersect_mouse.RDS"
+outfile_auprc_mm <- "/space/scratch/amorin/R_objects/03-06-2023_aggregate_vector_comparison_auprc_mouse.RDS"
+outfile_cor_mm <- "/space/scratch/amorin/R_objects/03-06-2023_aggregate_vector_comparison_cor_mouse.RDS"
+
+# Correlation of gene's rankings across studies
+# gene_mat <- gene_vec_to_mat(agg_hg, gene)
+# gene_rank_cor <- cor(gene_mat, method = "spearman", use = "pairwise.complete.obs")
+
+
+# rmat_int_hg <- rank_similarity_matrix(agg_l = agg_hg, 
+#                                       gene = gene, 
+#                                       msr = "Intersect",
+#                                       k = 1000,
+#                                       ncores = ncore)
+# 
+# 
+# rmat_auprc_hg <- rank_similarity_matrix(agg_l = agg_hg,
+#                                         gene = gene,
+#                                         msr = "AUPRC",
+#                                         k = 1000,
+#                                         ncores = ncore)
+# 
+# 
+# rmat_cor_hg <- rank_similarity_matrix(agg_l = agg_hg, 
+#                                       gene = gene, 
+#                                       msr = "Cor",
+#                                       ncores = ncore)
+
+
+
+# Intersects
+
+
+if (!file.exists(outfile_int_hg)) {
+  
+  int_l_hg <- lapply(test_genes_hg, function(gene) {
+    
+    rank_similarity_matrix(agg_l = agg_hg,
+                           gene = gene,
+                           msr = "Intersect",
+                           k = 1000,
+                           ncores = ncore)
+  })
+  names(int_l_hg) <- test_genes_hg
+  saveRDS(int_l_hg, outfile_int_hg)
+}
+
+
+
+if (!file.exists(outfile_int_mm)) {
+  
+  int_l_mm <- lapply(test_genes_mm, function(gene) {
+    
+    rank_similarity_matrix(agg_l = agg_mm,
+                           gene = gene,
+                           msr = "Intersect",
+                           k = 1000,
+                           ncores = ncore)
+  })
+  names(int_l_mm) <- test_genes_mm
+  saveRDS(int_l_mm, outfile_int_mm)
+}
+
+
+# AUPRCs
+
+
+if (!file.exists(outfile_auprc_hg)) {
+  
+  auprc_l_hg <- lapply(test_genes_hg, function(gene) {
+    
+    rank_similarity_matrix(agg_l = agg_hg,
+                           gene = gene,
+                           msr = "AUPRC",
+                           k = 1000,
+                           ncores = ncore)
+  })
+  names(auprc_l_hg) <- test_genes_hg
+  saveRDS(auprc_l_hg, outfile_auprc_hg)
+}
+
+
+
+if (!file.exists(outfile_auprc_mm)) {
+  
+  auprc_l_mm <- lapply(test_genes_mm, function(gene) {
+    
+    rank_similarity_matrix(agg_l = agg_mm,
+                           gene = gene,
+                           msr = "AUPRC",
+                           k = 1000,
+                           ncores = ncore)
+  })
+  names(auprc_l_mm) <- test_genes_mm
+  saveRDS(auprc_l_mm, outfile_auprc_mm)
+}
+
+
+
+# Cors
+
+
+if (!file.exists(outfile_cor_hg)) {
+  
+  cor_l_hg <- lapply(test_genes_hg, function(gene) {
+    
+    rank_similarity_matrix(agg_l = agg_hg,
+                           gene = gene,
+                           msr = "Cor",
+                           ncores = ncore)
+  })
+  names(cor_l_hg) <- test_genes_hg
+  saveRDS(cor_l_hg, outfile_cor_hg)
+}
+
+
+
+if (!file.exists(outfile_cor_mm)) {
+  
+  cor_l_mm <- lapply(test_genes_mm, function(gene) {
+    
+    rank_similarity_matrix(agg_l = agg_mm,
+                           gene = gene,
+                           msr = "Cor",
+                           ncores = ncore)
+  })
+  names(cor_l_mm) <- test_genes_mm
+  saveRDS(cor_l_mm, outfile_cor_mm)
+}
