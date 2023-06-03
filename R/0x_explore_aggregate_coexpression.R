@@ -12,7 +12,7 @@ source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-# 
+# Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 
 #
@@ -54,12 +54,7 @@ genes_mm <- rownames(agg_mm[[1]])
 
 
 
-gene_vec_to_mat <- function(agg_l, gene) {
-  do.call(cbind, lapply(agg_l, function(x) x[gene, ]))
-}
-
-
-gene <- "RPL13"
+gene <- "RPL13"  # "RPL13"
 
 
 gene_mat <- gene_vec_to_mat(agg_hg, gene)
@@ -104,116 +99,120 @@ rmat_hg <- rank_similarity_matrix(agg_hg, gene, ncores = ncore)
 
 
 
-# TODO:
-
-get_au_perf <- function(rank_df, label_col, measure = NULL) {
-  
-  stopifnot(label_col %in% colnames(rank_df), measure %in% c("AUROC", "AUPRC"))
-  
-  # positives/has evidence=1 negatives/no known evidence=0 
-  labels <- as.factor(as.numeric(rank_df[[label_col]]))
-  
-  # convert ranks to monotonically decreasing scores representing rank importance
-  scores <- 1/(1:length(labels))
-  
-  pred <- ROCR::prediction(predictions = scores, labels = labels)
-  
-  if (measure == "AUROC") {
-    perf <- ROCR::performance(pred, measure = "auc")@y.values[[1]]
-  } else {
-    perf <- ROCR::performance(pred, measure = "aucpr")@y.values[[1]]
-  }
-  
-  return(perf)
-}
-
-
-
 
 ### Isolating inner comparison of two experiments and one gene
 
 k <- 1000  # length(genes_hg)
-# x <- sort(agg_hg$GSE180928[, gene], decreasing = TRUE)
-x <- sort(agg_hg$GSE180928[, gene], decreasing = TRUE)[1:(k+1)]
+i <- "Tabula_Sapiens"
+j <- "GSE180928"
+# x <- sort(agg_hg[[i]][, gene], decreasing = TRUE)
+x <- sort(agg_hg[[i]][, gene], decreasing = TRUE)[1:(k+1)]
 x <- x[names(x) != gene]
-y <- sort(agg_hg$GSE216019[, gene], decreasing = TRUE)[1:(k+1)]
+y <- sort(agg_hg[[j]][, gene], decreasing = TRUE)[1:(k+1)]
 y <- y[names(y) != gene]
 
 
 rank_df <- data.frame(
   Symbol = names(x),
-  Rank = 1:length(x),
+  Rank = x,
   Label = names(x) %in% names(y)
-  # Label = factor(names(x) %in% names(y), levels = c(TRUE, FALSE))
 )
 
-perf_df <- get_perf_df(rank_df, label_col = "Label", measure = "PR")
-perf <- get_au_perf(rank_df, label_col = "Label", measure = "AUPRC")
+
+perf_df <- get_perf_df(rank_df, label_col = "Label", score_col = "Rank", measure = "PR")
+perf <- get_au_perf(rank_df, label_col = "Label", score_col = "Rank", measure = "AUPRC")
 ##
 
-
-### Isolating comparison of one gene list versus the top k of all other genes
-auprc_l <- lapply(genes_hg, function(i) {
-  
-  x <- sort(agg_hg$GSE180928[, gene], decreasing = TRUE)
-  x <- x[names(x) != gene]
-  y <- sort(agg_hg$GSE216019[, i], decreasing = TRUE)[1:(k+1)]
-  y <- y[names(y) != gene]
-  
-  rank_df <- data.frame(
-    Symbol = names(x),
-    Rank = 1:length(x),
-    Label = names(x) %in% names(y)
-  )
-  
-  perf <- get_au_perf(rank_df, label_col = "Label", measure = "AUPRC")
-  
-})
-
-names(auprc_l) <- genes_hg
-auprc_l <- sort(unlist(auprc_l), decreasing = TRUE)
-which(names(auprc_l) == gene)
-hist(unlist(auprc_l), breaks = 100)
-abline(v = auprc_l[gene], col = "red")
-##
 
 
 ### Isolating comparison of top k of one gene list versus the top k of all other genes
-auprc_l2 <- lapply(genes_hg, function(i) {
+auprc_l <- mclapply(genes_hg, function(g) {
   
-  x <- sort(agg_hg$GSE180928[, gene], decreasing = TRUE)[1:(k+1)]
+  x <- sort(agg_hg[[i]][, gene], decreasing = TRUE)
   x <- x[names(x) != gene]
-  y <- sort(agg_hg$GSE216019[, i], decreasing = TRUE)[1:(k+1)]
-  y <- y[names(y) != gene]
+  y <- sort(agg_hg[[j]][, g], decreasing = TRUE)[1:(k+1)]
+  # y <- y[names(y) != gene]
+  y <- y[names(y) != g]
+  # y <- y[!names(y) %in% c(gene, i)]
   
   rank_df <- data.frame(
     Symbol = names(x),
-    Rank = 1:length(x),
-    Label = factor(names(x) %in% names(y), levels = c(TRUE, FALSE))
+    Rank = x,
+    Label = names(x) %in% names(y)
   )
   
-  # if (all(!rank_df$Label)) return(0)
+  if (all(rank_df$Label)) return(1)
+  if (all(!rank_df$Label)) return(0)
   
-  perf <- get_au_perf(rank_df, label_col = "Label", measure = "AUPRC")
-  perf <- get_perf_df(rank_df, label_col = "Label", measure = "PR")
+  perf <- get_au_perf(rank_df, label_col = "Label", score_col = "Rank", measure = "AUPRC")
+  # perf_df <- get_perf_df(rank_df, label_col = "Label", score_col = "Rank", measure = "PR")
+  n_pos <- sum(rank_df$Label[1:k])
   
-})
+  return(c(AUPRC = perf, N_pos = n_pos))
+  # return(perf)
 
-names(auprc_l2) <- genes_hg
-auprc_l2 <- sort(unlist(auprc_l2), decreasing = TRUE)
-which(names(auprc_l2) == gene)
-hist(unlist(auprc_l2), breaks = 100)
-abline(v = auprc_l2[gene], col = "red")
+}, mc.cores = ncore)
+names(auprc_l) <- genes_hg
+
+
+auprc_df <- do.call(rbind, auprc_l) %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "Symbol") %>% 
+  arrange(desc(AUPRC))
+
+
+which(auprc_df$Symbol == gene)
+hist(auprc_df$AUPRC, breaks = 100)
+abline(v = filter(auprc_df, Symbol == gene)$AUPRC, col = "red")
+plot(auprc_df$AUPRC, auprc_df$N_pos)
+
+
+
 ##
 
 
-## Compare the two lists
-cor(auprc_l, auprc_l2[names(auprc_l)], method = "spearman")
+which_ranked_auprc <- function(rank_vec, 
+                               rank_mat, 
+                               gene, 
+                               k = 1000,
+                               ncores = 1) {
+  
+  x <- sort(rank_vec, decreasing = TRUE)
+  x <- x[names(x) != gene]
+  
+  auprc_l <- mclapply(genes, function(i) {
+    
+    y <- sort(rank_mat[, i], decreasing = TRUE)[1:(k+1)]
+    # y <- y[names(y) != gene]
+    y <- y[names(y) != i]
+    # y <- y[!names(y) %in% c(gene, i)]
+    
+    rank_df <- data.frame(
+      Symbol = names(x),
+      Rank = x,
+      Label = names(x) %in% names(y)
+    )
+    
+    if (all(rank_df$Label)) return(1)
+    if (all(!rank_df$Label)) return(0)
+    
+    get_au_perf(rank_df, label_col = "Label", score_col = "Rank", measure = "AUPRC")
+    
+  }, mc.cores = ncores)
+  names(auprc_l) <- genes
+  
+  auprc_l <- sort(unlist(auprc_l), decreasing = TRUE)
+  which_rank <- which(names(auprc_l) == gene)
+  
+  return(which_rank)
+}
 
 
 
 ## Into a function
-rank_auprc_matrix <- function(agg_l, gene, k) {
+
+
+rank_auprc_matrix <- function(agg_l, gene, k, ncores = 1) {
   
   ids <- names(agg_l)
   genes <- rownames(agg_l[[1]])
@@ -229,26 +228,108 @@ rank_auprc_matrix <- function(agg_l, gene, k) {
         next
       }
       
-      x <- sort(agg_hg[[i]][, gene], decreasing = TRUE)[1:(k+1)]
-      x <- x[names(x) != gene]
-      y <- sort(agg_hg$GSE216019[, i], decreasing = TRUE)[1:(k+1)]
-      y <- y[names(y) != gene]
+      rank_ix <- which_ranked_auprc(
+        rank_vec = agg_l[[i]][, gene],
+        rank_mat = agg_l[[j]],
+        gene = gene,
+        k = k,
+        ncores = ncores)
       
-      rank_df <- data.frame(
-        Symbol = names(x),
-        Rank = 1:length(x),
-        Label = names(x) %in% names(y)
-      )
-      
-      if (all(!rank_df$Label)) return(0)
-      
-      perf <- get_au_perf(rank_df, label_col = "Label", measure = "AUPRC")
+      rank_auprc_mat[i, j] <- rank_ix
     }
   }
   
-  return(rank_cor_mat)
+  return(rank_auprc_mat)
   
 }
+
+
+auprc_rank_mat_hg <- rank_auprc_matrix(agg_l = agg_hg, 
+                                       gene = gene, 
+                                       k = 1000,
+                                       ncores = ncore)
+
+
+
+
+
+
+###
+
+
+which_ranked_intersect <- function(rank_vec,
+                                   rank_mat,
+                                   gene,
+                                   k = 1000,
+                                   ncores = 1) {
+  
+  x <- sort(rank_vec, decreasing = TRUE)[1:(k+1)]
+  x <- x[names(x) != gene]
+  
+  intersect_l <- mclapply(genes, function(i) {
+    
+    y <- sort(rank_mat[, i], decreasing = TRUE)[1:(k+1)]
+    # y <- y[names(y) != gene]
+    y <- y[names(y) != i]
+    # y <- y[!names(y) %in% c(gene, i)]
+    
+    length(intersect(names(x), names(y)))
+    
+  }, mc.cores = ncores)
+  names(intersect_l) <- genes
+  
+  intersect_l <- sort(unlist(intersect_l), decreasing = TRUE)
+  which_rank <- which(names(intersect_l) == gene)
+  
+  return(which_rank)
+}
+
+
+
+
+rank_intersect_matrix <- function(agg_l, gene, k, ncores = 1) {
+  
+  ids <- names(agg_l)
+  genes <- rownames(agg_l[[1]])
+  
+  stopifnot(length(ids) > 0, gene %in% genes)
+  
+  rank_mat <- matrix(1, nrow = length(agg_l), ncol = length(agg_l))
+  rownames(rank_mat) <- colnames(rank_mat) <- ids
+  
+  for (i in ids) {
+    for (j in ids) {
+      if (i == j) {
+        next
+      }
+      
+      rank_ix <- which_ranked_intersect(
+        rank_vec = agg_l[[i]][, gene],
+        rank_mat = agg_l[[j]],
+        gene = gene,
+        k = k,
+        ncores = ncores)
+      
+      rank_mat[i, j] <- rank_ix
+    }
+  }
+  
+  return(rank_mat)
+  
+}
+
+
+
+intersect_rank_mat_hg <- rank_intersect_matrix(
+  agg_l = agg_hg,
+  gene = gene,
+  k = 1000,
+  ncores = ncore
+)
+
+
+
+
 ##
 
 # Using ribosomal genes as a sanity check
