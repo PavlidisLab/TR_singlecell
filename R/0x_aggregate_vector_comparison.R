@@ -104,7 +104,7 @@ which_ranked_auprc <- function(rank_vec,
   rank_auprc <- sort(unlist(auprc_l), decreasing = TRUE)
   rank_ix <- which(names(rank_auprc) == gene)
   
-  return(list(Rank = rank_ix, List = rank_cor))
+  return(list(Rank = rank_ix, List = rank_auprc))
 }
 
 
@@ -205,8 +205,8 @@ rank_similarity_matrix <- function(agg_l,
 
 tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
 
-test_genes_hg <- Reduce(intersect, list(str_to_upper(tfs), ribo_genes$Symbol_hg, gene_hg))
-test_genes_mm <- Reduce(intersect, list(str_to_title(tfs), ribo_genes$Symbol_mm, gene_mm))
+test_genes_hg <- intersect(c(str_to_upper(tfs), ribo_genes$Symbol_hg), genes_hg)
+test_genes_mm <- intersect(c(str_to_title(tfs), ribo_genes$Symbol_mm), genes_mm)
 
 outfile_int_hg <- "/space/scratch/amorin/R_objects/03-06-2023_aggregate_vector_comparison_intersect_human.RDS"
 outfile_auprc_hg <- "/space/scratch/amorin/R_objects/03-06-2023_aggregate_vector_comparison_auprc_human.RDS"
