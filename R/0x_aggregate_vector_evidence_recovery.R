@@ -2,6 +2,7 @@
 ## TODO: missing genes excluded from rank df makes a difference?
 ## TODO: common process for curated and top k evidence for get_rank_df
 ## TODO: remove tf?
+## TODO: process/save/load function
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -94,7 +95,7 @@ get_tf_performance <- function(agg_l,
   # TODO:
   auprc_l <- lapply(colnames(sc_tf_mat), function(x) {
     gene_vec <- sc_tf_mat[, x]
-    rank_df <- get_rank_df(gene_vec, evidence, evidence_col, k)
+    rank_df <- get_rank_df(gene_vec, evidence_df, evidence_col, k)
     get_au_perf(rank_df, label_col = "Label", score_col = "Score", measure = "AUPRC")
   })
   names(auprc_l) <- colnames(sc_tf_mat)
@@ -203,6 +204,11 @@ if (!file.exists(outfile_hg1)) {
   names(hg1) <- tfs_hg
   
   saveRDS(hg1, outfile_hg1)
+
+} else {
+  
+  hg1 <- readRDS(outfile_hg1)
+  
 }
 
 
@@ -221,6 +227,11 @@ if (!file.exists(outfile_hg2)) {
   names(hg2) <- tfs_hg
   
   saveRDS(hg2, outfile_hg2)
+  
+} else {
+  
+  hg2 <- readRDS(outfile_hg2)
+  
 }
 
 
@@ -242,6 +253,11 @@ if (!file.exists(outfile_mm1)) {
   names(mm1) <- tfs_mm
   
   saveRDS(mm1, outfile_mm1)
+  
+} else {
+  
+  mm1 <- readRDS(outfile_mm1)
+  
 }
 
 
@@ -260,8 +276,17 @@ if (!file.exists(outfile_mm2)) {
   names(mm2) <- tfs_mm
   
   saveRDS(mm2, outfile_mm2)
+  
+} else {
+  
+  mm2 <- readRDS(outfile_mm2)
+  
 }
 
+
+
+#
+# ------------------------------------------------------------------------------
 
 
 # which_tf_auprc <- lapply(auprc_l3, function(x) which(x$Symbol == tf))
