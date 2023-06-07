@@ -103,9 +103,31 @@ qc_scatter <- function(meta) {
 # Correlation plots
 # ------------------------------------------------------------------------------
 
+# TODO:
 
-
-
+cor_heatmap <- function(cor_vec, 
+                        col_min = -1, 
+                        col_max = 1,
+                        heatmap_pal = colorRampPalette(c("#0571b0", "white", "#ca0020"))(pal_length),
+                        display_numbers_arg = TRUE,
+                        pal_length = 100,
+                        cell_size = 50) {
+  
+  color_breaks <- seq(col_min, col_max, length.out = pal_length)
+  
+  pheatmap(t(cor_vec),
+           cluster_rows = FALSE,
+           cluster_cols = FALSE,
+           border_col = "black",
+           color = heatmap_pal,
+           breaks = color_breaks,
+           display_numbers = display_numbers_arg,
+           number_color = "black",
+           # fontsize_number = 20,
+           fontsize = 20,
+           cellwidth = cell_size,
+           cellheight = cell_size)
+}
 
 
 
