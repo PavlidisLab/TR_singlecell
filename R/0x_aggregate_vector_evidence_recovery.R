@@ -144,6 +144,31 @@ get_all_performance <- function(agg_l,
 
 
 
+# This helper takes the output list of get_all_performance(), and returns an
+# experiment by tf matrix, where each element represents the AUPRC rank of the
+# given TF's aggregate vector at recovering evidence, relative to all other
+# gene aggregate vectors in the given dataset.
+# Eg [MKA, Ascl1] == 6153: Ascl1 had the 6153th best AUPRC rank at recovering
+# Ascl1 evidence among all genes in the MKA dataset.
+
+which_rank_mat <- function(perf_l) {
+  
+  tfs <- names(perf_l)
+  
+  which_l <- lapply(tfs, function(tf) {
+    lapply(perf_l[[tf]], function(x) {
+      which(x$Symbol == tf)
+    })
+  })
+  
+  which_mat <- do.call(cbind, which_l)
+  colnames(which_mat) <- tfs
+  
+  return(which_mat)
+}
+
+
+
 # Individual versus aggregate recovery
 # ------------------------------------------------------------------------------
 
@@ -285,33 +310,35 @@ if (!file.exists(outfile_mm2)) {
 
 
 
-#
+# TODO:
 # ------------------------------------------------------------------------------
 
 
-# which_tf_auprc <- lapply(auprc_l3, function(x) which(x$Symbol == tf))
-# 
-# 
-# i <- 5
-# 
-# hist(auprc_l3[[i]]$Topk, breaks = 100)
-# abline(v = filter(auprc_l3[[i]], Symbol == tf)$Topk, col = "red")
-# 
-# hist(auprc_l3[[i]]$AUPRC, breaks = 100)
-# abline(v = filter(auprc_l3[[i]], Symbol == tf)$AUPRC, col = "red")
-# 
-# 
-# plot(auprc_l3$GSE180928$Topk, auprc_l3$GSE180928$AUPRC)
-# cor(auprc_l3$GSE180928$Topk, auprc_l3$GSE180928$AUPRC, method = "spearman")
+which_hg1 <- which_rank_mat(hg1)
+which_hg2 <- which_rank_mat(hg2)
+which_mm1 <- which_rank_mat(mm1)
+which_mm2 <- which_rank_mat(mm2)
+
+
+
+
+hist(hg1$ASCL1$Tabula_Sapiens$Topk, breaks = 100)
+abline(v = filter(hg1$ASCL1$Tabula_Sapiens, Symbol == tf)$Topk, col = "red")
+
+hist(hg1$ASCL1$Tabula_Sapiens$AUPRC, breaks = 100)
+abline(v = filter(hg1$ASCL1$Tabula_Sapiens, Symbol == tf)$AUPRC, col = "red")
+
+plot(hg1$ASCL1$Tabula_Sapiens$Topk, hg1$ASCL1$Tabula_Sapiens$AUPRC)
+cor(hg1$ASCL1$Tabula_Sapiens$Topk, hg1$ASCL1$Tabula_Sapiens$AUPRC, method = "spearman")
 
 
 # Tally the genes whose aggregate expression vector was among the top k at 
 # recovering evidence (also top k)
 
-# tally_topk <- lapply(auprc_l3, function(x) x$Symbol[1:k]) %>% 
-#   unlist() %>% 
-#   table() %>% 
-#   sort(decreasing = TRUE)
+tally_topk <- lapply(hg1$HES1, function(x) x$Symbol[1:k]) %>%
+  unlist() %>%
+  table() %>%
+  sort(decreasing = TRUE)
 
 
 
