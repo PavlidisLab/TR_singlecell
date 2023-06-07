@@ -146,12 +146,23 @@ na_to_zero <- function(mat) {
 }
 
 
+
 # Set diag in matrix to 1
 
 diag_to_one <- function(mat) {
   diag(mat) <- 1
   return(mat)
 }
+
+
+
+# Set diag in matrix to NA
+
+diag_to_na <- function(mat) {
+  diag(mat) <- NA
+  return(mat)
+}
+
 
 
 # Set upper triangle to NA
