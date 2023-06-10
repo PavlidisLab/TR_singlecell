@@ -6,6 +6,7 @@
 ## TODO: collapse main function (general structure of nested loop to mat)
 ## TODO: lapply call of main either made into a function or reduced to relevant only
 ## TODO: process/save/load function
+## TODO: double check k+1
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -43,6 +44,10 @@ ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_
 #
 genes_hg <- rownames(agg_hg[[1]])
 genes_mm <- rownames(agg_mm[[1]])
+
+# TODO: this step should be done upstream
+agg_hg <- lapply(agg_hg, function(x) x[genes_hg, genes_hg])
+agg_mm <- lapply(agg_mm, function(x) x[genes_mm, genes_mm])
 
 
 
@@ -264,8 +269,9 @@ similarity_matrix <- function(agg_l,
 # Inspecting single genes
 # ------------------------------------------------------------------------------
 
-gene_hg <- "RPL19"  # RPL3
-gene_mm <- "Rpl19"
+
+gene_hg <- "RPL3"  # RPL3  RPL19
+gene_mm <- "Rpl3"
 
 
 # Cor
@@ -324,14 +330,15 @@ comp_df <- data.frame(
 
 
 
-
 ggplot(comp_df, aes(x = Cor, y = AUPRC)) +
   geom_point(shape = 19, size = 3) +
   ggtitle(gene_hg) +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         axis.title = element_text(size = 20),
-        plot.title = element_text(size = 20))
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
 
 cor(comp_df)
 
@@ -396,67 +403,67 @@ if (!file.exists(outfile_int_mm)) {
 # AUPRCs
 
 
-if (!file.exists(outfile_auprc_hg)) {
-  
-  auprc_l_hg <- lapply(test_genes_hg, function(gene) {
-    
-    rank_similarity_matrix(agg_l = agg_hg,
-                           gene = gene,
-                           msr = "AUPRC",
-                           k = 1000,
-                           ncores = ncore)
-  })
-  names(auprc_l_hg) <- test_genes_hg
-  saveRDS(auprc_l_hg, outfile_auprc_hg)
-} 
-
-
-if (!file.exists(outfile_auprc_mm)) {
-  
-  auprc_l_mm <- lapply(test_genes_mm, function(gene) {
-    
-    rank_similarity_matrix(agg_l = agg_mm,
-                           gene = gene,
-                           msr = "AUPRC",
-                           k = 1000,
-                           ncores = ncore)
-  })
-  names(auprc_l_mm) <- test_genes_mm
-  saveRDS(auprc_l_mm, outfile_auprc_mm)
-}
-
-
-
-# Cors
-
-
-if (!file.exists(outfile_cor_hg)) {
-  
-  cor_l_hg <- lapply(test_genes_hg, function(gene) {
-    
-    rank_similarity_matrix(agg_l = agg_hg,
-                           gene = gene,
-                           msr = "Cor",
-                           ncores = ncore)
-  })
-  names(cor_l_hg) <- test_genes_hg
-  saveRDS(cor_l_hg, outfile_cor_hg)
-}
-
-
-
-if (!file.exists(outfile_cor_mm)) {
-  
-  cor_l_mm <- lapply(test_genes_mm, function(gene) {
-    
-    rank_similarity_matrix(agg_l = agg_mm,
-                           gene = gene,
-                           msr = "Cor",
-                           ncores = ncore)
-  })
-  names(cor_l_mm) <- test_genes_mm
-  saveRDS(cor_l_mm, outfile_cor_mm)
-}
+# if (!file.exists(outfile_auprc_hg)) {
+#   
+#   auprc_l_hg <- lapply(test_genes_hg, function(gene) {
+#     
+#     rank_similarity_matrix(agg_l = agg_hg,
+#                            gene = gene,
+#                            msr = "AUPRC",
+#                            k = 1000,
+#                            ncores = ncore)
+#   })
+#   names(auprc_l_hg) <- test_genes_hg
+#   saveRDS(auprc_l_hg, outfile_auprc_hg)
+# } 
+# 
+# 
+# if (!file.exists(outfile_auprc_mm)) {
+#   
+#   auprc_l_mm <- lapply(test_genes_mm, function(gene) {
+#     
+#     rank_similarity_matrix(agg_l = agg_mm,
+#                            gene = gene,
+#                            msr = "AUPRC",
+#                            k = 1000,
+#                            ncores = ncore)
+#   })
+#   names(auprc_l_mm) <- test_genes_mm
+#   saveRDS(auprc_l_mm, outfile_auprc_mm)
+# }
+# 
+# 
+# 
+# # Cors
+# 
+# 
+# if (!file.exists(outfile_cor_hg)) {
+#   
+#   cor_l_hg <- lapply(test_genes_hg, function(gene) {
+#     
+#     rank_similarity_matrix(agg_l = agg_hg,
+#                            gene = gene,
+#                            msr = "Cor",
+#                            ncores = ncore)
+#   })
+#   names(cor_l_hg) <- test_genes_hg
+#   saveRDS(cor_l_hg, outfile_cor_hg)
+# }
+# 
+# 
+# 
+# if (!file.exists(outfile_cor_mm)) {
+#   
+#   cor_l_mm <- lapply(test_genes_mm, function(gene) {
+#     
+#     rank_similarity_matrix(agg_l = agg_mm,
+#                            gene = gene,
+#                            msr = "Cor",
+#                            ncores = ncore)
+#   })
+#   names(cor_l_mm) <- test_genes_mm
+#   saveRDS(cor_l_mm, outfile_cor_mm)
+# }
 
 
 ##
@@ -522,3 +529,17 @@ gene_topk_rank_hg <- which_ranked_intersect(
 
 
 gene_topk_rank_hg$List %>% head
+
+
+# Inspect TFs
+
+
+med_tf_srank_hg <- med_standard_rank(int_l_hg[tfs_hg], max_rank = length(genes_hg))
+med_tf_srank_mm <- med_standard_rank(int_l_mm[tfs_mm], max_rank = length(genes_mm))
+
+
+med_tf_srank_df <- rbind(mat_to_df(diag_to_na(med_tf_srank_hg)),
+                         mat_to_df(diag_to_na(med_tf_srank_mm)))
+
+
+hist(med_tf_srank_df$Value, breaks = 10)
