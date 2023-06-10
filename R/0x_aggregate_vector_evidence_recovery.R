@@ -40,6 +40,10 @@ tfs_hg <- names(evidence_l$Human)
 genes_hg <- rownames(agg_hg[[1]])
 genes_mm <- rownames(agg_mm[[1]])
 
+# TODO: this step should be done upstream
+agg_hg <- lapply(agg_hg, function(x) x[genes_hg, genes_hg])
+agg_mm <- lapply(agg_mm, function(x) x[genes_mm, genes_mm])
+
 
 
 # Functions
@@ -179,7 +183,7 @@ tf_performance_hg <- lapply(tfs_hg, function(tf) {
   
   get_tf_performance(agg_l = agg_hg, 
                      evidence_df = evidence_l$Human[[tf]], 
-                     evidence_col = "Rank_binding", 
+                     evidence_col = "Rank_integrated", 
                      tf = tf, 
                      k = 1000)
 })
@@ -193,7 +197,7 @@ tf_performance_mm <- lapply(tfs_mm, function(tf) {
   
   get_tf_performance(agg_l = agg_mm, 
                      evidence_df = evidence_l$Mouse[[tf]], 
-                     evidence_col = "Rank_binding", 
+                     evidence_col = "Rank_integrated", 
                      tf = tf, 
                      k = 1000)
 })
@@ -320,16 +324,26 @@ which_mm1 <- which_rank_mat(mm1)
 which_mm2 <- which_rank_mat(mm2)
 
 
+tf <- "ASCL1"
 
+hist(hg1[[tf]]$Tabula_Sapiens$Topk, breaks = 100)
+abline(v = filter(hg1[[tf]]$Tabula_Sapiens, Symbol == tf)$Topk, col = "red")
+head(hg1[[tf]]$Tabula_Sapiens, 10)
 
-hist(hg1$ASCL1$Tabula_Sapiens$Topk, breaks = 100)
-abline(v = filter(hg1$ASCL1$Tabula_Sapiens, Symbol == tf)$Topk, col = "red")
+hist(hg2[[tf]]$Tabula_Sapiens$Topk, breaks = 100)
+abline(v = filter(hg2[[tf]]$Tabula_Sapiens, Symbol == tf)$Topk, col = "red")
+head(hg2[[tf]]$Tabula_Sapiens, 10)
 
-hist(hg1$ASCL1$Tabula_Sapiens$AUPRC, breaks = 100)
-abline(v = filter(hg1$ASCL1$Tabula_Sapiens, Symbol == tf)$AUPRC, col = "red")
 
 plot(hg1$ASCL1$Tabula_Sapiens$Topk, hg1$ASCL1$Tabula_Sapiens$AUPRC)
 cor(hg1$ASCL1$Tabula_Sapiens$Topk, hg1$ASCL1$Tabula_Sapiens$AUPRC, method = "spearman")
+
+
+tf <- "Pax6"
+
+hist(mm2[[tf]]$HypoMap$Topk, breaks = 100)
+abline(v = filter(mm2[[tf]]$HypoMap, Symbol == tf)$Topk, col = "red")
+head(mm2[[tf]]$HypoMap, 10)
 
 
 # Tally the genes whose aggregate expression vector was among the top k at 
