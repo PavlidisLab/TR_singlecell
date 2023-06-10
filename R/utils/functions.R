@@ -421,13 +421,13 @@ mat_to_df <- function(mat, symmetric = TRUE) {
 
 
 
-
-# Bind all gene vectors of all matrices in agg_l into its own matrix
+# Bind given gene vectors from all matrices in agg_l into its own matrix
 
 gene_vec_to_mat <- function(agg_l, gene) {
-  do.call(cbind, lapply(agg_l, function(x) x[gene, ]))
+  genes <- rownames(agg_l[[1]])
+  stopifnot(gene %in% genes)
+  do.call(cbind, lapply(agg_l, function(x) x[genes, gene]))
 }
-
 
 
 
