@@ -2,7 +2,7 @@
 ## ranked vectors
 
 # TODO: consider removal of self gene (and k+1) # rank_vec <- rank_vec[names(rank_vec) != gene]
-
+# TODO: consider AUPRC helper as duplicated block
 
 source("R/utils/functions.R")
 
@@ -129,19 +129,30 @@ gene_rank_topk <- function(rank_vec,
 
 
 
-# Return an n x n matrix where n is equal to the count of aggregate matrices
-# in agg_l. For the given gene
+# agg_l is a list of aggregate gene-gene rank matrices
+# gene is a pcoding gene of interest
+# msr is the type of similarity to be calculated
+# cor_method is the type of correlation to be fed to WGCNA::cor
+# k is cutoff for the top genes to use as labels for every column in rank_mat
+# ncores is number of cores
+# 
+# Return an n x n matrix where n is equal to the count of matrices in agg_l. Each
+# element corresponds to the rank (1=best) of the given gene's similarity rank
+# across all pairs of experiments in agg_l.
 
-rank_similarity_matrix <- function(agg_l, 
-                                   gene, 
-                                   msr,  # AUPRC|Intersect|Cor
-                                   k = 1000,
-                                   ncores = 1) {
+gene_rank_matrix <- function(agg_l,
+                             gene,
+                             msr,  # AUPRC|Topk|Cor
+                             cor_method = "spearman",
+                             k = 1000,
+                             ncores = 1) {
   
   ids <- names(agg_l)
   genes <- rownames(agg_l[[1]])
   
-  stopifnot(length(ids) > 0, gene %in% genes)
+  stopifnot(length(ids) > 0, 
+            gene %in% genes, 
+            msr %in% c("AUPRC", "Topk", "Cor"))
   
   rank_mat <- matrix(1, nrow = length(agg_l), ncol = length(agg_l))
   rownames(rank_mat) <- colnames(rank_mat) <- ids
@@ -154,27 +165,28 @@ rank_similarity_matrix <- function(agg_l,
       
       rank_ix <- if (msr == "AUPRC") {
         
-        which_ranked_auprc(
+        gene_rank_auprc(
           rank_vec = agg_l[[i]][, gene],
           rank_mat = agg_l[[j]],
           gene = gene,
           k = k,
           ncores = ncores)$Rank
         
-      } else if (msr == "Intersect") {
+      } else if (msr == "Topk") {
         
-        which_ranked_intersect(
+        gene_rank_topk(
           rank_vec = agg_l[[i]][, gene],
           rank_mat = agg_l[[j]],
           gene = gene,
           k = k,
           ncores = ncores)$Rank
         
-      } else {
+      } else if (msr == "Cor") {
         
-        which_ranked_cor(
+        gene_rank_cor(
           rank_vec = agg_l[[i]][, gene],
           rank_mat = agg_l[[j]],
+          cor_method = cor_method,
           gene = gene,
           ncores = ncores)$Rank
       }
@@ -189,19 +201,34 @@ rank_similarity_matrix <- function(agg_l,
 
 
 
-similarity_matrix <- function(agg_l, 
-                              gene, 
-                              msr,  # AUPRC|Intersect
-                              k = 1000,
-                              ncores = 1) {
+# agg_l is a list of aggregate gene-gene rank matrices
+# gene is a pcoding gene of interest
+# msr is the type of similarity to be calculated
+# cor_method is the type of correlation to be fed to WGCNA::cor
+# k is cutoff for the top genes to use as labels for every column in rank_mat
+# ncores is number of cores
+# 
+# Return an n x n matrix where n is equal to the count of matrices in agg_l. Each
+# element corresponds to the raw similarity metric of the given gene with its
+# corresponding vector across all pairs of experiments in agg_l.
+
+gene_similarity_matrix <- function(agg_l,
+                                   gene,
+                                   msr,  # AUPRC|Topk|Cor
+                                   cor_method = "spearman",
+                                   k = 1000,
+                                   ncores = 1) {
   
   ids <- names(agg_l)
   genes <- rownames(agg_l[[1]])
   
-  stopifnot(length(ids) > 0, gene %in% genes)
+  stopifnot(length(ids) > 0, 
+            gene %in% genes, 
+            msr %in% c("AUPRC", "Topk", "Cor"))
   
   sim_mat <- matrix(1, nrow = length(agg_l), ncol = length(agg_l))
   rownames(sim_mat) <- colnames(sim_mat) <- ids
+  if (msr == "Topk") diag(sim_mat) <- k
   
   for (i in ids) {
     for (j in ids) {
@@ -209,29 +236,30 @@ similarity_matrix <- function(agg_l,
         next
       }
       
-      x <- sort(agg_l[[i]][, gene], decreasing = TRUE)
-      x <- x[names(x) != gene]
-      
-      y <- sort(agg_l[[j]][, gene], decreasing = TRUE)[1:(k+1)]
-      y <- y[names(y) != i]
-      
+      rank_vec <- sort(agg_l[[i]][, gene], decreasing = TRUE)
+      rank_vec2 <- sort(agg_l[[j]][, gene], decreasing = TRUE)[1:k]
+
       sim <- if (msr == "AUPRC") {
         
-        rank_df <- data.frame(
-          Symbol = names(x),
-          Rank = x,
-          Label = names(x) %in% names(y)
-        )
+        rank_df <- data.frame(Rank = rank_vec, 
+                              Label = names(rank_vec) %in% names(rank_vec2))
         
         if (all(rank_df$Label)) return(1)
         if (all(!rank_df$Label)) return(0)
         
         get_au_perf(rank_df, label_col = "Label", score_col = "Rank", measure = "AUPRC")
         
-      } else if (msr == "Intersect") {
+      } else if (msr == "Topk") {
         
-        x <- x[1:k]
-        length(intersect(names(x), names(y)))
+        rank_vec <- rank_vec[1:k]
+        length(intersect(names(rank_vec), names(rank_vec2)))
+        
+      } else if (msr == "Cor") {
+        
+        WGCNA::cor(x = agg_l[[i]][genes, gene], 
+                   y = agg_l[[j]][genes, gene],
+                   method = cor_method,
+                   nThreads = ncores)
         
       }
       
