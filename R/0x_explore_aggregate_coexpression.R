@@ -56,16 +56,22 @@ genes_mm <- rownames(agg_mm[[1]])
 
 
 # Using ribosomal genes as a sanity check
-lapply(agg_hg, function(x) head(sort(x[, "RPL3"], decreasing = TRUE)))
+check_hg <- do.call(cbind, lapply(agg_hg, function(x) names(head(sort(x[, "RPL3"], decreasing = TRUE), 10))))
+check_mm <- do.call(cbind, lapply(agg_mm, function(x) names(head(sort(x[, "Rpl3"], decreasing = TRUE), 10))))
 
 
 # List of max pairs for each data set
 
 max_pair_l <- function(agg_l, ncores = 1) {
-  mclapply(agg_l, function(x) {
+  
+  l <- mclapply(agg_l, function(x) {
     diag(x) <- NA
-    which(x == max(x, na.rm = TRUE), arr.ind = TRUE)
+    ix <- which(x == max(x, na.rm = TRUE), arr.ind = TRUE)
+    data.frame(Gene1 = rownames(ix)[1], Gene2 = rownames(ix)[2])
   }, mc.cores = ncores)
+  
+  # data.frame(Study = names(agg_l), do.call(rbind, l))
+  do.call(rbind, l)
 }
 
 
@@ -74,11 +80,11 @@ max_pair_mm <- max_pair_l(agg_mm, ncore)
 
 
 dat_files <- list.files(amat_dir, pattern = "_clean_mat_and_meta.RDS", recursive = TRUE, full.names = TRUE)
-dat <- readRDS("/space/scratch/amorin/TR_singlecell/Tabula_Sapiens/Tabula_Sapiens_clean_mat_and_meta.RDS")
+dat <- readRDS("/space/scratch/amorin/TR_singlecell/GSE180928/GSE180928_clean_mat_and_meta.RDS")
 mat <- dat$Mat
 meta <- dat$Meta
-gene1 <- "RPL13"
-gene2 <- "RPS18"
+gene1 <- "HBA1"
+gene2 <- "HBA2"
 ct_cors <- all_celltype_cor(mat, meta, gene1, gene2)
 
 
@@ -95,16 +101,6 @@ plot_scatter <- function(df, cell_type) {
     theme(plot.title = element_text(size = 15),
           axis.title = element_text(size = 20),
           axis.text = element_text(size = 15))
-}
-
-
-cor_heatmap <- function(cor_vec, cell_size = 10) {
-  
-  pheatmap(t(cor_vec),
-           cluster_rows = FALSE,
-           cluster_cols = FALSE,
-           cellwidth = cell_size,
-           cellheight = cell_size)
 }
 
 
@@ -154,18 +150,19 @@ ct_scatter_plot <- plot_grid(plotlist = ct_scatter_l)
 ct_heatmap_h <- cor_heatmap(ct_cors)
 ct_heatmap_v <- cor_heatmap(t(ct_cors))
 
-px1_h <- plot_grid(ct_scatter_l[[names(ct_cors[1])]], ct_heatmap$gtable, nrow = 2)
-px2_h <- plot_grid(ct_scatter_plot, ct_heatmap$gtable, nrow = 2)
+
+px1_h <- plot_grid(ct_scatter_l[[names(ct_cors[1])]], ct_heatmap_h$gtable, nrow = 2)
+px2_h <- plot_grid(ct_scatter_plot, ct_heatmap_h$gtable, nrow = 2)
 px1_v <-  plot_grid(ct_scatter_l[[names(ct_cors[1])]], ct_heatmap_v$gtable, ncol = 2)
-px2_v <-  plot_grid(ct_scatter_l[[names(ct_cors[1])]], ct_heatmap_v$gtable, ncol = 2)
+px2_v <-  plot_grid(ct_scatter_plot, ct_heatmap_v$gtable, ncol = 2, rel_widths = c(2, 1))
 
 
 ct_scatter_plot_3 <- plot_grid(
   plotlist = c(ct_scatter_l[names(ct_cors)[1]],
-               ct_scatter_l[names(ct_cors)[floor(length(ct_cors) / 2)]],
+               ct_scatter_l[names(ct_cors)[ceiling(length(ct_cors) / 2)]],
                ct_scatter_l[names(ct_cors)[length(ct_cors)]]),
   ncol = 1)
 
 
-px3_v <- plot_grid(ct_scatter_plot_3, ct_heatmap_v$gtable, ncol = 2)
 px3_h <- plot_grid(ct_scatter_plot_3, ct_heatmap_h$gtable, nrow = 2, rel_heights = c(2, 1))
+px3_v <- plot_grid(ct_scatter_plot_3, ct_heatmap_v$gtable, ncol = 2, rel_widths = c(2, 1))
