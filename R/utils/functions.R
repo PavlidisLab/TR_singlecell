@@ -14,11 +14,15 @@ library(Matrix)
 # Single cell coexpression aggregation
 # ------------------------------------------------------------------------------
 
+# NOTE: All of these assume that bigger values are more important, and that the
+# rank importance is the inverse such that 1=best. Seed is set for default
+# random ties.
 
 
 # Rank matrix columns such that 1=best. Return as same dimension as input.
 
-colrank_mat <- function(mat, ties_arg = "random", na_arg = "keep") {
+colrank_mat <- function(mat, ties_arg = "random", na_arg = "keep", seed = 3) {
+  set.seed(seed)
   rank_mat <- apply(-mat, 2, rank, ties.method = ties_arg, na.last = na_arg)
   return(rank_mat)
 }
@@ -27,7 +31,8 @@ colrank_mat <- function(mat, ties_arg = "random", na_arg = "keep") {
 
 # Rank matrix rows such that 1=best. Return as same dimension as input.
 
-rowrank_mat <- function(mat, ties_arg = "random", na_arg = "keep") {
+rowrank_mat <- function(mat, ties_arg = "random", na_arg = "keep", seed = 3) {
+  set.seed(seed)
   rank_mat <- apply(-mat, 1, rank, ties.method = ties_arg, na.last = na_arg)
   return(t(rank_mat))
 }
@@ -36,12 +41,11 @@ rowrank_mat <- function(mat, ties_arg = "random", na_arg = "keep") {
 
 # Rank the entire matrix jointly such that 1=best. Return as same dimension as input.
 
-allrank_mat <- function(mat, ties_arg = "random", na_arg = "keep") {
-  
+allrank_mat <- function(mat, ties_arg = "random", na_arg = "keep", seed = 3) {
+  set.seed(seed)
   rank_mat <- rank(-mat, ties.method = ties_arg, na.last = na_arg)
   rank_mat <- matrix(rank_mat, nrow = nrow(mat), ncol = ncol(mat))
   rownames(rank_mat) <- colnames(rank_mat) <- rownames(mat)
-  
   return(rank_mat)
 }
 
