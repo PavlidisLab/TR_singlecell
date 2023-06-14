@@ -80,15 +80,3 @@ if (!file.exists(allrank_path)) {
   rsr_all <- RSR_allrank(mat, meta)
   saveRDS(rsr_all, allrank_path)
 }
-
-
-# if (!file.exists(colrank_path)) {
-#   rsr_col <- RSR_colrank(mat, meta)
-#   saveRDS(rsr_col, colrank_path)
-# }
-# 
-# 
-# if (!file.exists(zcor_path)) {
-#   zcor <- fishersZ_aggregate(mat, meta)
-#   saveRDS(zcor, zcor_path)
-# }
