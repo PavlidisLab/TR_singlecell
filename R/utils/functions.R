@@ -11,6 +11,52 @@ library(WGCNA)
 library(Matrix)
 
 
+
+# Loading data objects
+# ------------------------------------------------------------------------------
+
+
+
+# Given a vector of ids, will load the associated aggregate correlation matrices
+# into a list. 
+# make_symmetric controls whether the upper triangle of NAs in the all rank
+# matrix should be filled with lower triangle
+
+load_agg_mat_list <- function(ids,
+                              sc_dir = "/space/scratch/amorin/TR_singlecell/",
+                              suffix = "_RSR_allrank.RDS",
+                              make_symmetric = TRUE) {
+  
+  agg_l <- lapply(ids, function(x) {
+    path <- file.path(sc_dir, x, paste0(x, suffix))
+    mat <- readRDS(path)
+    if (make_symmetric) mat <- lowertri_to_symm(mat)
+  })
+  names(agg_l) <- ids
+  
+  return(agg_l)
+}
+
+
+
+# Given a vector of ids, will load the associated list of normalized matrices
+# and metadata into a list. 
+
+load_dat_list <- function(ids,
+                          sc_dir = "/space/scratch/amorin/TR_singlecell/",
+                          suffix = "_clean_mat_and_meta.RDS") {
+  
+  dat_l <- lapply(ids, function(x) {
+    path <- file.path(sc_dir, x, paste0(x, suffix))
+    dat <- readRDS(path)
+  })
+  names(dat_l) <- ids
+  
+  return(dat_l)
+}
+
+
+
 # Single cell coexpression aggregation
 # ------------------------------------------------------------------------------
 
@@ -231,6 +277,8 @@ RSR_colrank <- function(mat,
     
     rmat <- colrank_mat(cmat)
     amat <- amat + rmat
+    rm(cmat, ct_mat)
+    gc(verbose = FALSE)
     
   }
   
@@ -289,6 +337,8 @@ RSR_allrank <- function(mat,
 
     rmat <- allrank_mat(cmat)
     amat <- amat + rmat
+    rm(cmat, ct_mat)
+    gc(verbose = FALSE)
     
   }
   
@@ -348,6 +398,8 @@ fishersZ_aggregate <- function(mat,
     
     zmat <- DescTools::FisherZ(cmat)
     amat <- amat + zmat
+    rm(cmat, zmat, ct_mat)
+    gc(verbose = FALSE)
     
   }
   
