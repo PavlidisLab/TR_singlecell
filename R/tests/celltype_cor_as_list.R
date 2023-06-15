@@ -66,13 +66,8 @@ if (!file.exists(corlist_path)) {
 
 
 
-# Rank cor list
+# Rank cor list - random rank default seed
 rank_l <- lapply(cor_l, function(x) allrank_mat(upper_to_na(x)))
-# rank_l2 <- lapply(cor_l, function(x) allrank_mat(upper_to_na(x)))
-# rank_l_cp <- rank_l
-# rank_l <- rank_l2
-
-
 
 
 # Aggregate rank + standardize
@@ -81,30 +76,43 @@ rank_mat <- allrank_mat(agg_mat)
 srank_mat <- rank_mat / sum(!is.na(rank_mat))
 
 
+# Ensure this matches what was previously generated
+identical(srank_mat, rsr)
+
+
+# Looking at another random seed for ranking, or min ranking
+# rank_l2 <- lapply(cor_l, function(x) allrank_mat(upper_to_na(x), seed = 5))
+rank_l2 <- lapply(cor_l, function(x) allrank_mat(upper_to_na(x), ties_arg = "min"))
+agg_mat2 <- Reduce("+", rank_l2)
+rank_mat2 <- allrank_mat(agg_mat2, ties_arg = "min")
+srank_mat2 <- rank_mat2 / sum(!is.na(rank_mat2))
+
+
 # Get the average cor across cell types
 cor_avg <- Reduce("+", cor_l) / length(cor_l)
 
 
-# Compare average cor to standardized rank generated here and the previously
-# generated RSR mat
+# Compare average cor to standardized rank/RSR, including count of NA pairs
 
-
-srank_df <- srank_mat %>% 
-  mat_to_df(symmetric = TRUE) %>% 
-  dplyr::rename(Srank = Value) %>% 
-  mutate(Rank_srank = rank(-Srank, ties.method = "random"))
-
-
+set.seed(3)
 rsr_df <- rsr %>% 
   mat_to_df(symmetric = TRUE) %>% 
   dplyr::rename(RSR = Value) %>% 
-  mutate(Rank_RSR = rank(-RSR, ties.method = "random"))
+  mutate(Rank_RSR = rank(-RSR, ties.method = "min"))
 
 
+set.seed(3)
+rsr2_df <- srank_mat2 %>% 
+  mat_to_df(symmetric = TRUE) %>% 
+  dplyr::rename(RSR2 = Value) %>% 
+  mutate(Rank_RSR2 = rank(-RSR2, ties.method = "min"))
+
+
+set.seed(3)
 cor_df <- cor_avg %>% 
   mat_to_df(symmetric = TRUE) %>% 
   dplyr::rename(Avg_cor = Value) %>% 
-  mutate(Rank_cor = rank(-Avg_cor, ties.method = "random"))
+  mutate(Rank_cor = rank(-Avg_cor, ties.method = "min"))
 
 
 # cor(rsr_df$Avg_cor, cor_df$RSR, method = "spearman")
@@ -112,32 +120,39 @@ cor_df <- cor_avg %>%
 
 all_df <- cbind(rsr_df,
                 cor_df[, c("Avg_cor", "Rank_cor")],
-                srank_df[, c("Srank", "Rank_srank")],
                 Count_NA = mat_to_df(na_mat, symmetric = TRUE)$Value)
 
 
 top_df <- all_df %>% 
-  filter(Rank_cor < 10e3 | Rank_RSR < 10e3 | Rank_srank < 10e3) %>% 
-  mutate(Diff_RSR_Srank = abs(Rank_srank - Rank_RSR),
-         Diff_RSR_cor = abs(Rank_srank - Rank_cor))
+  filter(Rank_cor < 10e3 | Rank_RSR < 10e3) %>% 
+  mutate(Diff_rank = abs(Rank_RSR - Rank_cor))
 
 
 # Find relationship between the difference in ranks and the count of NAs
 
-boxplot(top_df$Diff_RSR_cor ~ top_df$Count_NA)
+ggplot(top_df, aes(x = as.factor(Count_NA), y = Diff_rank)) +
+  geom_boxplot(width = 0.3) +
+  xlab("Count of NAs") +
+  ylab("Difference in ranks") +
+  ggtitle("Effect of NAs on difference in average cor and RSR ranks") +
+  theme_classic() +
+  theme(axis.title = element_text(size = 20),
+        axis.text = element_text(size = 20),
+        plot.title = element_text(size = 20))
+
+  
 
 
 # Inspect most different rank with all measurements (no NAs)
 
-most_diff <- top_df %>% filter(Count_NA == 0) %>% slice_max(Diff_RSR_cor)
+most_diff <- top_df %>% filter(Count_NA == 0) %>% slice_max(Diff_rank)
 
 
 gene1 <- most_diff$Row  # "RHOXF2"  "FAM72A"
 gene2 <- most_diff$Col   # "RHOXF2B"  "FAM72B"
-all_celltype_cor(mat, meta, gene1, gene2)
-mean(all_celltype_cor(mat, meta, gene1, gene2))
-mean(unlist(lapply(cor_l, function(x) x[gene1, gene2])))
+unlist(lapply(cor_l, function(x) x[gene1, gene2]))
 unlist(lapply(rank_l, function(x) x[gene1, gene2]))
+unlist(lapply(rank_l2, function(x) x[gene1, gene2]))
 
 
 
@@ -147,21 +162,21 @@ tf <- "ASCL1"
 
 tf_df <- data.frame(
   Symbol = rownames(cor_avg),
-  Cor = cor_avg[, tf],
+  Avg_cor = cor_avg[, tf],
   RSR = lowertri_to_symm(rsr)[, tf],
-  Srank = lowertri_to_symm(srank_mat)[, tf],
+  RSR2 = lowertri_to_symm(srank_mat2)[, tf],
   Count_NA = na_mat[, tf]
 )
 
 
-tf_df$Rank_cor <- rank(-tf_df$Cor, ties.method = "random")
-tf_df$Rank_RSR <- rank(-tf_df$RSR, ties.method = "random")
-tf_df$Rank_Srank <- rank(-tf_df$Srank, ties.method = "random")
+tf_df$Rank_cor <- rank(-tf_df$Avg_cor, ties.method = "min")
+tf_df$Rank_RSR <- rank(-tf_df$RSR, ties.method = "min")
+tf_df$Rank_RSR2 <- rank(-tf_df$RSR2, ties.method = "min")
 
 
 tf_df %>% 
-  filter(Rank_RSR < 2e3 & Rank_Srank < 2e3) %>% 
-  ggplot(aes(x = Rank_RSR, y = Rank_Srank)) +
+  filter(Rank_RSR < 2e3 & Rank_RSR2 < 2e3) %>% 
+  ggplot(aes(x = Rank_RSR, y = Rank_RSR2)) +
   geom_point() + 
   theme_classic() +
   theme(axis.title = element_text(size = 20),
