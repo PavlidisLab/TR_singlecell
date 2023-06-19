@@ -65,47 +65,42 @@ if (!file.exists(corlist_path)) {
 }
 
 
+# Get the average cor across cell types
+cor_avg <- Reduce("+", cor_l) / length(cor_l)
 
-# Rank cor list - random rank default seed
-rank_l <- lapply(cor_l, function(x) allrank_mat(upper_to_na(x)))
 
-
-# Aggregate rank + standardize
-agg_mat <- Reduce("+", rank_l)
-rank_mat <- allrank_mat(agg_mat)
-srank_mat <- rank_mat / sum(!is.na(rank_mat))
+# Rank cor list + aggregate: random rank default seed
+rank_l_rand <- lapply(cor_l, function(x) allrank_mat(upper_to_na(x)))
+agg_mat_rand <- Reduce("+", rank_l_rand)
+rank_mat_rand <- allrank_mat(agg_mat_rand)
+srank_mat_rand <- rank_mat_rand / sum(!is.na(rank_mat_rand))
 
 
 # Ensure this matches what was previously generated
-identical(srank_mat, rsr)
+identical(srank_mat_rand, rsr)
 
 
-# Looking at another random seed for ranking, or min ranking
-# rank_l2 <- lapply(cor_l, function(x) allrank_mat(upper_to_na(x), seed = 5))
-rank_l2 <- lapply(cor_l, function(x) allrank_mat(upper_to_na(x), ties_arg = "min"))
-agg_mat2 <- Reduce("+", rank_l2)
-rank_mat2 <- allrank_mat(agg_mat2, ties_arg = "min")
-srank_mat2 <- rank_mat2 / sum(!is.na(rank_mat2))
-
-
-# Get the average cor across cell types
-cor_avg <- Reduce("+", cor_l) / length(cor_l)
+# Rank cor list + aggregate: min rank
+rank_l_min <- lapply(cor_l, function(x) allrank_mat(upper_to_na(x), ties_arg = "min"))
+agg_mat_min <- Reduce("+", rank_l_min)
+rank_mat_min <- allrank_mat(agg_mat_min, ties_arg = "min")
+srank_mat_min <- rank_mat_min / sum(!is.na(rank_mat_min))
 
 
 # Compare average cor to standardized rank/RSR, including count of NA pairs
 
 set.seed(3)
-rsr_df <- rsr %>% 
+rsr_df_rand <- srank_mat_rand %>% 
   mat_to_df(symmetric = TRUE) %>% 
-  dplyr::rename(RSR = Value) %>% 
-  mutate(Rank_RSR = rank(-RSR, ties.method = "min"))
+  dplyr::rename(RSR_rand = Value) %>% 
+  mutate(Rank_RSR_rand = rank(-RSR_rand, ties.method = "min"))
 
 
 set.seed(3)
-rsr2_df <- srank_mat2 %>% 
+rsr_df_min <- srank_mat_min %>% 
   mat_to_df(symmetric = TRUE) %>% 
-  dplyr::rename(RSR2 = Value) %>% 
-  mutate(Rank_RSR2 = rank(-RSR2, ties.method = "min"))
+  dplyr::rename(RSR_min = Value) %>% 
+  mutate(Rank_RSR_min = rank(-RSR_min, ties.method = "min"))
 
 
 set.seed(3)
@@ -115,22 +110,31 @@ cor_df <- cor_avg %>%
   mutate(Rank_cor = rank(-Avg_cor, ties.method = "min"))
 
 
-# cor(rsr_df$Avg_cor, cor_df$RSR, method = "spearman")
+# cor(rsr_df$Avg_cor, cor_df$RSR_rand, method = "spearman")
 
 
-all_df <- cbind(rsr_df,
+all_df <- cbind(rsr_df_rand,
+                rsr_df_min[, c("RSR_min", "Rank_RSR_min")],
                 cor_df[, c("Avg_cor", "Rank_cor")],
                 Count_NA = mat_to_df(na_mat, symmetric = TRUE)$Value)
 
 
+rm(rsr_df_rand, rsr_df_min, cor_df)
+gc()
+
+
+
 top_df <- all_df %>% 
-  filter(Rank_cor < 10e3 | Rank_RSR < 10e3) %>% 
-  mutate(Diff_rank = abs(Rank_RSR - Rank_cor))
+  filter(Rank_cor < 10e3 | Rank_RSR_rand < 10e3 | Rank_RSR_min < 10e3) %>% 
+  mutate(Diff_rand_min = abs(Rank_RSR_min - Rank_RSR_rand),
+         Diff_rand_cor = abs(Rank_RSR_rand - Rank_cor),
+         Diff_min_cor = abs(Rank_RSR_min - Rank_cor))
+
 
 
 # Find relationship between the difference in ranks and the count of NAs
 
-ggplot(top_df, aes(x = as.factor(Count_NA), y = Diff_rank)) +
+ggplot(top_df, aes(x = as.factor(Count_NA), y = Diff_rand_cor)) +
   geom_boxplot(width = 0.3) +
   xlab("Count of NAs") +
   ylab("Difference in ranks") +
@@ -140,20 +144,36 @@ ggplot(top_df, aes(x = as.factor(Count_NA), y = Diff_rank)) +
         axis.text = element_text(size = 20),
         plot.title = element_text(size = 20))
 
-  
 
+top_df %>% 
+  filter(Count_NA == 0) %>% 
+  ggplot(., aes(x = RSR_rand, y = RSR_min)) +
+  geom_point()
+
+  
 
 # Inspect most different rank with all measurements (no NAs)
 
-most_diff <- top_df %>% filter(Count_NA == 0) %>% slice_max(Diff_rank)
+most_diff <- top_df %>% filter(Count_NA == 0) %>% slice_max(Diff_rand_cor)
 
 
 gene1 <- most_diff$Row  # "RHOXF2"  "FAM72A"
 gene2 <- most_diff$Col   # "RHOXF2B"  "FAM72B"
-unlist(lapply(cor_l, function(x) x[gene1, gene2]))
-unlist(lapply(rank_l, function(x) x[gene1, gene2]))
-unlist(lapply(rank_l2, function(x) x[gene1, gene2]))
 
+unlist(lapply(cor_l, function(x) x[gene1, gene2]))
+unlist(lapply(rank_l_rand, function(x) x[gene1, gene2]))
+unlist(lapply(rank_l_min, function(x) x[gene1, gene2]))
+
+rank_mat_min[gene1, gene2]
+rank_mat_rand[gene1, gene2]
+
+
+agg_mat_rand[gene1, gene2]
+agg_mat_min[gene1, gene2]
+
+
+
+head(sort(table(agg_mat_rand)))
 
 
 # Comparing the top values for a given TF
@@ -164,7 +184,7 @@ tf_df <- data.frame(
   Symbol = rownames(cor_avg),
   Avg_cor = cor_avg[, tf],
   RSR = lowertri_to_symm(rsr)[, tf],
-  RSR2 = lowertri_to_symm(srank_mat2)[, tf],
+  RSR2 = lowertri_to_symm(srank_mat_min)[, tf],
   Count_NA = na_mat[, tf]
 )
 
