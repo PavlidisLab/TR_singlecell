@@ -22,20 +22,39 @@ library(Matrix)
 # make_symmetric controls whether the upper triangle of NAs in the all rank
 # matrix should be filled with lower triangle
 
+# load_agg_mat_list <- function(ids,
+#                               sc_dir = "/space/scratch/amorin/TR_singlecell/",
+#                               suffix = "_RSR_allrank.RDS",
+#                               make_symmetric = TRUE) {
+#   
+#   agg_l <- lapply(ids, function(x) {
+#     path <- file.path(sc_dir, x, paste0(x, suffix))
+#     mat <- readRDS(path)
+#     if (make_symmetric) mat <- lowertri_to_symm(mat)
+#   })
+#   names(agg_l) <- ids
+#   
+#   gc(verbose = FALSE)
+#   return(agg_l)
+# }
+
+
+# TODO: temp version diectly takes paths (because currently split across dirs)
+
 load_agg_mat_list <- function(ids,
-                              sc_dir = "/space/scratch/amorin/TR_singlecell/",
-                              suffix = "_RSR_allrank.RDS",
+                              paths,
                               make_symmetric = TRUE) {
   
-  agg_l <- lapply(ids, function(x) {
-    path <- file.path(sc_dir, x, paste0(x, suffix))
-    mat <- readRDS(path)
+  agg_l <- lapply(paths, function(x) {
+    mat <- readRDS(x)
     if (make_symmetric) mat <- lowertri_to_symm(mat)
   })
   names(agg_l) <- ids
   
+  gc(verbose = FALSE)
   return(agg_l)
 }
+
 
 
 
@@ -287,7 +306,7 @@ RSR_colrank <- function(mat,
     ngene <- length(genes)
     amat <- apply(amat, 2, function(x) x/ngene)
   } else {
-    amat <- colrank_mat(-amat)
+    amat <- colrank_mat(amat)
   }
   
   return(amat)
@@ -345,7 +364,7 @@ RSR_allrank <- function(mat,
   if (standardize) {
     amat <- allrank_mat(amat) / sum(!is.na(amat))
   } else {
-    amat <- allrank_mat(-amat)
+    amat <- allrank_mat(amat)
   }
   
   return(amat)
