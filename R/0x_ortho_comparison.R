@@ -9,6 +9,8 @@
 
 library(tidyverse)
 library(cowplot)
+library(randomForest)
+library(caret)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
@@ -148,6 +150,28 @@ pca_and_var <- function(mat, scale_arg = TRUE) {
 
 
 
+pc_scatter <- function(df,
+                       pc_list,
+                       pc_x,
+                       pc_y,
+                       title = NULL) {
+  
+  ggplot(df, aes(x = !!sym(paste0("PC", pc_x)),
+                 y = !!sym(paste0("PC", pc_y)))) +
+    geom_point(aes(fill = Symbol, shape = Species), size = 6) +
+    xlab(paste0("PC", pc_x, "(", pc_list$Var_explained[pc_x], "%)")) +
+    ylab(paste0("PC", pc_y, "(", pc_list$Var_explained[pc_y], "%)")) +
+    ggtitle(title) +
+    scale_shape_manual(values = c(22, 24)) +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    theme_classic() +
+    theme(axis.title = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+  
+}
+
+
 
 # Generate ortho mat for given gene
 # ------------------------------------------------------------------------------
@@ -194,10 +218,12 @@ if (!file.exists(outfile)) {
 
 # Extract a single matrix of interest
 
-# sub_genes <- filter(pc_df, Symbol_hg %in% c("ASCL1", "RPL3", "RUNX1", "RPL13"))$ID
+# sub_genes <- filter(pc_df, Symbol_hg %in% c("PAX6", "RPL3", "RPL13"))$ID
 # sub_genes <- filter(pc_df, Symbol_mm %in% tfs)$ID
-sub_genes <- c(filter(pc_df, Symbol_mm %in% tfs)$ID, filter(pc_df, Symbol_hg %in% c("RPL3", "RPL13"))$ID)
-               
+# sub_genes <- c(filter(pc_df, Symbol_mm %in% tfs)$ID, filter(pc_df, Symbol_hg %in% c("RPL3", "RPL13"))$ID)
+# sub_genes <- filter(pc_df, Symbol_hg %in% c("RPL3", "RPL13"))$ID
+# sub_genes <- names(ortho_l)
+sub_genes <- "RUNX1_Runx1"
 
 
 ortho_mat <- do.call(cbind, ortho_l[sub_genes])
@@ -231,43 +257,21 @@ df <- data.frame(
 
 
 
-
-pc_scatter <- function(df,
-                       pc_list,
-                       pc_x,
-                       pc_y,
-                       title) {
-
-  ggplot(df, aes(x = !!sym(paste0("PC", pc_x)),
-                 y = !!sym(paste0("PC", pc_y)))) +
-    geom_point(aes(fill = Symbol, shape = Species), size = 6) +
-    xlab(paste0("PC", pc_x, "(", pc_list$Var_explained[pc_x], "%)")) +
-    ylab(paste0("PC", pc_y, "(", pc_list$Var_explained[pc_y], "%)")) +
-    ggtitle(title) +
-    scale_shape_manual(values = c(22, 24)) +
-    guides(fill = guide_legend(override.aes = list(shape = 21))) +
-    theme_classic() +
-    theme(axis.title = element_text(size = 15))
-
-}
-
-
-
-p1a <- pc_scatter(df = df, pc_list = ortho_pca, pc_x = 1, pc_y = 2, title = "buh") + theme(legend.position = "none")
-p1b <- pc_scatter(df = df, pc_list = ortho_pca, pc_x = 2, pc_y = 3, title = "buh") + theme(legend.position = "none")
-p1c <- pc_scatter(df = df, pc_list = ortho_pca, pc_x = 3, pc_y = 4, title = "buh") + theme(legend.position = "none")
-p1d <- pc_scatter(df = df, pc_list = ortho_pca, pc_x = 4, pc_y = 5, title = "buh") 
+p1a <- pc_scatter(df = df, pc_list = ortho_pca, pc_x = 1, pc_y = 2) + theme(legend.position = "none")
+p1b <- pc_scatter(df = df, pc_list = ortho_pca, pc_x = 2, pc_y = 3) + theme(legend.position = "none")
+p1c <- pc_scatter(df = df, pc_list = ortho_pca, pc_x = 3, pc_y = 4) + theme(legend.position = "none")
+p1d <- pc_scatter(df = df, pc_list = ortho_pca, pc_x = 4, pc_y = 5) 
 p1_leg <- get_legend(p1d)
 p1d <- p1d + theme(legend.position = "none")
 p1 <- plot_grid(p1a, p1b, p1c, p1d, nrow = 2)
-p1 <- plot_grid(p1, p1_leg, rel_widths = c(1, 0.1))
+p1 <- plot_grid(p1, p1_leg, rel_widths = c(2, 0.3))
 
 
 
 # Get average per gene
 ortho_avg <- do.call(
   cbind,
-  lapply(sub_genes, function(x) rowMeans(ortho_mat[, filter(df, Gene == x)$Matrix_ID]))
+  lapply(sub_genes, function(x) rowMeans(ortho_mat[, filter(df, Symbol == x)$Matrix_ID]))
 )
 colnames(ortho_avg) <- sub_genes
 
@@ -343,37 +347,57 @@ format_pair_df <- function(mat, meta, symmetric = TRUE) {
 }
 
 
-jacc_df <- format_pair_df(jacc_mat, meta = sc_meta, symmetric = TRUE) %>% 
+pair_df <- format_pair_df(jacc_mat, meta = sc_meta, symmetric = TRUE) %>% 
   dplyr::rename(Jaccard = Value)
 
 
 
-boxplot(jacc_df$Jaccard ~ jacc_df$Group)
-plot(density(filter(jacc_df, Group == "In_gene_in_species")$Jaccard))
-lines(density(filter(jacc_df, Group == "In_gene_out_species")$Jaccard), col = "red")
-lines(density(filter(jacc_df, Group == "Out")$Jaccard), col = "blue")
+stat <- "Cor"
+boxplot(pair_df[[stat]] ~ pair_df$Group)
+plot(density(filter(pair_df, Group == "In_gene_in_species")[[stat]]))
+lines(density(filter(pair_df, Group == "In_gene_out_species")[[stat]]), col = "red")
+lines(density(filter(pair_df, Group == "Out")[[stat]]), col = "blue")
+
+
+# Correlation by group status
+
+
+cor_mat <- WGCNA::cor(ortho_mat, method = "pearson")
+# cor_mat <- WGCNA::cor(ortho_mat, method = "spearman")
+pair_df$Cor <- mat_to_df(cor_mat, symmetric = TRUE)$Value
 
 
 
-# Why are there numerous examples of perfect Jaccard
+# Why are there numerous examples of perfect similarities between datasets...
+# Because they are not expressed 
 
-jacc_top <- filter(jacc_df, Jaccard == 1)
+top <- filter(pair_df, Jaccard == 1)
 
-
-ortho_mat[1:5, "GSE137537_RUNX1"]
-ortho_mat[1:5, "ROSMAP_RUNX1"]
-
-
-plot(ortho_mat[, "GSE137537_RUNX1"], ortho_mat[, "ROSMAP_RUNX1"])
-cor(ortho_mat[, "GSE137537_RUNX1"], ortho_mat[, "ROSMAP_RUNX1"], method = "spearman")
+id1 <- "GSE115469"
+id2 <- "GSE145928"
+gene1 <- "PAX6"
 
 
-sub_meta <- filter(sc_meta, ID %in% c("GSE137537", "ROSMAP"))
+plot(ortho_mat[, paste0(id1, "_", gene1)], ortho_mat[, paste0(id2, "_", gene1)])
+cor(ortho_mat[, paste0(id1, "_", gene1)], ortho_mat[, paste0(id2, "_", gene1)], method = "spearman")
+
+sub_meta <- filter(sc_meta, ID %in% c(id1, id2))
+
 agg_l <- load_agg_mat_list(ids = sub_meta$ID, paths = sub_meta$Path)
+dat_l <- load_dat_list(ids = sub_meta$ID)
 
-
-sub_mat <- do.call(cbind, lapply(agg_l, function(x) x[, c("RUNX1", "ASCL1")]))
+sub_mat <- do.call(cbind, lapply(agg_l, function(x) x[, gene1]))
 plot(sub_mat[, 1], sub_mat[, 2])
-cor(sub_mat)
+cor(sub_mat, method = "spearman")
+
+gene2 <- names(head(sort(sub_mat[, 2], decreasing = TRUE)))[2]
+
+all_celltype_cor(mat = dat_l[[id1]]$Mat, meta = dat_l[[id1]]$Meta, gene1 = gene1, gene2 = gene2)
+all_celltype_cor(mat = dat_l[[id1]]$Mat, meta = dat_l[[id1]]$Meta, gene1 = "RPL3", gene2 = "RPL11")
+
+
+# Train a classifier to check model performance at group discrimination
+
+
 
 
