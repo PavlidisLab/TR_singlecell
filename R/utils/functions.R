@@ -48,6 +48,7 @@ load_agg_mat_list <- function(ids,
   agg_l <- lapply(paths, function(x) {
     mat <- readRDS(x)
     if (make_symmetric) mat <- lowertri_to_symm(mat)
+    return(mat)
   })
   names(agg_l) <- ids
   
