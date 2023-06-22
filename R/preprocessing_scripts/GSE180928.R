@@ -3,19 +3,25 @@
 
 library(WGCNA)
 library(tidyverse)
+library(data.table)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 
 id <- "GSE180928"
+
 sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata", id)
 dat_path <- file.path(sc_dir, paste0(id, "_filtered_cell_counts.csv"))
 meta_path <- file.path(sc_dir, paste0(id, "_metadata.csv"))
-out_dir <- file.path("/space/scratch/amorin/TR_singlecell", id)
+out_dir <- file.path(amat_dir, id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta.RDS"))
-allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.RDS"))
-colrank_path <- file.path(out_dir, paste0(id, "_RSR_colrank.RDS"))
+allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.tsv"))
+namat_path <- file.path(out_dir, paste0(id, "_NA_mat.tsv"))
+
+# Used for generating/comparing column ranked and avg Fisher's z matrices 
+colrank_path <- file.path(out_dir, paste0(id, "_RSR_colrank.tsv"))
 zcor_path <- file.path(out_dir, paste0(id, "_fishersZ.RDS"))
+
 pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 
 
@@ -67,8 +73,8 @@ if (!file.exists(processed_path)) {
 } else {
   
   dat <- readRDS(processed_path)
-  meta <- dat[[2]]
-  mat <- dat[[1]]
+  meta <- dat$Meta
+  mat <- dat$Mat
   
 }
 
@@ -80,14 +86,39 @@ mat <- as.matrix(mat)
 
 
 if (!file.exists(allrank_path)) {
+  
   rsr_all <- RSR_allrank(mat, meta)
-  saveRDS(rsr_all, allrank_path)
+  
+  suppressMessages(fwrite(
+    rsr_all$Agg_mat,
+    sep = "\t",
+    row.names = FALSE,
+    quote = FALSE,
+    file = allrank_path
+  ))
+  
+  suppressMessages(fwrite(
+    rsr_all$NA_mat,
+    sep = "\t",
+    row.names = FALSE,
+    quote = FALSE,
+    file = namat_path
+  ))
 }
 
 
+
 if (!file.exists(colrank_path)) {
+  
   rsr_col <- RSR_colrank(mat, meta)
-  saveRDS(rsr_col, colrank_path)
+  
+  suppressMessages(fwrite(
+    rsr_col,
+    sep = "\t",
+    row.names = FALSE,
+    quote = FALSE,
+    file = colrank_path
+  ))
 }
 
 

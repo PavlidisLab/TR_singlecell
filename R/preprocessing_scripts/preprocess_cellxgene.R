@@ -112,4 +112,3 @@ if (!file.exists(allrank_path)) {
     file = namat_path
   ))
 }
-
