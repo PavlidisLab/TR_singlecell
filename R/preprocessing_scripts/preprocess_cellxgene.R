@@ -1,6 +1,6 @@
 ## This script takes in arguments for an experiment ID and species, loading the
 ## associated ID's seurat object and pre-processing the data before generating
-## the aggregate correlation matrix.
+## the aggregate correlation matrix and a matrix tracking NAs
 ## -----------------------------------------------------------------------------
 
 source("R/00_config.R")
@@ -65,8 +65,8 @@ if (!file.exists(processed_path)) {
   
   stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
   
-  message(paste0("Count of cells: ", ncol(mat),
-                 "Count unique cell types: ", n_distinct(meta$Cell_type)))
+  message(paste("Count of cells:", ncol(mat),
+                "Count unique cell types: ", n_distinct(meta$Cell_type)))
   
   saveRDS(list(Mat = mat, Meta = meta), file = processed_path)
   
@@ -76,8 +76,8 @@ if (!file.exists(processed_path)) {
 } else {
   
   dat <- readRDS(processed_path)
-  meta <- dat[[2]]
-  mat <- dat[[1]]
+  meta <- dat$Meta
+  mat <- dat@Mat
   
 }
 
