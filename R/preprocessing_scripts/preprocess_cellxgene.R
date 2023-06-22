@@ -3,6 +3,9 @@
 ## the aggregate correlation matrix and a matrix tracking NAs
 ## -----------------------------------------------------------------------------
 
+library(WGCNA)
+library(tidyverse)
+library(data.table)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
@@ -11,11 +14,12 @@ args <- commandArgs(trailingOnly = TRUE)
 id <- args[1]
 species <- args[2]  
 
-sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/amorin_sc_datasets", id)
+sc_dir <- file.path(sc_dir, id)
 dat_path <- file.path(sc_dir, paste0(id, "_cellxgene_seurat.RDS"))
-out_dir <- file.path("/space/scratch/amorin/TR_singlecell", id)
+out_dir <- file.path(amat_dir, id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta.RDS"))
-allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.RDS"))
+allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.tsv"))
+namat_path <- file.path(out_dir, paste0(id, "_RSR_allrank.tsv"))
 
 
 pc <- if (str_to_lower(species) %in% c("human", "hg")) {
@@ -89,6 +93,23 @@ mat <- as.matrix(mat)
 
 
 if (!file.exists(allrank_path)) {
+  
   rsr_all <- RSR_allrank(mat, meta)
-  saveRDS(rsr_all, allrank_path)
+  
+  suppressMessages(fwrite(
+    rsr_all$Agg_mat,
+    sep = "\t",
+    row.names = FALSE,
+    quote = FALSE,
+    file = allrank_path
+  ))
+  
+  suppressMessages(fwrite(
+    rsr_all$NA_mat,
+    sep = "\t",
+    row.names = FALSE,
+    quote = FALSE,
+    file = namat_path
+  ))
 }
+
