@@ -12,6 +12,9 @@ ncore <- 8
 plot_dir <- "/home/amorin/Plots/TR_singlecell/"
 
 
+# Location of (most) single cell data sets + metadata
+sc_dir <- "/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/amorin_sc_datasets"
+
 # Location of aggregate coexpression matrices
 amat_dir <- "/space/scratch/amorin/TR_singlecell/"
 
