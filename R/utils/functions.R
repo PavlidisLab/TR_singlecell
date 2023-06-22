@@ -263,7 +263,7 @@ RSR_allrank <- function(mat,
                         min_cell = 20,
                         standardize = TRUE) {
   
-  stopifnot(c("Cell_type", "ID") %in% colnames(meta), length(rownames(mat) > 1))
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta), length(rownames(mat)) > 0)
   
   cts <- unique(meta$Cell_type)
 
@@ -332,7 +332,7 @@ RSR_colrank <- function(mat,
                         min_cell = 20,
                         standardize = TRUE) {
   
-  stopifnot(c("Cell_type", "ID") %in% colnames(meta), length(rownames(mat) > 1))
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta), length(rownames(mat)) > 0)
   
   cts <- unique(meta$Cell_type)
 
@@ -393,7 +393,7 @@ fishersZ_aggregate <- function(mat,
                                meta,
                                min_cell = 20) {
   
-  stopifnot(c("Cell_type", "ID") %in% colnames(meta), length(rownames(mat) > 1))
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta), length(rownames(mat)) > 0)
   
   cts <- unique(meta$Cell_type)
 
