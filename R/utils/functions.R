@@ -1,5 +1,4 @@
 ## Project functions
-## TODO: init_agg_mat() reconsider mat instead of row_genes as input
 ## -----------------------------------------------------------------------------
 
 library(parallel)
@@ -182,27 +181,14 @@ subset_and_filter <- function(mat, meta, cell_type, min_count = 20) {
 
 
 
-# Return a gene x gene matrix of 0s used to track coexpression aggregation
-# across cell types. Rows are the full set of provided genes, while columns
-# are an optional subset of genes.
+# Assumes mat is a gene x cell count matrix and returns a gene x gene matrix of 
+# 0s with the names and dimension of the gene rows of mat
 
-init_agg_mat <- function(row_genes, col_genes = NULL) {
+init_agg_mat <- function(mat) {
   
-  if (!is.null(col_genes)) {
-    
-    stopifnot(all(col_genes %in% row_genes))
-    
-    amat <- matrix(0, nrow = length(row_genes), ncol = length(col_genes))
-    rownames(amat) <- row_genes
-    colnames(amat) <- col_genes
-    
-  } else {
-    
-    amat <- matrix(0, nrow = length(row_genes), ncol = length(row_genes))
-    rownames(amat) <- colnames(amat) <- row_genes
-    
-  }
-  
+  stopifnot(length(rownames(mat)) > 1)
+  amat <- matrix(0, nrow = nrow(mat), ncol = nrow(mat))
+  rownames(amat) <- colnames(amat) <- rownames(mat)
   return(amat)
 }
 
@@ -270,7 +256,7 @@ RSR_colrank <- function(mat,
   cts <- unique(meta$Cell_type)
   genes <- rownames(mat)
   
-  amat <- init_agg_mat(row_genes = genes)
+  amat <- init_agg_mat(mat)
   
   for (ct in cts) {
     
@@ -319,6 +305,60 @@ RSR_colrank <- function(mat,
 # whether the final ranks should be kept in their original integer order, or 
 # standardized to be [0, 1]
 
+# RSR_allrank <- function(mat,
+#                         meta,
+#                         min_cell = 20,
+#                         standardize = TRUE) {
+#   
+#   stopifnot(c("Cell_type", "ID") %in% colnames(meta))
+#   
+#   cts <- unique(meta$Cell_type)
+#   genes <- rownames(mat)
+#   
+#   amat <- init_agg_mat(mat)
+#   
+#   for (ct in cts) {
+#     
+#     message(paste(ct, Sys.time()))
+#     
+#     # Get count matrix for current cell type, coercing low count genes to NAs
+#     
+#     ct_mat <- subset_and_filter(mat, meta, ct, min_cell)
+#     
+#     if (sum(is.na(ct_mat)) == length(ct_mat)) {
+#       message(paste(ct, "skipped due to insufficient counts"))
+#       next()
+#     }
+# 
+#     # Get cell-type cor matrix: full symmetric, NA cors to 0, diag (self-cor)
+#     # coerced to 1, then to triangular to prevent double ranking symmetric matrix
+# 
+#     cmat <- ct_mat %>%
+#       get_cor_mat(lower_tri = FALSE) %>%
+#       na_to_zero() %>%
+#       diag_to_one() %>%
+#       upper_to_na()
+# 
+#     # Rank the tri matrix and add to aggregate matrix
+# 
+#     rmat <- allrank_mat(cmat)
+#     amat <- amat + rmat
+#     rm(cmat, ct_mat)
+#     gc(verbose = FALSE)
+#     
+#   }
+#   
+#   if (standardize) {
+#     amat <- allrank_mat(amat) / sum(!is.na(amat))
+#   } else {
+#     amat <- allrank_mat(amat)
+#   }
+#   
+#   return(amat)
+# }
+
+
+
 RSR_allrank <- function(mat,
                         meta,
                         min_cell = 20,
@@ -329,7 +369,8 @@ RSR_allrank <- function(mat,
   cts <- unique(meta$Cell_type)
   genes <- rownames(mat)
   
-  amat <- init_agg_mat(row_genes = genes)
+  amat <- init_agg_mat(mat)
+  na_mat <- amat  # matrix of 0s for tracking NA gene-gene cor pairs
   
   for (ct in cts) {
     
@@ -343,18 +384,22 @@ RSR_allrank <- function(mat,
       message(paste(ct, "skipped due to insufficient counts"))
       next()
     }
-
+    
     # Get cell-type cor matrix: full symmetric, NA cors to 0, diag (self-cor)
     # coerced to 1, then to triangular to prevent double ranking symmetric matrix
-
-    cmat <- ct_mat %>%
-      get_cor_mat(lower_tri = FALSE) %>%
+    
+    cmat <- get_cor_mat(ct_mat, lower_tri = FALSE)
+    
+    na_ix <- which(is.na(cmat), arr.ind = TRUE)
+    na_mat[na_ix] <- na_mat[na_ix] + 1
+    
+    cmat <- cmat %>%
       na_to_zero() %>%
       diag_to_one() %>%
       upper_to_na()
-
+    
     # Rank the tri matrix and add to aggregate matrix
-
+    
     rmat <- allrank_mat(cmat)
     amat <- amat + rmat
     rm(cmat, ct_mat)
@@ -368,8 +413,10 @@ RSR_allrank <- function(mat,
     amat <- allrank_mat(amat)
   }
   
-  return(amat)
+  return(list(Agg_mat = amat, NA_mat = na_mat))
 }
+
+
 
 
 
@@ -389,7 +436,7 @@ fishersZ_aggregate <- function(mat,
   cts <- unique(meta$Cell_type)
   genes <- rownames(mat)
   
-  amat <- init_agg_mat(row_genes = genes)
+  amat <- init_agg_mat(mat)
   na_mat <- amat  # matrix of 0s for tracking NA gene-gene cor pairs
   
   for (ct in cts) {
@@ -505,94 +552,6 @@ gene_vec_to_mat <- function(agg_l, gene) {
   do.call(cbind, lapply(agg_l, function(x) x[genes, gene]))
 }
 
-
-
-# Working with Seurat object
-# TODO: sample_expression_level() impl requires subset (costly) - try pre-format input mat
-# ------------------------------------------------------------------------------
-
-
-# TODO:
-
-top_expr_quantile <- function(sdat, gene, qtl = 0.9) {
-  
-  expr_cutoff <- quantile(sdat@assays$RNA@data[gene, ], qtl)
-  expr_cutoff <- ifelse(expr_cutoff == 0L, 1, expr_cutoff)
-  sdat$Top_expr_quantile <- sdat@assays$RNA@data[gene, ] >= expr_cutoff
-  
-  return(sdat)
-}
-
-
-
-# TODO:
-
-top_expr_celltype <- function(sdat, avg_mat, gene) {
-  
-  stopifnot("Cell_type" %in% colnames(sdat@meta.data))
-  
-  top_ct <- names(which.max(avg_mat[gene , ]))
-  sdat$Top_expr_celltype <- sdat$Cell_type == top_ct
-  
-  return(sdat)
-}
-
-
-
-# TODO: doc and use slot get method
-
-get_ct_avg <- function(sdat, assay = "RNA", scale = FALSE, ncores = 8) {
-  
-  stopifnot("Cell_type" %in% colnames(sdat@meta.data))
-  
-  cts <- unique(sdat$Cell_type)
-  
-  if (scale) {
-    mat <- sdat@assays[[assay]]@scale.data
-  } else {
-    mat <- sdat@assays[[assay]]@data
-  }
-  
-  ct_avg <- mclapply(cts, function(x) {
-    rowMeans(mat[, sdat$Cell_type == x])
-  }, mc.cores = ncores)
-  
-  ct_avg <- do.call(cbind, ct_avg)
-  rownames(ct_avg) <- rownames(mat)
-  colnames(ct_avg) <- cts
-  
-  return(ct_avg)
-}
-
-
-
-# TODO: doc and use slot get method
-
-
-sample_expression_level <- function(sdat, targets, rank_window = 200) {
-  
-  stopifnot(all(targets %in% rownames(sdat)))
-  
-  # get the ordered average expression of genes across all cells
-  avg_all <- sort(rowMeans(sdat@assays$RNA@data))
-  
-  # for each target sample a gene whose average expression is within rank window
-  
-  sample_ix <- vapply(targets, function(x) {
-    
-    ix_orig <- which(names(avg_all) == x)
-    ix_new <- ix_orig
-    
-    while (ix_new == ix_orig) {
-      ix_new <- ix_orig + sample(-rank_window:rank_window, 1) 
-    }
-    
-    return(ix_new)
-    
-  }, FUN.VALUE = integer(1), USE.NAMES = FALSE)
-  
-  return(names(avg_all[sample_ix]))
-}
 
 
 
