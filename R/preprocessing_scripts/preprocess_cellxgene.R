@@ -81,7 +81,7 @@ if (!file.exists(processed_path)) {
   
   dat <- readRDS(processed_path)
   meta <- dat$Meta
-  mat <- dat@Mat
+  mat <- dat$Mat
   
 }
 

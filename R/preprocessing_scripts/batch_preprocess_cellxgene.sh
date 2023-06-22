@@ -7,7 +7,7 @@
 
 sc_dir="/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/amorin_sc_datasets/"
 input_file=$1
-preprocess="/home/amorin/Projects/TR_singlecell/R/utils/preprocess_cellxgene.R"
+preprocess="/home/amorin/Projects/TR_singlecell/R/preprocessing_scripts/preprocess_cellxgene.R"
 
 
 while IFS=$'\t' read -r id species url; do
