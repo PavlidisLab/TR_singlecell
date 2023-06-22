@@ -222,8 +222,8 @@ if (!file.exists(outfile)) {
 # sub_genes <- filter(pc_df, Symbol_mm %in% tfs)$ID
 # sub_genes <- c(filter(pc_df, Symbol_mm %in% tfs)$ID, filter(pc_df, Symbol_hg %in% c("RPL3", "RPL13"))$ID)
 # sub_genes <- filter(pc_df, Symbol_hg %in% c("RPL3", "RPL13"))$ID
-# sub_genes <- names(ortho_l)
-sub_genes <- "RUNX1_Runx1"
+sub_genes <- names(ortho_l)
+# sub_genes <- filter(pc_df, Symbol_hg %in% c("RUNX1", "HES1"))$ID
 
 
 ortho_mat <- do.call(cbind, ortho_l[sub_genes])
@@ -286,9 +286,13 @@ lapply(1:ncol(ortho_avg), function(x) head(sort(ortho_avg[, x], decreasing = TRU
 
 
  
-# Jaccard by TF status
+# Similarity by TF status. Use Jaccard of top/bottomk and cor
 
 jacc_mat <- get_jaccard_matrix(ortho_mat_bin)
+cor_mat <- WGCNA::cor(ortho_mat, method = "pearson")
+
+
+# Organize into df of unique pairs with group status
 
 
 # hacky name fix for _ delim in IDs
@@ -347,8 +351,10 @@ format_pair_df <- function(mat, meta, symmetric = TRUE) {
 }
 
 
+
 pair_df <- format_pair_df(jacc_mat, meta = sc_meta, symmetric = TRUE) %>% 
-  dplyr::rename(Jaccard = Value)
+  dplyr::rename(Jaccard = Value) %>% 
+  mutate(Cor = mat_to_df(cor_mat, symmetric = TRUE)$Value)
 
 
 
@@ -359,12 +365,6 @@ lines(density(filter(pair_df, Group == "In_gene_out_species")[[stat]]), col = "r
 lines(density(filter(pair_df, Group == "Out")[[stat]]), col = "blue")
 
 
-# Correlation by group status
-
-
-cor_mat <- WGCNA::cor(ortho_mat, method = "pearson")
-# cor_mat <- WGCNA::cor(ortho_mat, method = "spearman")
-pair_df$Cor <- mat_to_df(cor_mat, symmetric = TRUE)$Value
 
 
 
