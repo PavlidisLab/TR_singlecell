@@ -19,7 +19,7 @@ dat_path <- file.path(sc_dir, paste0(id, "_cellxgene_seurat.RDS"))
 out_dir <- file.path(amat_dir, id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta.RDS"))
 allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.tsv"))
-namat_path <- file.path(out_dir, paste0(id, "_RSR_allrank.tsv"))
+namat_path <- file.path(out_dir, paste0(id, "_NA_mat.tsv"))
 
 
 pc <- if (str_to_lower(species) %in% c("human", "hg")) {
@@ -96,19 +96,26 @@ if (!file.exists(allrank_path)) {
   
   rsr_all <- RSR_allrank(mat, meta)
   
-  suppressMessages(fwrite(
-    rsr_all$Agg_mat,
-    sep = "\t",
-    row.names = FALSE,
-    quote = FALSE,
-    file = allrank_path
-  ))
+  # Write as data.frames (preserve rownames) with data.table fwrite (fast)
   
-  suppressMessages(fwrite(
-    rsr_all$NA_mat,
+  fwrite(
+    data.frame(rsr_all$Agg_mat, row.names = rownames(rsr_all$Agg_mat)),
     sep = "\t",
-    row.names = FALSE,
+    row.names = TRUE,
     quote = FALSE,
+    verbose = FALSE,
+    showProgress = FALSE,
+    file = allrank_path
+  )
+  
+  
+  fwrite(
+    data.frame(rsr_all$NA_mat, row.names = rownames(rsr_all$NA_mat)),
+    sep = "\t",
+    row.names = TRUE,
+    quote = FALSE,
+    verbose = FALSE,
+    showProgress = FALSE,
     file = namat_path
-  ))
+  )
 }

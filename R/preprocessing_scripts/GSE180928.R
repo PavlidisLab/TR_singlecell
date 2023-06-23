@@ -88,22 +88,29 @@ mat <- as.matrix(mat)
 if (!file.exists(allrank_path)) {
   
   rsr_all <- RSR_allrank(mat, meta)
+
+  # Write as data.frames (preserve rownames) with data.table fwrite (fast)
   
-  suppressMessages(fwrite(
-    rsr_all$Agg_mat,
+  fwrite(
+    data.frame(rsr_all$Agg_mat, row.names = rownames(rsr_all$Agg_mat)),
     sep = "\t",
-    row.names = FALSE,
+    row.names = TRUE,
     quote = FALSE,
+    verbose = FALSE,
+    showProgress = FALSE,
     file = allrank_path
-  ))
+  )
   
-  suppressMessages(fwrite(
-    rsr_all$NA_mat,
+  
+  fwrite(
+    data.frame(rsr_all$NA_mat, row.names = rownames(rsr_all$NA_mat)),
     sep = "\t",
-    row.names = FALSE,
+    row.names = TRUE,
     quote = FALSE,
+    verbose = FALSE,
+    showProgress = FALSE,
     file = namat_path
-  ))
+  )
 }
 
 
@@ -112,13 +119,15 @@ if (!file.exists(colrank_path)) {
   
   rsr_col <- RSR_colrank(mat, meta)
   
-  suppressMessages(fwrite(
-    rsr_col,
+  fwrite(
+    data.frame(rsr_col, row.names = rownames(rsr_col)),
     sep = "\t",
-    row.names = FALSE,
+    row.names = TRUE,
     quote = FALSE,
+    verbose = FALSE,
+    showProgress = FALSE,
     file = colrank_path
-  ))
+  )
 }
 
 
