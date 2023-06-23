@@ -10,13 +10,12 @@
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
-library(Seurat)
 library(WGCNA)
 library(parallel)
 library(pheatmap)
 library(RColorBrewer)
 library(cowplot)
-source("R/utils/functions.R")
+source("R/utils/test_vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
@@ -26,7 +25,7 @@ sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 # IDs for scRNA-seq datasets
 ids_hg <- filter(sc_meta, Species == "Human")$ID
 ids_mm <- filter(sc_meta, Species == "Mouse")$ID
-ids <- union(ids_hg, ids_mm)
+# ids <- union(ids_hg, ids_mm)
 
 # Load aggregate matrix into list
 agg_hg <- lapply(ids_hg, function(x) lowertri_to_symm(readRDS(file.path(amat_dir, x, paste0(x, "_RSR_allrank.RDS")))))
@@ -53,213 +52,6 @@ agg_mm <- lapply(agg_mm, function(x) x[genes_mm, genes_mm])
 
 # Functions
 # ------------------------------------------------------------------------------
-
-
-#
-
-which_ranked_cor <- function(rank_vec, 
-                             rank_mat, 
-                             gene,
-                             cor_method = "spearman",
-                             ncores = 1) {
-  
-  rank_cor <-  WGCNA::cor(x = rank_vec, 
-                          y = rank_mat,
-                          method = cor_method,
-                          nThreads = ncores)
-  
-  rank_cor <- sort(rank_cor[1, ], decreasing = TRUE)
-  rank_ix <- which(names(rank_cor) == gene)
-  
-  return(list(Rank = rank_ix, List = rank_cor))
-}
-
-
-
-
-#
-
-which_ranked_auprc <- function(rank_vec, 
-                               rank_mat, 
-                               gene, 
-                               k = 1000,
-                               ncores = 1) {
-  
-  genes <- rownames(rank_mat)
-  x <- sort(rank_vec, decreasing = TRUE)
-  x <- x[names(x) != gene]
-  
-  auprc_l <- mclapply(genes, function(g) {
-    
-    y <- sort(rank_mat[, g], decreasing = TRUE)[1:(k+1)]
-    y <- y[names(y) != g]
-
-    rank_df <- data.frame(
-      Symbol = names(x),
-      Rank = x,
-      Label = names(x) %in% names(y)
-    )
-    
-    if (all(rank_df$Label)) return(1)
-    if (all(!rank_df$Label)) return(0)
-    
-    get_au_perf(rank_df, label_col = "Label", score_col = "Rank", measure = "AUPRC")
-    
-  }, mc.cores = ncores)
-  names(auprc_l) <- genes
-  
-  rank_auprc <- sort(unlist(auprc_l), decreasing = TRUE)
-  rank_ix <- which(names(rank_auprc) == gene)
-  
-  return(list(Rank = rank_ix, List = rank_auprc))
-}
-
-
-
-#
-
-which_ranked_intersect <- function(rank_vec,
-                                   rank_mat,
-                                   gene,
-                                   k = 1000,
-                                   ncores = 1) {
-  
-  genes <- rownames(rank_mat)
-  x <- sort(rank_vec, decreasing = TRUE)[1:(k+1)]
-  x <- x[names(x) != gene]
-  
-  intersect_l <- mclapply(genes, function(i) {
-    
-    y <- sort(rank_mat[, i], decreasing = TRUE)[1:(k+1)]
-    y <- y[names(y) != i]
-
-    length(intersect(names(x), names(y)))
-    
-  }, mc.cores = ncores)
-  names(intersect_l) <- genes
-  
-  rank_intersect <- sort(unlist(intersect_l), decreasing = TRUE)
-  rank_ix <- which(names(rank_intersect) == gene)
-  
-  return(list(Rank = rank_ix, List = rank_intersect))
-}
-
-
-
-
-# Return an n x n matrix where n is equal to the count of aggregate matrices
-# in agg_l. For the given gene
-
-rank_similarity_matrix <- function(agg_l, 
-                                   gene, 
-                                   msr,  # AUPRC|Intersect|Cor
-                                   k = 1000,
-                                   ncores = 1) {
-  
-  ids <- names(agg_l)
-  genes <- rownames(agg_l[[1]])
-  
-  stopifnot(length(ids) > 0, gene %in% genes)
-  
-  rank_mat <- matrix(1, nrow = length(agg_l), ncol = length(agg_l))
-  rownames(rank_mat) <- colnames(rank_mat) <- ids
-  
-  for (i in ids) {
-    for (j in ids) {
-      if (i == j) {
-        next
-      }
-      
-      rank_ix <- if (msr == "AUPRC") {
-        
-        which_ranked_auprc(
-          rank_vec = agg_l[[i]][, gene],
-          rank_mat = agg_l[[j]],
-          gene = gene,
-          k = k,
-          ncores = ncores)$Rank
-        
-      } else if (msr == "Intersect") {
-        
-        which_ranked_intersect(
-          rank_vec = agg_l[[i]][, gene],
-          rank_mat = agg_l[[j]],
-          gene = gene,
-          k = k,
-          ncores = ncores)$Rank
-        
-      } else {
-        
-        which_ranked_cor(
-          rank_vec = agg_l[[i]][, gene],
-          rank_mat = agg_l[[j]],
-          gene = gene,
-          ncores = ncores)$Rank
-      }
-
-      rank_mat[i, j] <- rank_ix
-    }
-  }
-  
-  return(rank_mat)
-}
-
-
-
-
-similarity_matrix <- function(agg_l, 
-                              gene, 
-                              msr,  # AUPRC|Intersect
-                              k = 1000,
-                              ncores = 1) {
-  
-  ids <- names(agg_l)
-  genes <- rownames(agg_l[[1]])
-  
-  stopifnot(length(ids) > 0, gene %in% genes)
-  
-  sim_mat <- matrix(1, nrow = length(agg_l), ncol = length(agg_l))
-  rownames(sim_mat) <- colnames(sim_mat) <- ids
-  
-  for (i in ids) {
-    for (j in ids) {
-      if (i == j) {
-        next
-      }
-      
-      x <- sort(agg_l[[i]][, gene], decreasing = TRUE)
-      x <- x[names(x) != gene]
-      
-      y <- sort(agg_l[[j]][, gene], decreasing = TRUE)[1:(k+1)]
-      y <- y[names(y) != i]
-      
-      sim <- if (msr == "AUPRC") {
-        
-        rank_df <- data.frame(
-          Symbol = names(x),
-          Rank = x,
-          Label = names(x) %in% names(y)
-        )
-        
-        if (all(rank_df$Label)) return(1)
-        if (all(!rank_df$Label)) return(0)
-        
-        get_au_perf(rank_df, label_col = "Label", score_col = "Rank", measure = "AUPRC")
-        
-      } else if (msr == "Intersect") {
-       
-        x <- x[1:k]
-        length(intersect(names(x), names(y)))
-        
-      }
-        
-      sim_mat[i, j] <- sim
-      
-    }
-  }
-  
-  return(sim_mat)
-}
 
 
 
