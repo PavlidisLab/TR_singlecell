@@ -16,43 +16,25 @@ library(Matrix)
 
 
 
-# Given a vector of ids, will load the associated aggregate correlation matrices
-# into a list. 
-# make_symmetric controls whether the upper triangle of NAs in the all rank
-# matrix should be filled with lower triangle
+# Loads aggregate correlation matrices into a list. Data is saved as tsv (using 
+# fread/fwrite for speed) with symbols/rownames as first column, and must be 
+# converted back to matrix with rownames
 
-# load_agg_mat_list <- function(ids,
-#                               sc_dir = "/space/scratch/amorin/TR_singlecell/",
-#                               suffix = "_RSR_allrank.RDS",
-#                               make_symmetric = TRUE) {
-#   
-#   agg_l <- lapply(ids, function(x) {
-#     path <- file.path(sc_dir, x, paste0(x, suffix))
-#     mat <- readRDS(path)
-#     if (make_symmetric) mat <- lowertri_to_symm(mat)
-#   })
-#   names(agg_l) <- ids
-#   
-#   gc(verbose = FALSE)
-#   return(agg_l)
-# }
-
-
-# TODO: temp version diectly takes paths (because currently split across dirs)
-
-load_agg_mat_list <- function(ids,
-                              paths,
-                              make_symmetric = TRUE) {
+load_agg_mat_list <- function(ids, paths, sub_genes = NULL) {
   
-  agg_l <- lapply(paths, function(x) {
-    mat <- readRDS(x)
-    if (make_symmetric) mat <- lowertri_to_symm(mat)
-    return(mat)
+  if (!is.null(sub_genes)) sub_genes <- c("V1", sub_genes)
+  
+  mat_l <- lapply(paths, function(x) {
+    dat <- fread(x, sep = "\t", select = sub_genes)
+    mat <- as.matrix(dat[, -1])
+    rownames(mat) <- dat$V1
+    mat
   })
-  names(agg_l) <- ids
   
+  names(mat_l) <- ids
   gc(verbose = FALSE)
-  return(agg_l)
+  
+  return(mat_l)
 }
 
 
