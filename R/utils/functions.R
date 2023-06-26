@@ -18,7 +18,7 @@ library(Matrix)
 
 # Loads aggregate correlation matrices into a list. Data is saved as tsv (using 
 # fread/fwrite for speed) with symbols/rownames as first column, and must be 
-# converted back to matrix with rownames
+# converted back to matrix with rownames and colnames set
 
 load_agg_mat_list <- function(ids, 
                               amat_dir = "/space/scratch/amorin/TR_singlecell/", 
@@ -30,7 +30,7 @@ load_agg_mat_list <- function(ids,
     path <- file.path(amat_dir, x, paste0(x, "_RSR_allrank.tsv"))
     dat <- fread(path, sep = "\t", select = sub_genes)
     mat <- as.matrix(dat[, -1, drop = FALSE])
-    rownames(mat) <- dat$V1
+    rownames(mat) <- colnames(mat) <- dat$V1
     mat
   })
   
