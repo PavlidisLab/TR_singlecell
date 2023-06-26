@@ -10,12 +10,13 @@
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
+library(data.table)
 library(WGCNA)
 library(parallel)
 library(pheatmap)
 library(RColorBrewer)
 library(cowplot)
-source("R/utils/test_vector_comparison_functions.R")
+source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
@@ -23,30 +24,29 @@ source("R/00_config.R")
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 
 # IDs for scRNA-seq datasets
-ids_hg <- filter(sc_meta, Species == "Human")$ID
-ids_mm <- filter(sc_meta, Species == "Mouse")$ID
-# ids <- union(ids_hg, ids_mm)
+ids_hg <- filter(sc_meta, Species == "Human")$ID[1:3]
+ids_mm <- filter(sc_meta, Species == "Mouse")$ID[1:3]
 
-# Load aggregate matrix into list
-agg_hg <- lapply(ids_hg, function(x) lowertri_to_symm(readRDS(file.path(amat_dir, x, paste0(x, "_RSR_allrank.RDS")))))
-names(agg_hg) <- ids_hg
-agg_mm <- lapply(ids_mm, function(x) lowertri_to_symm(readRDS(file.path(amat_dir, x, paste0(x, "_RSR_allrank.RDS")))))
-names(agg_mm) <- ids_mm
-gc()
-
-#
+# Loading genes of interest
 sribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
 lribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
 pc_ortho <- read.delim(pc_ortho_path)
 ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
 
-#
+# Genes to focus/subset on when loading aggregate coexpression matrices
+subset_hg <- NULL    # c("RPL3", "EGR1")
+subset_mm <- NULL    # c("Rpl3", "Egr1")
+
+# Load aggregate matrix into list
+agg_hg <- load_agg_mat_list(ids = ids_hg, sub_genes = subset_hg)
+agg_mm <- load_agg_mat_list(ids = ids_mm, sub_genes = subset_mm)
+
 genes_hg <- rownames(agg_hg[[1]])
 genes_mm <- rownames(agg_mm[[1]])
+stopifnot(all(unlist(lapply(agg_hg, function(x) identical(rownames(x), genes_hg)))))
+stopifnot(all(unlist(lapply(agg_mm, function(x) identical(rownames(x), genes_mm)))))
 
-# TODO: this step should be done upstream
-agg_hg <- lapply(agg_hg, function(x) x[genes_hg, genes_hg])
-agg_mm <- lapply(agg_mm, function(x) x[genes_mm, genes_mm])
+
 
 
 
@@ -62,8 +62,8 @@ agg_mm <- lapply(agg_mm, function(x) x[genes_mm, genes_mm])
 # ------------------------------------------------------------------------------
 
 
-gene_hg <- "RPL3"  # RPL3  RPL19
-gene_mm <- "Rpl3"
+gene_hg <- "EGR1"  # RPL3  RPL19
+gene_mm <- "Egr1"  # Rpl3  Rpl19
 
 
 # Cor
@@ -79,8 +79,9 @@ cor_heatmap(gene_cor_mm)
 
 # AUPRC
 
-gene_auprc_hg <- similarity_matrix(agg_l = agg_hg, gene = gene_hg, k = 1000, msr = "AUPRC")
-gene_auprc_mm <- similarity_matrix(agg_l = agg_mm, gene = gene_mm, k = 1000, msr = "AUPRC")
+gene_auprc_hg <- gene_similarity_matrix(agg_l = agg_hg, gene = gene_hg, k = 1000, msr = "AUPRC")
+gene_auprc_mm <- gene_similarity_matrix(agg_l = agg_mm, gene = gene_mm, k = 1000, msr = "AUPRC")
+
 
 pheatmap(gene_auprc_hg,
          cluster_rows = FALSE,
@@ -96,8 +97,27 @@ pheatmap(gene_auprc_hg,
 
 # Topk
 
-gene_topk_hg <- similarity_matrix(agg_l = agg_hg, gene = gene_hg, k = 1000, msr = "Intersect")
-gene_topk_mm <- similarity_matrix(agg_l = agg_mm, gene = gene_mm, k = 1000, msr = "Intersect")
+gene_topk_hg <- gene_similarity_matrix(agg_l = agg_hg, gene = gene_hg, k = 1000, msr = "Topk")
+gene_topk_mm <- gene_similarity_matrix(agg_l = agg_mm, gene = gene_mm, k = 1000, msr = "Topk")
+
+
+
+
+F1 <- gene_vec_to_mat(agg_hg, gene_hg) %>% 
+  binarize_top_and_btm_k(k = 1000) %>% 
+  colwise_jaccard()
+
+
+F2 <-  gene_vec_to_mat(agg_hg, gene_hg) %>% 
+  colwise_topk()
+
+
+
+comp_df <- data.frame(
+  Jacc = mat_to_df(F1, symmetric = TRUE)$Value,
+  Topk = mat_to_df(F2, symmetric = TRUE)$Value
+)
+
 
 
 
@@ -122,7 +142,7 @@ comp_df <- data.frame(
 
 
 
-ggplot(comp_df, aes(x = Cor, y = AUPRC)) +
+ggplot(comp_df, aes(x = AUPRC, y = Topk)) +
   geom_point(shape = 19, size = 3) +
   ggtitle(gene_hg) +
   theme_classic() +
@@ -133,6 +153,20 @@ ggplot(comp_df, aes(x = Cor, y = AUPRC)) +
 
 
 cor(comp_df)
+
+
+
+#
+
+Sys.time()
+tt <- gene_rank_matrix(agg_l = agg_hg,
+                       gene = gene_hg,
+                       msr = "Topk",
+                       k = 1000,
+                       ncores = ncore)
+Sys.time()
+
+
 
 
 # Calling which rank over numerous genes (ribosomal + TF) - prohibitively slow
