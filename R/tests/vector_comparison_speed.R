@@ -28,6 +28,9 @@ stopifnot(all(unlist(lapply(agg_hg, function(x) identical(rownames(x), genes_hg)
 stopifnot(all(unlist(lapply(agg_mm, function(x) identical(rownames(x), genes_mm)))))
 
 
+gene <- "EGR1"
+
+
 
 # The outer() version is slower than the nested loop, as can't skip diagonal
 
@@ -95,9 +98,6 @@ colwise_topk_auprc3 <- function(agg_l, gene, k = 1000) {
 
 
 
-gene <- "EGR1"
-
-
 res1 <- microbenchmark::microbenchmark(
   F1 = gene_vec_to_mat(agg_hg, gene) %>% colwise_topk_auprc(),
   F2 = gene_vec_to_mat(agg_hg, gene) %>% colwise_topk_auprc2(),
@@ -135,3 +135,126 @@ res2 <- microbenchmark::microbenchmark(
   F1 = gene_vec_to_mat(agg_hg, gene) %>% colwise_topk_intersect(),
   F2 = gene_vec_to_mat(agg_hg, gene) %>% colwise_topk_intersect2(),
   times = 5)
+
+
+
+
+
+query_gene_rank_topk <- function(query_vec,
+                                 subject_mat,
+                                 gene,
+                                 k = 1000,
+                                 ncores = 1) {
+  
+  genes <- rownames(subject_mat)
+  
+  stopifnot(gene %in% genes, identical(names(query_vec), genes))
+  
+  query_topk <- topk_sort(query_vec, k)
+  
+  topk_l <- mclapply(genes, function(x) {
+    subject_topk <- topk_sort(subject_mat[, x], k)
+    topk_intersect(query_topk, subject_topk)
+  }, mc.cores = ncores)
+  
+  names(topk_l) <- genes
+  topk_sort <- sort(unlist(topk_l), decreasing = TRUE)
+  rank_ix <- which(names(topk_sort) == gene)
+  
+  return(list(Rank = rank_ix, Topk = topk_sort))
+  # return(rank_ix)
+}
+
+
+
+query_gene_rank_topk2 <- function(query_vec,
+                                  subject_mat,
+                                  gene,
+                                  k = 1000,
+                                  ncores = 1) {
+  
+  genes <- rownames(subject_mat)
+  
+  stopifnot(gene %in% genes, identical(names(query_vec), genes))
+  
+  query_topk <- topk_sort(query_vec, k)
+  
+  topk_l <- mclapply(genes, function(x) {
+    subject_topk <- topk_sort(subject_mat[, x], k)
+    topk_intersect(query_topk, subject_topk)
+  }, mc.cores = ncores)
+  
+  names(topk_l) <- genes
+  topk_sort <- sort(unlist(topk_l), decreasing = TRUE)
+  rank_ix <- which(names(topk_sort) == gene)
+  
+  # return(list(Rank = rank_ix, Topk = topk_sort))
+  return(rank_ix)
+}
+
+
+
+
+
+query_gene_rank_topk_all <- function(agg_l,
+                                     gene,
+                                     k = 1000,
+                                     ncores = 1) {
+  ids <- names(agg_l)
+  genes <- rownames(agg_l[[1]])
+  
+  stopifnot(length(ids) > 0, gene %in% genes)
+  
+  rank_mat <- matrix(1, nrow = length(agg_l), ncol = length(agg_l))
+  rownames(rank_mat) <- colnames(rank_mat) <- ids
+  
+  for (i in ids) {
+    for (j in ids) {
+      if (i == j) next
+      query_vec <- agg_l[[i]][, gene]
+      subject_mat <- agg_l[[j]]
+      rank_mat[i, j] <- query_gene_rank_topk(query_vec, subject_mat, gene, k, ncores)$Rank
+    }
+  }
+
+  return(rank_mat)
+}
+
+
+query_gene_rank_topk_all2 <- function(agg_l,
+                                      gene,
+                                      k = 1000,
+                                      ncores = 1) {
+  ids <- names(agg_l)
+  genes <- rownames(agg_l[[1]])
+  
+  stopifnot(length(ids) > 0, gene %in% genes)
+  
+  rank_mat <- matrix(1, nrow = length(agg_l), ncol = length(agg_l))
+  rownames(rank_mat) <- colnames(rank_mat) <- ids
+  
+  for (i in ids) {
+    for (j in ids) {
+      if (i == j) next
+      query_vec <- agg_l[[i]][, gene]
+      subject_mat <- agg_l[[j]]
+      rank_mat[i, j] <- query_gene_rank_topk2(query_vec, subject_mat, gene, k, ncores)
+    }
+  }
+  
+  return(rank_mat)
+}
+
+
+
+
+res3 <- microbenchmark::microbenchmark(
+  F1 = query_gene_rank_topk_all(agg_hg, gene, ncores = ncore),
+  F2 = query_gene_rank_topk_all2(agg_hg, gene, ncores = ncore),
+  times = 3
+)
+
+
+
+F1 = query_gene_rank_topk_all(agg_hg, gene, ncores = ncore) 
+F2 = query_gene_rank_cor_all(agg_hg, gene, ncores = ncore)
