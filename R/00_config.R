@@ -30,6 +30,11 @@ ens_hg_path <- "/space/grp/amorin/Metadata/ensembl_human_protein_coding_105.tsv"
 ens_mm_path <- "/space/grp/amorin/Metadata/ensembl_mouse_protein_coding_105.tsv"
 
 
+# TF gene paths
+tfs_hg_path <- "/space/grp/amorin/Metadata/human_tfs.tsv"
+tfs_mm_path <- "/space/grp/amorin/Metadata/mouse_tfs.tsv"
+
+
 # TR-target rankings from genomics evidence
 evidence_path <- "/space/scratch/amorin/R_objects/ranked_target_list_Apr2022.RDS"
 
