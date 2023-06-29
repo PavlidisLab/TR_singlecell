@@ -99,7 +99,7 @@ if (!file.exists(allrank_path)) {
   # Write as data.frames (preserve rownames) with data.table fwrite (fast)
   
   fwrite(
-    data.frame(rsr_all$Agg_mat, row.names = rownames(rsr_all$Agg_mat)),
+    data.frame(rsr_all$Agg_mat, check.names = FALSE),
     sep = "\t",
     row.names = TRUE,
     quote = FALSE,
@@ -110,7 +110,7 @@ if (!file.exists(allrank_path)) {
   
   
   fwrite(
-    data.frame(rsr_all$NA_mat, row.names = rownames(rsr_all$NA_mat)),
+    data.frame(rsr_all$NA_mat, check.names = FALSE),
     sep = "\t",
     row.names = TRUE,
     quote = FALSE,
