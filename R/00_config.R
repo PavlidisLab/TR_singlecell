@@ -41,6 +41,10 @@ gsheets_id <- "1SQx_rFdBNBwOEdChaHkbQY1vStcbuA3fF0CZk6YECEc"
 # Local copy of meta
 sc_meta_path <- "/space/grp/amorin/Metadata/single_cell_dataset_meta.tsv"
 
+# Binary matrices tracking if a gene was measured in at least once cell type
+msr_mat_hg_path <- "/space/scratch/amorin/TR_singlecell/binary_measurement_matrix_human.RDS"
+msr_mat_mm_path <- "/space/scratch/amorin/TR_singlecell/binary_measurement_matrix_mouse.RDS"
+
 
 # Human Protein Atlas
 expr_mat_l_path <- "/home/amorin/scratch/R_objects/HPA_expression_mat_list.RDS"
