@@ -29,10 +29,14 @@ sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 ids_hg <- filter(sc_meta, Species == "Human")$ID
 ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 
+# Protein coding genes
+pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
+pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
+pc_ortho <- read.delim(pc_ortho_path)
+
 # Loading genes of interest
 sribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
 lribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
-pc_ortho <- read.delim(pc_ortho_path)
 ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
 tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
 
@@ -41,19 +45,11 @@ subset_hg <- c(str_to_upper(tfs), "RPL3", "EGR1")   # NULL
 subset_mm <- c(str_to_title(tfs), "Rpl3", "Egr1")   # NULL
 
 # Load aggregate matrix into list
-agg_hg <- load_agg_mat_list(ids = ids_hg, sub_genes = subset_hg)
-agg_mm <- load_agg_mat_list(ids = ids_mm, sub_genes = subset_mm)
+agg_hg <- load_agg_mat_list(ids = ids_hg, sub_genes = subset_hg, genes = pc_hg$Symbol)
+agg_mm <- load_agg_mat_list(ids = ids_mm, sub_genes = subset_mm, genes = pc_mm$Symbol)
 
-genes_hg <- rownames(agg_hg[[1]])
-genes_mm <- rownames(agg_mm[[1]])
-
-# TODO: this needs to be replaced with upstream ordering
-agg_hg <- lapply(agg_hg, function(x) x[genes_hg, ])
-agg_mm <- lapply(agg_mm, function(x) x[genes_mm, ])
-
-
-stopifnot(all(unlist(lapply(agg_hg, function(x) identical(rownames(x), genes_hg)))))
-stopifnot(all(unlist(lapply(agg_mm, function(x) identical(rownames(x), genes_mm)))))
+stopifnot(all(unlist(lapply(agg_hg, function(x) identical(rownames(x), pc_hg$Symbol)))))
+stopifnot(all(unlist(lapply(agg_mm, function(x) identical(rownames(x), pc_mm$Symbol)))))
 
 
 
