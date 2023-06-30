@@ -20,18 +20,32 @@ library(Matrix)
 # fread/fwrite for speed) with symbols/rownames as first column, and must be 
 # converted back to matrix with rownames and colnames set
 
-load_agg_mat_list <- function(ids, 
-                              amat_dir = "/space/scratch/amorin/TR_singlecell/", 
-                              sub_genes = NULL) {
-  
-  if (!is.null(sub_genes)) sub_genes <- c("V1", sub_genes)
+load_agg_mat_list  <- function(ids,
+                               dir = "/space/scratch/amorin/TR_singlecell/",
+                               genes,
+                               sub_genes = NULL) {
   
   mat_l <- lapply(ids, function(x) {
+    
     path <- file.path(amat_dir, x, paste0(x, "_RSR_allrank.tsv"))
-    dat <- fread(path, sep = "\t", select = sub_genes)
-    mat <- as.matrix(dat[, -1, drop = FALSE])
-    rownames(mat) <- colnames(mat) <- dat$V1
-    mat
+    
+    if (!is.null(sub_genes)) {
+      
+      dat <- fread(path, sep = "\t", select = c("V1", sub_genes))
+      mat <- as.matrix(dat[, -1, drop = FALSE])
+      rownames(mat) <- dat$V1
+      colnames(mat) <- sub_genes
+      mat <- mat[genes, sub_genes]
+      
+    } else {
+      
+      dat <- fread(path, sep = "\t")
+      mat <- as.matrix(dat[, -1, drop = FALSE])
+      rownames(mat) <- colnames(mat) <- dat$V1
+      mat <- mat[genes, genes]
+    }
+    
+    return(mat)
   })
   
   names(mat_l) <- ids
@@ -39,7 +53,6 @@ load_agg_mat_list <- function(ids,
   
   return(mat_l)
 }
-
 
 
 
