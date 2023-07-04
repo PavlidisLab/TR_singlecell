@@ -51,111 +51,68 @@ agg_mm <- load_agg_mat_list(ids = ids_mm, sub_genes = subset_mm, genes = pc_mm$S
 stopifnot(all(unlist(lapply(agg_hg, function(x) identical(rownames(x), pc_hg$Symbol)))))
 stopifnot(all(unlist(lapply(agg_mm, function(x) identical(rownames(x), pc_mm$Symbol)))))
 
+# Measurement matrices used for filtering when a gene was never expressed
+msr_hg <- readRDS(msr_mat_hg_path)
+msr_mm <- readRDS(msr_mat_mm_path)
 
 
 # Inspecting single genes
 # ------------------------------------------------------------------------------
 
 
-gene_hg <- "ASCL1"  # RPL3  RPL19
-gene_mm <- "Ascl1"  # Rpl3  Rpl19
+gene_hg <- "ASCL1"
+gene_mm <- str_to_title(gene_hg)
+stopifnot(gene_mm %in% pc_mm$Symbol)
 
+# Bind individual gene vectors into a matrix, removing datasets with no expression
+gene_mat_hg <- gene_vec_to_mat(agg_hg, gene_hg)[, which(msr_hg[gene_hg, ] == 1)]
+gene_mat_mm <- gene_vec_to_mat(agg_mm, gene_mm)[, which(msr_mm[gene_mm, ] == 1)]
 
 # Cor
-
-gene_mat_hg <- gene_vec_to_mat(agg_hg, gene_hg)
 gene_cor_hg <- colwise_cor(gene_mat_hg)
-cor_heatmap(gene_cor_hg)
-
-gene_mat_mm <- gene_vec_to_mat(agg_mm, gene_mm)
 gene_cor_mm <- colwise_cor(gene_mat_mm)
-cor_heatmap(gene_cor_mm)
-
 
 # AUPRC
-
 gene_auprc_hg <- colwise_topk_auprc(gene_mat_hg)
 gene_auprc_mm <- colwise_topk_auprc(gene_mat_mm)
 
-
-
-# pheatmap(gene_auprc_hg,
-#          cluster_rows = FALSE,
-#          cluster_cols = FALSE,
-#          border_col = "black",
-#          color = c('#f7fbff','#deebf7','#c6dbef','#9ecae1','#6baed6','#4292c6','#2171b5','#08519c','#08306b'),
-#          display_numbers = TRUE,
-#          number_color = "black",
-#          fontsize = 20,
-#          cellwidth = 50,
-#          cellheight = 50)
-
-
 # Topk
-
 gene_topk_hg <- colwise_topk_intersect(gene_mat_hg)
 gene_topk_mm <- colwise_topk_intersect(gene_mat_mm)
 
 # Jaccard of top and bottom k
-
 gene_jacc_hg <- binarize_topk_btmk(gene_mat_hg) %>% colwise_jaccard()
 gene_jacc_mm <- binarize_topk_btmk(gene_mat_mm) %>% colwise_jaccard()
 
 
 
-# TODO: better
-# Comparing metrics
+# Collect similarity metrics into a dataframe
 
 
-comp_df <- data.frame(
-  Scor = c(
-    mat_to_df(gene_cor_hg, symmetric = TRUE)$Value,
-    mat_to_df(gene_cor_mm, symmetric = TRUE)$Value
-  ),
-  Topk = c(
-    mat_to_df(gene_topk_hg, symmetric = TRUE)$Value,
-    mat_to_df(gene_topk_mm, symmetric = TRUE)$Value
-  ),
-  AUPRC = c(
-    mat_to_df(gene_auprc_hg, symmetric = TRUE)$Value,
-    mat_to_df(gene_auprc_mm, symmetric = TRUE)$Value
-  ),
-  Jaccard = c(
-    mat_to_df(gene_jacc_hg, symmetric = TRUE)$Value,
-    mat_to_df(gene_jacc_mm, symmetric = TRUE)$Value
+gene_sim_df <-
+  rbind(
+    mat_to_df(gene_cor_hg, symmetric = TRUE, value_name = "Scor"),
+    mat_to_df(gene_cor_mm, symmetric = TRUE, value_name = "Scor")
+  ) %>%
+  cbind(
+    Topk = c(
+      mat_to_df(gene_topk_hg, symmetric = TRUE)$Value,
+      mat_to_df(gene_topk_mm, symmetric = TRUE)$Value
+    ),
+    AUPRC = c(
+      mat_to_df(gene_auprc_hg, symmetric = TRUE)$Value,
+      mat_to_df(gene_auprc_mm, symmetric = TRUE)$Value
+    ),
+    Jaccard = c(
+      mat_to_df(gene_jacc_hg, symmetric = TRUE)$Value,
+      mat_to_df(gene_jacc_mm, symmetric = TRUE)$Value
+    )
   )
-)
-
-
-comp_df <- cbind(comp_df,
-                 rbind(
-                   mat_to_df(gene_jacc_hg, symmetric = TRUE)[, c("Row", "Col")],
-                   mat_to_df(gene_jacc_mm, symmetric = TRUE)[, c("Row", "Col")])
-)
 
 
 
-# TODO: Replace hacky NA filter with formal binary detection matrix
-
-na_hg <- gene_cor_hg %>% 
-  diag_to_na() %>% 
-  apply(., 2, function(x) any(x == 1))
-
-na_hg <- names(na_hg[!is.na(na_hg)])
-
-
-na_mm <- gene_cor_mm %>% 
-  diag_to_na() %>% 
-  apply(., 2, function(x) any(x == 1))
-
-na_mm <- names(na_mm[!is.na(na_mm)])
-
-
-comp_df2 <- filter(comp_df, !(Row %in% c(na_hg, na_mm) | Col %in% c(na_hg, na_mm)))
-
-
-# ggplot(comp_df2, aes(x = AUPRC, y = Topk)) +
-ggplot(comp_df2, aes(x = Scor, y = Topk)) +
+ggplot(gene_sim_df, aes(x = AUPRC, y = Topk)) +
+# ggplot(gene_sim_df, aes(x = Scor, y = Topk)) +
   geom_point(shape = 19, size = 3) +
   ggtitle(gene_hg) +
   theme_classic() +
@@ -165,7 +122,8 @@ ggplot(comp_df2, aes(x = Scor, y = Topk)) +
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
-cor(select_if(comp_df2, is.numeric))
+cor(select_if(gene_sim_df, is.numeric))
+
 
 
 
@@ -266,3 +224,19 @@ med_tf_srank_df <- rbind(mat_to_df(diag_to_na(med_tf_srank_hg)),
 
 
 hist(med_tf_srank_df$Value, breaks = 10)
+
+
+
+# cor_heatmap(gene_cor_hg)
+# cor_heatmap(gene_cor_mm)
+
+# pheatmap(gene_auprc_hg,
+#          cluster_rows = FALSE,
+#          cluster_cols = FALSE,
+#          border_col = "black",
+#          color = c('#f7fbff','#deebf7','#c6dbef','#9ecae1','#6baed6','#4292c6','#2171b5','#08519c','#08306b'),
+#          display_numbers = TRUE,
+#          number_color = "black",
+#          fontsize = 20,
+#          cellwidth = 50,
+#          cellheight = 50)
