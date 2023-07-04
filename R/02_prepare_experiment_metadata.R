@@ -1,5 +1,7 @@
 ## Load a google sheets metadata table tracking scRNA-seq experiments, then
 ## format and save a local copy for available experiments
+## TODO: finalize loading structure
+## TODO: counts should be only considering new data (very slow otherwise)
 ## -----------------------------------------------------------------------------
 
 library(googlesheets4)
@@ -21,12 +23,14 @@ loaded <- lapply(sc_meta$ID, function(x) {
 
 names(loaded) <- sc_meta$ID
 
+
 loaded <- unlist(loaded[!is.na(loaded)])
+
 
 all_paths <- data.frame(ID = names(loaded), Path = loaded)
 
 
-sc_meta <- filter(sc_meta, ID %in% all_paths$ID) %>% 
+sc_meta_loaded <- filter(sc_meta, ID %in% all_paths$ID) %>% 
   left_join(all_paths, by = "ID")
   
 
@@ -48,12 +52,12 @@ add_meta_cols <- function(id) {
 }
 
 
-meta_cols <- do.call(rbind, lapply(sc_meta$ID, add_meta_cols))
+meta_cols <- do.call(rbind, lapply(sc_meta_loaded$ID, add_meta_cols))
 
 
-stopifnot(identical(meta_cols$ID, sc_meta$ID))
-sc_meta$N_cells <- meta_cols$N_cells
-sc_meta$N_celltypes <- meta_cols$N_celltypes
+stopifnot(identical(meta_cols$ID, sc_meta_loaded$ID))
+sc_meta_loaded$N_cells <- meta_cols$N_cells
+sc_meta_loaded$N_celltypes <- meta_cols$N_celltypes
 
 
 # sc_meta2 <- left_join(
@@ -62,8 +66,14 @@ sc_meta$N_celltypes <- meta_cols$N_celltypes
 #   by = "ID")
 
 
-write.table(sc_meta,
+write.table(sc_meta_loaded,
             sep = "\t",
             row.names = FALSE,
             quote = FALSE,
             file = sc_meta_path)
+
+
+
+
+# For inspecting those that are not loaded/failed
+# setdiff(sc_meta$ID, sc_meta_loaded$ID)
