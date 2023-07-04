@@ -486,7 +486,7 @@ all_celltype_cor <- function(mat,
 # Convert a matrix into a long and skinny df. If symmetric, only return the
 # unique values.
 
-mat_to_df <- function(mat, symmetric = TRUE) {
+mat_to_df <- function(mat, symmetric = TRUE, value_name = NULL) {
   
   if (symmetric) {
     df <- data.frame(
@@ -503,6 +503,9 @@ mat_to_df <- function(mat, symmetric = TRUE) {
       stringsAsFactors = FALSE
     )
   }
+  
+  if (!is.null(value_name)) colnames(df)[colnames(df) == "Value"] <- value_name
+  
   return(df)
 }
 
