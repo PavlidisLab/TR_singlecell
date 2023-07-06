@@ -1,6 +1,7 @@
 ## Project functions
 ## -----------------------------------------------------------------------------
 
+library(data.table)
 library(parallel)
 library(ROCR)
 library(DescTools)
@@ -27,7 +28,7 @@ load_agg_mat_list  <- function(ids,
   
   mat_l <- lapply(ids, function(x) {
     
-    path <- file.path(amat_dir, x, paste0(x, "_RSR_allrank.tsv"))
+    path <- file.path(dir, x, paste0(x, "_RSR_allrank.tsv"))
     
     if (!is.null(sub_genes)) {
       
@@ -35,14 +36,14 @@ load_agg_mat_list  <- function(ids,
       mat <- as.matrix(dat[, -1, drop = FALSE])
       rownames(mat) <- dat$V1
       colnames(mat) <- sub_genes
-      mat <- mat[genes, sub_genes]
+      mat <- mat[genes, sub_genes, drop = FALSE]
       
     } else {
       
       dat <- fread(path, sep = "\t")
       mat <- as.matrix(dat[, -1, drop = FALSE])
       rownames(mat) <- colnames(mat) <- dat$V1
-      mat <- mat[genes, genes]
+      mat <- mat[genes, genes, drop = FALSE]
     }
     
     return(mat)
