@@ -2,7 +2,8 @@
 ## ranked vectors
 
 # TODO: consider removal of self gene (and k+1) # rank_vec <- rank_vec[names(rank_vec) != gene]
-# TODO: consider AUPRC helper as duplicated block
+# TODO: row vs col gene in rank function when using a non-symmetrix matrix
+
 
 source("R/utils/functions.R")
 
@@ -72,7 +73,9 @@ colwise_cor <- function(mat, cor_method = "spearman", ncores = 1) {
 
 colwise_jaccard <- function(mat) {
   
-  jaccard <- function(vec1, vec2) sum(vec1 & vec2) / sum(vec1 | vec2)  
+  jaccard <- function(vec1, vec2) {
+    sum(vec1 & vec2, na.rm = TRUE) / sum(vec1 | vec2, na.rm = TRUE)
+  }
   
   col_list <- asplit(mat, 2)
   jacc_mat <- outer(col_list, col_list, Vectorize(jaccard))
@@ -119,9 +122,10 @@ query_gene_rank_topk <- function(query_vec,
                                  k = 1000,
                                  ncores = 1) {
   
-  genes <- rownames(subject_mat)
+  # genes <- rownames(subject_mat)
+  genes <- colnames(subject_mat)
   
-  stopifnot(gene %in% genes, identical(names(query_vec), genes))
+  # stopifnot(gene %in% genes, identical(names(query_vec), genes))
   
   query_topk <- topk_sort(query_vec, k)
   
