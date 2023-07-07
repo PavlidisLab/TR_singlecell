@@ -1,12 +1,4 @@
-## This script generates metrics of similarity between a query gene vector from 
-## one aggregated correlation matrix and all other gene vectors from another
-## network. The main idea idea is to find the rank position of the gene of
-## interest with itself in another network.
-## TODO: function argument of main call
-## TODO: collapse main function (general structure of nested loop to mat)
-## TODO: lapply call of main either made into a function or reduced to relevant only
-## TODO: process/save/load function
-## TODO: double check k+1
+## TODO:
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -16,6 +8,7 @@ library(parallel)
 library(pheatmap)
 library(RColorBrewer)
 library(cowplot)
+source("R/utils/functions.R")
 source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
@@ -32,7 +25,7 @@ ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 # Protein coding genes
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
-pc_ortho <- read.delim(pc_ortho_path)
+# pc_ortho <- read.delim(pc_ortho_path)
 
 # Loading genes of interest
 sribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
@@ -41,19 +34,215 @@ ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_
 tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
 
 # Genes to focus/subset on when loading aggregate coexpression matrices
-subset_hg <- c(str_to_upper(tfs), "RPL3", "EGR1", "FOS", "FOSB")   # NULL
-subset_mm <- c(str_to_title(tfs), "Rpl3", "Egr1", "Fos", "Fosb")   # NULL
-
-# Load aggregate matrix into list
-agg_hg <- load_agg_mat_list(ids = ids_hg, sub_genes = subset_hg, genes = pc_hg$Symbol)
-agg_mm <- load_agg_mat_list(ids = ids_mm, sub_genes = subset_mm, genes = pc_mm$Symbol)
-
-stopifnot(all(unlist(lapply(agg_hg, function(x) identical(rownames(x), pc_hg$Symbol)))))
-stopifnot(all(unlist(lapply(agg_mm, function(x) identical(rownames(x), pc_mm$Symbol)))))
+# subset_hg <- c(str_to_upper(tfs), "RPL3", "EGR1", "FOS", "FOSB")   # NULL
+# subset_mm <- c(str_to_title(tfs), "Rpl3", "Egr1", "Fos", "Fosb")   # NULL
+# 
+# # Load aggregate matrix into list
+# agg_hg <- load_agg_mat_list(ids = ids_hg, sub_genes = subset_hg, genes = pc_hg$Symbol)
+# agg_mm <- load_agg_mat_list(ids = ids_mm, sub_genes = subset_mm, genes = pc_mm$Symbol)
+# 
+# stopifnot(all(unlist(lapply(agg_hg, function(x) identical(rownames(x), pc_hg$Symbol)))))
+# stopifnot(all(unlist(lapply(agg_mm, function(x) identical(rownames(x), pc_mm$Symbol)))))
 
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
+
+# List of paired experiment similarities for TFs
+tf_sim_hg <- readRDS(tf_sim_hg_path)
+tf_sim_mm <- readRDS(tf_sim_mm_path)
+
+# Null topk overlap
+null_topk_hg <- readRDS("/space/scratch/amorin/R_objects/05-07-2023_sampled_topk_intesect_human.RDS")
+null_topk_mm <- readRDS("/space/scratch/amorin/R_objects/05-07-2023_sampled_topk_intesect_mouse.RDS")
+
+
+
+# Functions
+# ------------------------------------------------------------------------------
+
+
+# Returns a dataframe of summary stats for topk for each TF in sim_l
+
+get_summary_df <- function(sim_l) {
+  
+  lapply(sim_l, function(x) summary(x$Sim_df$Topk)) %>% 
+    do.call(rbind, .) %>%
+    as.data.frame() %>% 
+    rownames_to_column(var = "TF") %>% 
+    mutate(N_exp = unlist(lapply(sim_l, `[[`, "N_exp"))) %>% 
+    arrange(Median) %>% 
+    mutate(TF = factor(TF, levels = unique(TF)))
+  
+}
+
+
+
+#
+# ------------------------------------------------------------------------------
+
+
+# Summary of null topk overlap
+null_summ_hg <- summary(unlist(lapply(null_topk_hg, function(x) median(x$Topk))))
+null_summ_mm <- summary(unlist(lapply(null_topk_hg, function(x) median(x$Topk))))
+
+
+# Summarize each TF's topk overlap and organize into a df
+tf_summ_hg <- get_summary_df(tf_sim_hg)
+tf_summ_mm <- get_summary_df(tf_sim_mm)
+
+
+# Relationship between median topk intersect and the number of non-NA experiments
+topk_na_cor_hg <- cor.test(tf_summ_hg$Median, tf_summ_hg$N_exp, method = "spearman")
+topk_na_cor_mm <- cor.test(tf_summ_mm$Median, tf_summ_mm$N_exp, method = "spearman")
+
+
+plot(tf_summ_hg$Median, tf_summ_hg$N_exp)
+
+
+tf_summ_hg %>% 
+  mutate(Group_nexp = cut(N_exp, 10, include.lowest = TRUE)) %>% 
+  ggplot(aes(x = Group_nexp, y = Median)) +
+  geom_boxplot() +
+  theme_classic()
+
+
+
+ggplot(tf_summ_hg, aes(y = Median, x = TF)) +
+  geom_point() +
+  geom_hline(yintercept = null_summ_hg["Median"], colour = "grey65") +
+  geom_hline(yintercept = null_summ_hg["1st Qu."], colour = "grey85") +
+  geom_hline(yintercept = null_summ_hg["3rd Qu."], colour = "grey40") +
+  ylab(paste0("Median Top k (k=", k, ")")) +
+  expand_limits(x = nrow(tf_summ_hg) + 50) +  # prevent point cut off
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20))
+
+
+
+ggplot(tf_summ_mm, aes(y = Median, x = TF)) +
+  geom_point() +
+  geom_hline(yintercept = null_summ_mm["Median"], colour = "grey65") +
+  geom_hline(yintercept = null_summ_mm["1st Qu."], colour = "grey85") +
+  geom_hline(yintercept = null_summ_mm["3rd Qu."], colour = "grey40") +
+  ylab(paste0("Median Top k (k=", k, ")")) +
+  expand_limits(x = nrow(tf_summ_mm) + 50) +  # prevent point cut off
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20))
+
+
+
+ggplot(tf_summ_hg, aes(x = TF)) +
+  geom_boxplot(
+    # aes(ymin = Min., lower = `1st Qu.`, middle = Median, upper = `3rd Qu.`, ymax = Max.),
+    aes(ymin = `1st Qu.`, lower = `1st Qu.`, middle = Median, upper = `3rd Qu.`, ymax = `3rd Qu.`),
+    stat = "identity") +
+  geom_hline(yintercept = null_summ_hg["Median"], colour = "firebrick", linewidth = 1.6) +
+  geom_hline(yintercept = null_summ_hg["1st Qu."], colour = "grey85") +
+  geom_hline(yintercept = null_summ_hg["3rd Qu."], colour = "grey40") +
+  ylab(paste0("Median Top k (k=", k, ")")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+
+ggplot(tf_summ_mm, aes(x = TF)) +
+  geom_boxplot(
+    # aes(ymin = Min., lower = `1st Qu.`, middle = Median, upper = `3rd Qu.`, ymax = Max.),
+    aes(ymin = `1st Qu.`, lower = `1st Qu.`, middle = Median, upper = `3rd Qu.`, ymax = `3rd Qu.`),
+    stat = "identity") +
+  geom_hline(yintercept = null_summ_mm["Median"], colour = "firebrick", linewidth = 1.6) +
+  geom_hline(yintercept = null_summ_mm["1st Qu."], colour = "grey85") +
+  geom_hline(yintercept = null_summ_mm["3rd Qu."], colour = "grey40") +
+  ylab(paste0("Median Top k (k=", k, ")")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+max_hg <- tf_sim_hg[[as.character(slice_max(tf_summ_hg, Median)$TF)]]$Sim_df
+max_mm <- tf_sim_mm[[as.character(slice_max(tf_summ_mm, Median)$TF)]]$Sim_df
+
+rep_hg <- tf_sim_hg[["RUNX1"]]$Sim_df
+rep_mm <- tf_sim_mm[["Runx1"]]$Sim_df
+
+rep_null_hg <- null_topk_hg[[sample(1:length(null_topk_hg), 1)]]
+rep_null_mm <- null_topk_mm[[sample(1:length(null_topk_mm), 1)]]
+
+
+plot_df_hg <- data.frame(
+  Group = c(rep("Max", nrow(max_hg)), rep("TF", nrow(rep_hg)), rep("Null", nrow(rep_null_hg))),
+  Topk = c(max_hg$Topk, rep_hg$Topk, rep_null_hg$Topk)
+)
+
+
+
+plot_df_mm <- data.frame(
+  Group = c(rep("Max", nrow(max_mm)), rep("TF", nrow(rep_mm)), rep("Null", nrow(rep_null_mm))),
+  Topk = c(max_mm$Topk, rep_mm$Topk, rep_null_mm$Topk)
+)
+
+
+
+
+ggplot(plot_df_hg, aes(x = Topk, fill = Group)) +
+  geom_density(alpha = 0.6) +
+  theme_classic() +
+  ylab("Density") +
+  xlab("Topk intersect (k=1000)") +
+  # scale_fill_manual(values = fill_col, labels = legend_text) +
+  theme(
+    axis.text = element_text(size = 30),
+    axis.title = element_text(size = 30),
+    plot.title = element_text(hjust = 0.5, size = 30),
+    legend.position = c(0.75, 0.90),
+    legend.text = element_text(size = 20),
+    legend.title = element_blank(),
+    plot.margin = margin(10, 20, 10, 10)  # xaxis was getting clipped for pcor
+  )
+
+
+
+ggplot(plot_df_mm, aes(x = Topk, fill = Group)) +
+  geom_density(alpha = 0.6) +
+  theme_classic() +
+  ylab("Density") +
+  xlab("Topk intersect (k=1000)") +
+  # scale_fill_manual(values = fill_col, labels = legend_text) +
+  theme(
+    axis.text = element_text(size = 30),
+    axis.title = element_text(size = 30),
+    plot.title = element_text(hjust = 0.5, size = 30),
+    legend.position = c(0.75, 0.90),
+    legend.text = element_text(size = 20),
+    legend.title = element_blank(),
+    plot.margin = margin(10, 20, 10, 10)  # xaxis was getting clipped for pcor
+  )
+
+
+
+
+
+boxplot(plot_df_hg$Topk ~ plot_df_hg$Group)
 
 
 # Inspecting single genes
