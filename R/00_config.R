@@ -50,6 +50,12 @@ sc_meta_path <- "/space/grp/amorin/Metadata/single_cell_dataset_meta.tsv"
 msr_mat_hg_path <- "/space/scratch/amorin/TR_singlecell/binary_measurement_matrix_human.RDS"
 msr_mat_mm_path <- "/space/scratch/amorin/TR_singlecell/binary_measurement_matrix_mouse.RDS"
 
+# List of TF vector similarities
+tf_sim_hg_path <- "/space/scratch/amorin/R_objects/06-07-2023_TF_similarity_human.RDS"
+tf_sim_mm_path <- "/space/scratch/amorin/R_objects/06-07-2023_TF_similarity_mouse.RDS"
+
+
+
 
 # Human Protein Atlas
 expr_mat_l_path <- "/home/amorin/scratch/R_objects/HPA_expression_mat_list.RDS"
