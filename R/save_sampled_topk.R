@@ -14,7 +14,7 @@ source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
 k <- 1000 
-n_samps <- 100
+n_samps <- 1000
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -32,8 +32,8 @@ msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
 # Saved list RDS of the sampled topk overlaps
-out_hg <- "/space/scratch/amorin/R_objects/05-07-2023_sampled_topk_intesect_human.RDS"
-out_mm <- "/space/scratch/amorin/R_objects/05-07-2023_sampled_topk_intesect_mouse.RDS"
+out_hg <- "/space/scratch/amorin/R_objects/06-07-2023_sampled_topk_intesect_human.RDS"
+out_mm <- "/space/scratch/amorin/R_objects/06-07-2023_sampled_topk_intesect_mouse.RDS"
 
 
 
@@ -130,6 +130,11 @@ if (!file.exists(out_mm)) {
 
 med_hg <- lapply(topk_hg, function(x) median(x$Topk))
 med_mm <- lapply(topk_mm, function(x) median(x$Topk))
+hist(unlist(med_hg), breaks = 20)
+hist(unlist(med_mm), breaks = 20)
+
 
 sd_hg <- lapply(topk_hg, function(x) sd(x$Topk))
 sd_mm <- lapply(topk_mm, function(x) median(x$Topk))
+hist(unlist(sd_hg), breaks = 20)
+hist(unlist(sd_mm), breaks = 20)
