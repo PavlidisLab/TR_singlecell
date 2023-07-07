@@ -56,9 +56,15 @@ all_rank_summary <- function(agg_l, msr_mat, genes) {
   
   summ_l <- lapply(genes, function(x) {
     
+    message(paste(x))
+    
     gene_mat <- gene_vec_to_mat(agg_l, x)
     gene_mat[x, ] <- NA
-    gene_mat <- gene_mat[, which(msr_mat[x, ] == 1)]
+    gene_mat <- gene_mat[, which(msr_mat[x, ] == 1), drop = FALSE]
+    
+    if (length(gene_mat) == 0) {
+      return(NA)
+    }
     
     colrank_gene_mat <- colrank_mat(gene_mat, ties_arg = "min")
     
