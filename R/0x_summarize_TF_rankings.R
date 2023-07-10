@@ -41,18 +41,53 @@ msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
 # Saved list RDS of the summaries
-out_hg <- "/space/scratch/amorin/R_objects/05-07-2023_TF_summary_human.RDS"
-out_mm <- "/space/scratch/amorin/R_objects/05-07-2023_TF_summary_mouse.RDS"
+out_hg <- "/space/scratch/amorin/R_objects/10-07-2023_TF_summary_human.RDS"
+out_mm <- "/space/scratch/amorin/R_objects/10-07-2023_TF_summary_mouse.RDS"
+
+
+
+# Return k, or the count of observations before the ties pileup if it less than k
+
+check_k <- function(vec_sort, k) {
+
+  if (vec_sort[k] == vec_sort[k - 1]) {
+    tie_start <- head(sort(table(vec_sort), decreasing = TRUE))[1]
+    k <- sum(vec_sort > as.numeric(names(tie_start)), na.rm = TRUE)
+  }
+  
+  return(k)
+}
+
+
+
+# TODO:
+
+get_topk_count <- function(gene_mat, k) {
+  
+  bin_l <- lapply(1:ncol(gene_mat), function(x) {
+    vec_sort <- sort(gene_mat[, x], decreasing = TRUE)
+    k <- check_k(vec_sort, k)
+    gene_mat[, x] >= vec_sort[k]
+  })
+  
+  bin_mat <- do.call(cbind, bin_l)
+  k_count <- rowSums(bin_mat, na.rm = TRUE)
+  
+  return(k_count)
+}
+
+
 
 
 # For each gene in genes, generate a summary dataframe that includes:
+# TODO: update
 # 1) The gene ranking of coexpressed partners (average aggregate rank)
 # 2) The count of times the gene pair was mutually measured
 # 3) The count of NAs (no mutual measurement)
 # 4) For the best correlation partner, what was its best rank across datasets?
 # 5) And in what dataset did it achieve this best rank?
 
-all_rank_summary <- function(agg_l, msr_mat, genes) {
+all_rank_summary <- function(agg_l, msr_mat, genes, k = 1000) {
   
   summ_l <- lapply(genes, function(x) {
     
@@ -76,13 +111,16 @@ all_rank_summary <- function(agg_l, msr_mat, genes) {
     
     best_rank <- apply(colrank_gene_mat, 1, min)
     
+    topk_count <- get_topk_count(gene_mat, k)
+    
     data.frame(
       Symbol = rownames(gene_mat),
       Avg_RSR = avg_rsr,
       Avg_colrank = avg_colrank,
       Rank_RSR = rank_rsr,
       Rank_colrank = rank_colrank,
-      Best_rank = best_rank)
+      Best_rank = best_rank,
+      Topk_count = topk_count)
   })
   
   names(summ_l) <- genes
