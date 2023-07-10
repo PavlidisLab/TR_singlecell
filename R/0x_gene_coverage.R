@@ -52,14 +52,14 @@ load_na_mat_list <- function(ids,
       mat <- as.matrix(dat[, -1, drop = FALSE])
       rownames(mat) <- dat$V1
       colnames(mat) <- sub_genes
-      mat <- mat[genes, sub_genes]
+      mat <- mat[genes, sub_genes, drop = FALSE]
    
      } else {
        
        dat <- fread(path, sep = "\t")
        mat <- as.matrix(dat[, -1, drop = FALSE])
        rownames(mat) <- colnames(mat) <- dat$V1
-       mat <- mat[genes, genes]
+       mat <- mat[genes, genes, drop = FALSE]
      }
     
     return(mat)
@@ -209,7 +209,7 @@ names(na_mm) <- ids_mm
 
 # Extract a single TF's vector across datasets ino a single matrix
 
-gene_hg <- "RUNX1"
+gene_hg <- "ASCL1"
 gene_mm <- str_to_title(gene_hg)
 stopifnot(gene_mm %in% pc_mm$Symbol)
 
