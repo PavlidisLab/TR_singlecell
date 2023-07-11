@@ -1,4 +1,5 @@
-## TODO:
+## Summarize the similarity (by topk intersect) of TF genes with themselves
+## across datasets, and contrast to null intersects and L/S ribosomal genes
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -224,99 +225,102 @@ p3a <- boxplot_topk_median(tf_summ_hg)
 p3b <- boxplot_topk_median(tf_summ_mm)
 
 
+# Density plot of topk intersect for select genes + null
 
-max_hg <- tf_sim_hg[[as.character(slice_max(tf_summ_hg, Median)$TF)]]$Sim_df
-max_mm <- tf_sim_mm[[as.character(slice_max(tf_summ_mm, Median)$TF)]]$Sim_df
 
-rep_hg <- tf_sim_hg[["RUNX1"]]$Sim_df
-rep_mm <- tf_sim_mm[["Runx1"]]$Sim_df
+density_topk <- function(plot_df) {
+  
+  ggplot(plot_df, aes(x = Topk, fill = Group)) +
+    geom_density(alpha = 0.6) +
+    theme_classic() +
+    ylab("Density") +
+    xlab(paste0("Topk intersect (k=", k, ")")) +
+    scale_fill_manual(values = c("#1b9e77", "#d95f02", "lightgrey", "#7570b3")) +
+    theme(
+      axis.text = element_text(size = 30),
+      axis.title = element_text(size = 30),
+      plot.title = element_text(hjust = 0.5, size = 30),
+      legend.position = c(0.75, 0.90),
+      legend.text = element_text(size = 20),
+      legend.title = element_blank(),
+      plot.margin = margin(10, 20, 10, 10))
+}
 
+
+# Isolating the max TF by topk similarity, a representative TF, a ribosomal gene,
+# and a null
+
+example_tf_hg <- "ASCL1"
+example_tf_mm <- "Ascl1"
+
+example_ribo_hg <- "RPL3"
+example_ribo_mm <- "Rpl3"
+
+max_tf_hg <- tf_sim_hg[[as.character(slice_max(tf_summ_hg, Median)$TF)]]$Sim_df
+max_tf_mm <- tf_sim_mm[[as.character(slice_max(tf_summ_mm, Median)$TF)]]$Sim_df
+
+tf_df_hg <- tf_sim_hg[[example_tf_hg]]$Sim_df
+tf_df_mm <- tf_sim_mm[[example_tf_mm]]$Sim_df
+
+ribo_df_hg <- ribo_sim_hg[[example_ribo_hg]]$Sim_df
+ribo_df_mm <- ribo_sim_mm[[example_ribo_mm]]$Sim_df
+
+
+set.seed(67)
 rep_null_hg <- null_topk_hg[[sample(1:length(null_topk_hg), 1)]]
 rep_null_mm <- null_topk_mm[[sample(1:length(null_topk_mm), 1)]]
 
 
+
 plot_df_hg <- data.frame(
-  Group = c(rep("Max", nrow(max_hg)), rep("TF", nrow(rep_hg)), rep("Null", nrow(rep_null_hg))),
-  Topk = c(max_hg$Topk, rep_hg$Topk, rep_null_hg$Topk)
+  Group = c(rep("Max", nrow(max_tf_hg)), 
+            rep(example_tf_hg, nrow(tf_df_hg)), 
+            rep(example_ribo_hg, nrow(ribo_df_hg)), 
+            rep("Null", nrow(rep_null_hg))),
+  Topk = c(max_tf_hg$Topk, tf_df_hg$Topk, ribo_df_hg$Topk, rep_null_hg$Topk)
 )
 
 
 
 plot_df_mm <- data.frame(
-  Group = c(rep("Max", nrow(max_mm)), rep("TF", nrow(rep_mm)), rep("Null", nrow(rep_null_mm))),
-  Topk = c(max_mm$Topk, rep_mm$Topk, rep_null_mm$Topk)
+  Group = c(rep("Max", nrow(max_tf_mm)), 
+            rep(example_tf_mm, nrow(tf_df_mm)), 
+            rep(example_ribo_mm, nrow(ribo_df_mm)), 
+            rep("Null", nrow(rep_null_mm))),
+  Topk = c(max_tf_mm$Topk, tf_df_mm$Topk, ribo_df_mm$Topk, rep_null_mm$Topk)
 )
 
 
 
-
-ggplot(plot_df_hg, aes(x = Topk, fill = Group)) +
-  geom_density(alpha = 0.6) +
-  theme_classic() +
-  ylab("Density") +
-  xlab("Topk intersect (k=1000)") +
-  # scale_fill_manual(values = fill_col, labels = legend_text) +
-  theme(
-    axis.text = element_text(size = 30),
-    axis.title = element_text(size = 30),
-    plot.title = element_text(hjust = 0.5, size = 30),
-    legend.position = c(0.75, 0.90),
-    legend.text = element_text(size = 20),
-    legend.title = element_blank(),
-    plot.margin = margin(10, 20, 10, 10)  # xaxis was getting clipped for pcor
-  )
-
-
-
-ggplot(plot_df_mm, aes(x = Topk, fill = Group)) +
-  geom_density(alpha = 0.6) +
-  theme_classic() +
-  ylab("Density") +
-  xlab("Topk intersect (k=1000)") +
-  # scale_fill_manual(values = fill_col, labels = legend_text) +
-  theme(
-    axis.text = element_text(size = 30),
-    axis.title = element_text(size = 30),
-    plot.title = element_text(hjust = 0.5, size = 30),
-    legend.position = c(0.75, 0.90),
-    legend.text = element_text(size = 20),
-    legend.title = element_blank(),
-    plot.margin = margin(10, 20, 10, 10)  # xaxis was getting clipped for pcor
-  )
-
-
-
+p4a <- density_topk(plot_df_hg)
+p4b <- density_topk(plot_df_mm)
 
 
 # Relationship between topk median and count of experiments
 
-tf_summ_hg %>% 
-  mutate(Group_nexp = cut(N_exp, 10, include.lowest = TRUE)) %>% 
+# plot(tf_summ_hg$N_exp, y = tf_summ_hg$Median)
+# plot(tf_summ_mm$N_exp, y = tf_summ_mm$Median)
+
+n_break <- length(ids_mm)
+
+p5a <- tf_summ_hg %>% 
+  mutate(Group_nexp = cut(N_exp, n_break, include.lowest = TRUE)) %>% 
   ggplot(aes(x = Group_nexp, y = Median)) +
   geom_boxplot() +
   theme_classic()
 
-plot(tf_summ_hg$Median, tf_summ_hg$N_exp)
+
+p5b <- tf_summ_mm %>% 
+  mutate(Group_nexp = cut(N_exp, n_break, include.lowest = TRUE)) %>% 
+  ggplot(aes(x = Group_nexp, y = Median)) +
+  geom_boxplot() +
+  theme_classic()
 
 
+# Heatmap of query/subject topk all ranks
 
 
-
-
-
-boxplot(plot_df_hg$Topk ~ plot_df_hg$Group)
-
-
-
-
-
-
-
-
-
-# Heatmap of all ranks
-
-pheatmap(allrank_mat,
+p6 <- pheatmap(allrank_mat,
          cluster_rows = FALSE,
          cluster_cols = FALSE,
          border_col = "black",
@@ -333,89 +337,36 @@ pheatmap(allrank_mat,
 
 
 
-# Pile up at the left of the histogram (lower/better ranks) suggests a signal,
-# as random ranking would be uniform
-
-hist(allrank_mat, breaks = 20)
-hist(replicate(length(allrank_mat), sample(1:length(pc_hg$Symbol), 1)), breaks = 20)
+# Histogram of query/subject all ranks: Pile up at the left of the histogram 
+# (lower/better ranks) suggests a signal, as random ranking would be uniform
 
 
+p7 <- mat_to_df(allrank_mat, value_name = "Rank") %>% 
+  ggplot(., aes(x = Rank)) +
+  geom_histogram(bins = 30) +
+  ylab("Count") +
+  ggtitle(gene_hg) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.ticks.x = element_blank(),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20))
 
 
-pxa <- data.frame(Topk = topk_rank$Topk) %>% 
+# hist(replicate(length(allrank_mat), sample(1:length(pc_hg$Symbol), 1)), breaks = 20)
+
+
+# Histogram of the example query/subject topk rank, with overlay of example gene
+
+
+p8 <- data.frame(Topk = topk_rank$Topk) %>% 
   ggplot(aes(x = Topk)) +
   geom_histogram(bins = 100) +
   geom_vline(xintercept = topk_rank$Topk[gene_hg], col = "red") +
+  ggtitle(gene_hg) +
   ylab("Count of genes") +
   xlab("Topk intersect") +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         axis.title = element_text(size = 20),
         plot.title = element_text(size = 20))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# cor_heatmap(gene_cor_hg)
-# cor_heatmap(gene_cor_mm)
-
-# pheatmap(gene_auprc_hg,
-#          cluster_rows = FALSE,
-#          cluster_cols = FALSE,
-#          border_col = "black",
-#          color = c('#f7fbff','#deebf7','#c6dbef','#9ecae1','#6baed6','#4292c6','#2171b5','#08519c','#08306b'),
-#          display_numbers = TRUE,
-#          number_color = "black",
-#          fontsize = 20,
-#          cellwidth = 50,
-#          cellheight = 50)
-
-
-# Collapse the ribosomal gene rankings: First standardize each rank (0 worst, 
-# 1 best), and then take the median of [exp1, exp2] ranks across ribo genes.
-
-# med_standard_rank <- function(mat_l, max_rank) {
-#   
-#   # because current ranks are 1=best to max_rank=worst, reverse for standard
-#   mat_l <- lapply(mat_l, function(x) (max_rank + 1 - x) / max_rank)
-#   med_mat <- apply(simplify2array(mat_l), 1:2, median)
-#   return(med_mat)
-# }
-# 
-# 
-# med_ribo_srank_hg <- med_standard_rank(int_l_hg[ribo_genes$Symbol_hg], max_rank = length(genes_hg))
-# med_ribo_srank_mm <- med_standard_rank(int_l_mm[ribo_genes$Symbol_mm], max_rank = length(genes_mm))
-# 
-# 
-# med_ribo_srank_df <- rbind(mat_to_df(diag_to_na(med_ribo_srank_hg)),
-#                            mat_to_df(diag_to_na(med_ribo_srank_mm)))
-# 
-# 
-# hist(med_ribo_srank_df$Value, breaks = 100)
-
-
-
-# # Inspect TFs
-# 
-# 
-# med_tf_srank_hg <- med_standard_rank(int_l_hg[tfs_hg], max_rank = length(genes_hg))
-# med_tf_srank_mm <- med_standard_rank(int_l_mm[tfs_mm], max_rank = length(genes_mm))
-# 
-# 
-# med_tf_srank_df <- rbind(mat_to_df(diag_to_na(med_tf_srank_hg)),
-#                          mat_to_df(diag_to_na(med_tf_srank_mm)))
-# 
-# 
-# hist(med_tf_srank_df$Value, breaks = 10)
