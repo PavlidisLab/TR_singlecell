@@ -8,7 +8,7 @@ library(WGCNA)
 library(parallel)
 library(pheatmap)
 library(RColorBrewer)
-library(cowplot)
+library(ggrepel)
 source("R/utils/functions.R")
 source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
@@ -170,16 +170,27 @@ p1 <- ggplot(tf_sim_hg[[gene_hg]]$Sim_df, aes(x = Scor, y = Topk)) +
 
 
 
-# Scatterplot of TF median topk intersect
+# Scatterplot of TF median topk intersect with text overlay for top n TFs
 
 
-scatter_topk_median <- function(summary_df) {
+scatter_topk_median <- function(summary_df, null_summary, topn_label = 30) {
+  
+  summary_df <- summary_df %>%  
+    mutate(Group = TF %in% slice_max(summary_df, Median, n = topn_label)$TF)
   
   ggplot(summary_df, aes(y = Median, x = TF)) +
     geom_point() +
-    geom_hline(yintercept = null_summ_hg["Median"], colour = "grey65") +
-    geom_hline(yintercept = null_summ_hg["1st Qu."], colour = "grey85") +
-    geom_hline(yintercept = null_summ_hg["3rd Qu."], colour = "grey40") +
+    geom_text_repel(data = filter(summary_df, Group),
+                    aes(x = TF, y = Median, label = TF, fontface = "italic"),
+                    max.overlaps = 20, 
+                    force = 0.5,
+                    nudge_x = -0.25,
+                    hjust = 0,
+                    size = 5,
+                    segment.size = 0.2) +
+    geom_hline(yintercept = null_summary["Median"], colour = "firebrick") +
+    geom_hline(yintercept = null_summary["1st Qu."], colour = "grey85") +
+    geom_hline(yintercept = null_summary["3rd Qu."], colour = "grey85") +
     ylab(paste0("Median Top k (k=", k, ")")) +
     expand_limits(x = nrow(tf_summ_hg) + 50) +  # prevent point cut off
     theme_classic() +
@@ -192,24 +203,26 @@ scatter_topk_median <- function(summary_df) {
 
 
 
-p2a <- scatter_topk_median(tf_summ_hg)
-p2b <- scatter_topk_median(tf_summ_mm)
+p2a <- scatter_topk_median(tf_summ_hg, null_summ_hg)
+p2b <- scatter_topk_median(tf_summ_mm, null_summ_mm)
+
+
 
 
 
 # Boxplot (show 1st and 3rd IQR) of TF median topk intersect
 
 
-boxplot_topk_median <- function(summary_df) {
+boxplot_topk_median <- function(summary_df, null_summary) {
   
   ggplot(summary_df, aes(x = TF)) +
     geom_boxplot(
       # aes(ymin = Min., lower = `1st Qu.`, middle = Median, upper = `3rd Qu.`, ymax = Max.),
       aes(ymin = `1st Qu.`, lower = `1st Qu.`, middle = Median, upper = `3rd Qu.`, ymax = `3rd Qu.`),
       stat = "identity") +
-    geom_hline(yintercept = null_summ_hg["Median"], colour = "firebrick", linewidth = 1.6) +
-    geom_hline(yintercept = null_summ_hg["1st Qu."], colour = "grey85") +
-    geom_hline(yintercept = null_summ_hg["3rd Qu."], colour = "grey40") +
+    geom_hline(yintercept = null_summary["Median"], colour = "firebrick", linewidth = 1.6) +
+    geom_hline(yintercept = null_summary["1st Qu."], colour = "grey85") +
+    geom_hline(yintercept = null_summary["3rd Qu."], colour = "grey40") +
     ylab(paste0("Median Top k (k=", k, ")")) +
     theme_classic() +
     theme(axis.text = element_text(size = 20),
@@ -221,8 +234,8 @@ boxplot_topk_median <- function(summary_df) {
 }
 
 
-p3a <- boxplot_topk_median(tf_summ_hg)
-p3b <- boxplot_topk_median(tf_summ_mm)
+p3a <- boxplot_topk_median(tf_summ_hg, null_summ_hg)
+p3b <- boxplot_topk_median(tf_summ_mm, null_summ_mm)
 
 
 # Density plot of topk intersect for select genes + null
