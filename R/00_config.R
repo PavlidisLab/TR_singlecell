@@ -54,7 +54,9 @@ msr_mat_mm_path <- "/space/scratch/amorin/TR_singlecell/binary_measurement_matri
 tf_sim_hg_path <- "/space/scratch/amorin/R_objects/06-07-2023_TF_similarity_human.RDS"
 tf_sim_mm_path <- "/space/scratch/amorin/R_objects/06-07-2023_TF_similarity_mouse.RDS"
 
-
+# List of summarized TF rankings
+tf_summ_hg_path <- "/space/scratch/amorin/R_objects/10-07-2023_TF_summary_human.RDS"
+tf_summ_mm_path <- "/space/scratch/amorin/R_objects/10-07-2023_TF_summary_mouse.RDS"
 
 
 # Human Protein Atlas
