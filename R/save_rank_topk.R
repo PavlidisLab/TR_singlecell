@@ -66,16 +66,6 @@ query_gene_rank_topk <- function(query_vec,
 
 
 
-# ids <- ids_hg
-# i <- ids[1]
-# j <- ids[2]
-# query_gene <- "ASCL1"
-# genes <- pc_hg$Symbol
-# k <- 1000
-# msr_mat <- msr_hg
-# ncores <- 8
-
-
 query_gene_rank_topk_all <- function(ids,
                                      query_gene,
                                      genes,
