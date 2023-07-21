@@ -763,21 +763,24 @@ add_count_info <- function(mat, meta) {
 
 
 
-# This removes from mat cells that fail any of the filters as laid out in 
+# This subsets mat to remove cells that fail any of the filters laid out in: 
 # https://hbctraining.github.io/scRNA-seq_online/lessons/04_SC_quality_control.html
+# The RNA novelty filter is relaxed for Smart-seq runs as more reads can go to
+# genes like mitochondrial https://pubmed.ncbi.nlm.nih.gov/33662621/
 
 rm_low_qc_cells <- function(mat, 
                             meta,
                             min_counts = 500,
                             min_genes = 250,
-                            min_novelty = 0.8,
+                            min_novelty = NULL,
                             max_mt_ratio = 0.2) {
   
-  keep_id <- meta %>% 
+  keep_id <- meta %>%
+    mutate(Is_smartseq = str_detect(str_to_lower(assay), "smart-seq")) %>%
     filter(
       UMI_counts >= min_counts,
       Gene_counts >= min_genes,
-      RNA_novelty > min_novelty) %>% 
+      ifelse(Is_smartseq, RNA_novelty > 0.5, RNA_novelty > 0.8)) %>%
     pull(ID)
   
   if ("MT_ratio" %in% colnames(meta)) {
