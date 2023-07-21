@@ -36,16 +36,24 @@ if (!file.exists(processed_path)) {
   
   dat <- readRDS(dat_path)
   
-  # Extract count matrix
+  # Extract count matrix: default counts slot, but use data slot if counts empty
   
   mat <- GetAssayData(dat, slot = "counts")
   
+  if (length(mat) == 0 || all(rowSums(mat) == 0)) {
+    mat <- GetAssayData(dat, slot = "data")
+  }
+  
+  
   # Ready metadata
   
-  meta <- dat@meta.data %>% 
-    dplyr::rename(Cell_type = cell_type) %>% 
+  change_colnames <- c(Cell_type = "cell_type", Old_ID = "ID")
+  
+  meta <- dat[[]] %>% 
+    dplyr::rename(any_of(change_colnames)) %>% 
     rownames_to_column(var = "ID") %>% 
     add_count_info(mat = mat)
+  
   
   # QC plots
   
