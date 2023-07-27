@@ -15,8 +15,8 @@ args <- commandArgs(trailingOnly = TRUE)
 id <- args[1]
 species <- args[2]  
 
-sc_dir <- file.path(sc_dir, id)
-dat_path <- list.files(sc_dir, pattern = ".RDS", full.names = TRUE)
+dat_dir <- file.path(sc_dir, id)
+dat_path <- list.files(dat_dir, pattern = ".RDS", full.names = TRUE)
 out_dir <- file.path(amat_dir, id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta.RDS"))
 allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.tsv"))
