@@ -1,12 +1,11 @@
 ## Project functions
 ## -----------------------------------------------------------------------------
 
-library(data.table)
+library(tidyverse, quietly = TRUE)
+library(data.table, quietly = TRUE)
 library(parallel)
-library(ROCR)
-library(DescTools)
-library(tidyverse)
-library(Seurat)
+# library(ROCR)
+# library(DescTools)
 library(WGCNA)
 library(Matrix)
 
@@ -71,6 +70,22 @@ load_dat_list <- function(ids,
   names(dat_l) <- ids
   
   return(dat_l)
+}
+
+
+
+# Uses fread() to read from path, assuming that the introduced V1 (rownames)
+# column is for genes. Coerces to matrix and assigns gene rownames.
+
+read_count_mat <- function(dat_path) {
+  
+  dat <- suppressWarnings(fread(dat_path))
+  genes <- dat$V1
+  dat$V1 <- NULL
+  mat <- as.matrix(dat)
+  rownames(mat) <- genes
+  
+  return(mat)
 }
 
 
@@ -756,7 +771,7 @@ add_count_info <- function(mat, meta) {
   }
   
   # Remove cell x gene features of this type, if present
-  meta[, c("nFeature_RNA", "nCount_RNA")] <- NULL
+  meta <- meta[, !(colnames(meta) %in% c("nFeature_RNA", "nCount_RNA"))]
   
   return(meta)
 }
