@@ -9,19 +9,23 @@ library(tidyverse)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
-sc_meta <- read_sheet(gsheets_id, sheet = "Main", trim_ws = TRUE)
+meta <- read_sheet(gsheets_id, sheet = "Main", trim_ws = TRUE)
 
 
-stopifnot(all(sc_meta$Species %in% c("Human", "Mouse")))
+stopifnot(all(meta$Species %in% c("Human", "Mouse")))
 
 
-loaded <- lapply(sc_meta$ID, function(x) {
-  f <- list.files(file.path(amat_dir, x), pattern = "RSR_allrank.tsv", full.names = TRUE)
-  if (length(f) == 0) f <- NA
-  return(f)
+loaded <- lapply(meta$ID, function(x) {
+  file.exists(file.path(amat_dir, x, paste0(x, "_RSR_allrank.tsv")))
 })
 
-names(loaded) <- sc_meta$ID
+
+meta_loaded <- meta[unlist(loaded), ]
+
+
+
+# For inspecting those that are not loaded/failed
+setdiff(meta$ID, meta_loaded$ID)
 
 
 loaded <- unlist(loaded[!is.na(loaded)])
@@ -30,7 +34,7 @@ loaded <- unlist(loaded[!is.na(loaded)])
 all_paths <- data.frame(ID = names(loaded), Path = loaded)
 
 
-sc_meta_loaded <- filter(sc_meta, ID %in% all_paths$ID) %>% 
+meta_loaded <- filter(meta, ID %in% all_paths$ID) %>% 
   left_join(all_paths, by = "ID")
   
 
@@ -52,28 +56,22 @@ add_meta_cols <- function(id) {
 }
 
 
-meta_cols <- do.call(rbind, lapply(sc_meta_loaded$ID, add_meta_cols))
+meta_cols <- do.call(rbind, lapply(meta_loaded$ID, add_meta_cols))
 
 
-stopifnot(identical(meta_cols$ID, sc_meta_loaded$ID))
-sc_meta_loaded$N_cells <- meta_cols$N_cells
-sc_meta_loaded$N_celltypes <- meta_cols$N_celltypes
+stopifnot(identical(meta_cols$ID, meta_loaded$ID))
+meta_loaded$N_cells <- meta_cols$N_cells
+meta_loaded$N_celltypes <- meta_cols$N_celltypes
 
 
-# sc_meta2 <- left_join(
-#   dplyr::select(sc_meta, -c(N_cells, N_celltypes)),
+# meta2 <- left_join(
+#   dplyr::select(meta, -c(N_cells, N_celltypes)),
 #   meta_cols, 
 #   by = "ID")
 
 
-write.table(sc_meta_loaded,
+write.table(meta_loaded,
             sep = "\t",
             row.names = FALSE,
             quote = FALSE,
-            file = sc_meta_path)
-
-
-
-
-# For inspecting those that are not loaded/failed
-# setdiff(sc_meta$ID, sc_meta_loaded$ID)
+            file = meta_path)
