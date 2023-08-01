@@ -22,12 +22,13 @@ library(Matrix)
 
 load_agg_mat_list  <- function(ids,
                                dir = "/space/scratch/amorin/TR_singlecell/",
+                               pattern = "_RSR_allrank.tsv",
                                genes,
                                sub_genes = NULL) {
   
   mat_l <- lapply(ids, function(x) {
     
-    path <- file.path(dir, x, paste0(x, "_RSR_allrank.tsv"))
+    path <- file.path(dir, x, paste0(x, pattern))
     
     if (!is.null(sub_genes)) {
       
