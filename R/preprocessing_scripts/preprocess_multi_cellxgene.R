@@ -7,6 +7,7 @@
 library(WGCNA)
 library(tidyverse)
 library(data.table)
+library(Seurat)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
