@@ -24,8 +24,8 @@ pc <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
 
 
 # Files were directly downloaded from GEO, see GSE121891_download.sh in dat_dir
-dat_path <- file.path(dat_dir, paste0(id, "_counts.txt"))
-meta_path <- file.path(dat_dir, paste0(id, "_metadata.txt"))
+dat_path <- file.path(dat_dir, paste0(id, "_counts.csv"))
+meta_path <- file.path(dat_dir, paste0(id, "_metadata.csv"))
 
 
 
@@ -35,28 +35,21 @@ if (!file.exists(processed_path)) {
   
   meta <- as.data.frame(fread(meta_path))
   mat <- read_count_mat(dat_path)
-  dat <- readRDS(dat_path)
+  mat <- mat[, meta$V1]
   
-  stopifnot(all(colnames(mat) %in% meta$V1))
-  
-  
-  # Extract count matrix: default counts slot, but use data slot if counts empty
-  
-  mat <- GetAssayData(dat, slot = "counts")
-  
-  if (length(mat) == 0 || all(rowSums(mat) == 0)) {
-    mat <- GetAssayData(dat, slot = "data")
-  }
+  stopifnot(identical(colnames(mat), meta$V1))
   
   
   # Ready metadata
+  # "GSE121891" collapse cell types
   
-  change_colnames <- c(Cell_type = "Celltypes", ID = "V1")
+  change_colnames <- c(Cell_type = "ClusterName", ID = "V1")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
-    mutate(assay = "NA") %>% 
-    rownames_to_column(var = "ID") %>% 
+    mutate(
+      assay = "10x 3' v2",
+      Cell_type = str_replace(Cell_type, "[:digit:]+$", "")) %>% 
     add_count_info(mat = mat)
   
   
