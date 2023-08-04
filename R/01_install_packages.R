@@ -7,7 +7,6 @@ if (!requireNamespace("remotes")) install.packages("remotes")
 
 
 # BiocManager::install("tanaylab/metacell")
- 
 # remotes::install_github("GfellerLab/SuperCell")
 
 install.packages("Seurat")
