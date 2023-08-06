@@ -27,7 +27,7 @@ pc <- if (str_to_lower(species) %in% c("human", "hg")) {
   read.delim(ens_hg_path, stringsAsFactors = FALSE)
 } else if (str_to_lower(species) %in% c("mouse", "mm")) {
   read.delim(ens_mm_path, stringsAsFactors = FALSE)
-} else{
+} else {
   stop("Species not recognized")
 }
 
@@ -76,7 +76,7 @@ if (!file.exists(processed_path)) {
   
   meta <- filter(meta, ID %in% colnames(mat))
   
-  stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
+  stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
   
   message(paste("Count of cells:", ncol(mat),
                 "Count unique cell types: ", n_distinct(meta$Cell_type)))
