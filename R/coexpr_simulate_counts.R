@@ -29,11 +29,11 @@ set.seed(5)
 # ------------------------------------------------------------------------------
 
 
-dat <- readRDS("/space/scratch/amorin/coexpr_sim/cheng2018_rawcounts_meta.RDS")
-# dat <- readRDS("/space/scratch/amorin/coexpr_sim/HPAP_rawcounts_meta.RDS")
+# dat <- readRDS("/space/scratch/amorin/coexpr_sim/cheng2018_rawcounts_meta.RDS")
+dat <- readRDS("/space/scratch/amorin/coexpr_sim/HPAP_rawcounts_meta.RDS")
 
 meta <- dat$Meta
-ct <- as.character(unique(meta$Cell_type))[5]
+ct <- "endothelial cell"  # "Merkel cell"  "melanocyte" "pancreatic D cell"
 ref_mat <- as.matrix(dat$Mat[, filter(meta, Cell_type == ct)$ID])
 
 
@@ -90,7 +90,7 @@ generate_sample_counts <- function(gene_qtls, ref_mat, ncore = 8) {
   
   sample_mat <- do.call(rbind, sample_l)
   
-  # Names used for tracking are of form "Qtl:[quantile_bin]_[gene_number]
+  # Names used for tracking are of form "Qtl[quantile_bin]_[gene_number]
   
   rownames(sample_mat) <- paste0("Qtl", 
                                  rep(1:nqtls, each = n_genes_per_qtl), 
@@ -173,7 +173,10 @@ get_plot_df <- function(cor_mat, nqtls, ncore = 8) {
     data.frame(Group = paste0("Qtl", x), mat_to_df(cor_mat[ix, ix]))
   }, mc.cores = ncore)
   
-  return(do.call(rbind, df_l))
+  df <- as.data.frame(do.call(rbind, df_l)) %>% 
+    mutate(Group = factor(Group, levels = unique(Group)))
+  
+  return(df)
 }
 
 
@@ -182,12 +185,14 @@ cor_boxplot <- function(plot_df, title) {
   
   ggplot(plot_df, aes(x = Group, y = Value)) +
     geom_boxplot() +
+    ylim(c(-0.5, 1)) +
     ggtitle(title) +
     ylab("Pearson's correlation") +
     xlab("Binned genes") +
     theme_classic() +
     theme(axis.text = element_text(size = 20),
           axis.title = element_text(size = 20),
+          plot.title = element_text(size = 20),
           axis.text.x = element_blank(),
           axis.ticks.x = element_blank())
 }
@@ -205,23 +210,23 @@ boxplot_l <- lapply(1:length(plot_df_l), function(x) {
   cor_boxplot(plot_df_l[[x]], title = names(plot_df_l)[x])
 }) 
                     
-                    
 
-
-
-# TODO: why is there is a low quantile group with nonzero cor? Qtl3
 
 
 # Inspect the averaged correlations for top quantile/bin across all genes, not
-# just within the bin. Do same for lower bins and compare
+# just within the bin. Do same for a lower bin. Only considering non-zero cors, 
+# which approx starts at Q50
 
 
-mat_l$Sample
+ix_start <- which(str_detect(colnames(cor_l$Sample), "Qtl50_"))[1]
+ix_q100 <- which(str_detect(colnames(cor_l$Sample), "Qtl100_"))
+ix_q75 <- which(str_detect(colnames(cor_l$Sample), "Qtl75_"))
+ix_start_exclude_q100 <- setdiff(ix_start:nrow(sample_mat), ix_q100)
+ix_start_exclude_q75 <- setdiff(ix_start:nrow(sample_mat), ix_q75)
 
-filter(pdf1, str_detect(Row, "Qtl:99") | str_detect(col, "Qtl:99"))
-filter(pdf1, str_detect(Row, "Qtl:75") | str_detect(col, "Qtl:75"))
 
-
+plot(density(rowMeans(cor_l$Sample[, ix_start_exclude_q100])), main = NA)
+lines(density(rowMeans(cor_l$Sample[, ix_start_exclude_q75])), col = "red")
 
 
 
@@ -230,15 +235,15 @@ filter(pdf1, str_detect(Row, "Qtl:75") | str_detect(col, "Qtl:75"))
 
 
 plot_df1 <- rbind(
-  data.frame(Group = "Q26", Counts = ref_mat[sample(names(gene_qtls$`26`), 1), ]),
-  data.frame(Group = "Q50", Counts = ref_mat[sample(names(gene_qtls$`50`), 1), ]),
-  data.frame(Group = "Q75", Counts = ref_mat[sample(names(gene_qtls$`75`), 1), ]),
-  data.frame(Group = "Q99", Counts = ref_mat[sample(names(gene_qtls$`99`), 1), ])
+  data.frame(Group = "Q27", Counts = ref_mat[sample(names(gene_qtls$Qtl27), 1), ]),
+  data.frame(Group = "Q50", Counts = ref_mat[sample(names(gene_qtls$Qtl50), 1), ]),
+  data.frame(Group = "Q75", Counts = ref_mat[sample(names(gene_qtls$Qtl75), 1), ]),
+  data.frame(Group = "Q100", Counts = ref_mat[sample(names(gene_qtls$Qtl100), 1), ])
 )
 
+plot_df1$Group <- factor(plot_df1$Group, levels = unique(plot_df1$Group))
 
 boxplot(plot_df1$Counts ~ plot_df1$Group)
-
 
 
 
@@ -248,10 +253,5 @@ plot(sample_mean)
 plot(gene_mean)
 
 # Inspect raw versus norm
-plot(sample_mat["Qtl:67_67", ],sample_mat_cpm["Qtl:67_67", ])
-plot(sample_mat["Qtl:67_67", ],sample_mat_lognorm["Qtl:67_67", ])
-
-
-
-
-
+plot(sample_mat["Qtl67_67", ],sample_mat_cpm["Qtl67_67", ])
+plot(sample_mat["Qtl67_67", ],sample_mat_lognorm["Qtl67_67", ])
