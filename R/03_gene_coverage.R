@@ -33,6 +33,9 @@ ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 evidence_l <- readRDS(evidence_path)
 
 
+# Functions
+# ------------------------------------------------------------------------------
+
 
 # Load matrices that track counts of NA pairs (lack of mutual measurement)
 # across datasets/ids into a list
