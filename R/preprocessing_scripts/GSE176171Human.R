@@ -40,7 +40,7 @@ if (!file.exists(processed_path)) {
   barcodes <- read.delim(barcodes_path, header = FALSE)
   mat <- Matrix::readMM(mat_path)
   
-  rownames(mat) <- features$V1
+  rownames(mat) <- str_replace(features$V1, "\\.[:digit:]+$", "")
   colnames(mat) <- barcodes$V1
   
   common <- intersect(colnames(mat), meta$cell_id)
@@ -74,7 +74,8 @@ if (!file.exists(processed_path)) {
   # Remove cells failing QC, keep only protein coding genes, and normalize
   
   mat <- rm_low_qc_cells(mat, meta) %>%
-    get_pcoding_only(pcoding_df = pc) %>% 
+    ensembl_to_symbol(., ensembl_df = pc) %>% 
+    get_pcoding_only(., pcoding_df = pc) %>% 
     Seurat::LogNormalize(., verbose = FALSE)
   
   meta <- filter(meta, ID %in% colnames(mat))

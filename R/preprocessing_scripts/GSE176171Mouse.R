@@ -74,8 +74,8 @@ if (!file.exists(processed_path)) {
   # Remove cells failing QC, keep only protein coding genes, and normalize
   
   mat <- rm_low_qc_cells(mat, meta) %>%
-    ensembl_to_symbol(mat = ., ensembl_df = pc) %>% 
-    get_pcoding_only(pcoding_df = pc) %>% 
+    ensembl_to_symbol(., ensembl_df = pc) %>% 
+    get_pcoding_only(., pcoding_df = pc) %>% 
     Seurat::LogNormalize(., verbose = FALSE)
   
   meta <- filter(meta, ID %in% colnames(mat))

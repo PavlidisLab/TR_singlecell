@@ -21,7 +21,7 @@ allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.tsv"))
 namat_path <- file.path(out_dir, paste0(id, "_NA_mat.tsv"))
 
 
-pc <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
+pc <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 
 
 # Files were directly downloaded from GEO, see GSE183310_download.sh in dat_dir
@@ -35,7 +35,8 @@ barcodes_path <- list.files(dat_dir, pattern = "barcodes", full.names = TRUE)
 if (!file.exists(processed_path)) {
   
   # Load metadata and the count matrix
-  # GSE183310: All barcodes/features/matrix are the same, so just use one
+  # GSE183310: All barcodes/features/matrix are the same, so just use one.
+  # Also must remove duplicates that are ambiguous between meta and barcodes
   
   meta <- as.data.frame(fread(meta_path))
   features <- read.delim(features_path[1], header = FALSE)
@@ -46,7 +47,8 @@ if (!file.exists(processed_path)) {
   
   meta$Barcode <- str_replace(meta$Barcode, "_[:digit:]$", "")
   common <- intersect(meta$Barcode, colnames(mat))
-  meta <- filter(meta, Barcode %in% common)
+  dupl <- common[which(duplicated(meta$Barcode))]
+  meta <- filter(meta, Barcode %in% common & !(Barcode %in% dupl))
   mat <- mat[, meta$Barcode]
 
   stopifnot(identical(colnames(mat), meta$Barcode))
@@ -76,13 +78,14 @@ if (!file.exists(processed_path)) {
   # Remove cells failing QC, keep only protein coding genes, and normalize
   
   mat <- rm_low_qc_cells(mat, meta) %>%
-    ense
-    get_pcoding_only(pcoding_df = pc) %>% 
+    ensembl_to_symbol(., ensembl_df = pc) %>% 
+    get_pcoding_only(., pcoding_df = pc) %>% 
     Seurat::LogNormalize(., verbose = FALSE)
   
   meta <- filter(meta, ID %in% colnames(mat))
+  mat <- mat[, meta$ID]
   
-  stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
+  stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
   
   message(paste("Count of cells:", ncol(mat),
                 "Count unique cell types: ", n_distinct(meta$Cell_type)))
