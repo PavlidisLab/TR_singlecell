@@ -256,7 +256,7 @@ density_topk <- function(plot_df) {
       legend.position = c(0.75, 0.90),
       legend.text = element_text(size = 20),
       legend.title = element_blank(),
-      plot.margin = margin(10, 20, 10, 10))
+      plot.margin = margin(10, 30, 10, 10))
 }
 
 
@@ -266,11 +266,14 @@ density_topk <- function(plot_df) {
 example_tf_hg <- "ASCL1"
 example_tf_mm <- "Ascl1"
 
+max_tf_hg <- as.character(slice_max(tf_summ_hg, Median)$TF)
+max_tf_mm <- as.character(slice_max(tf_summ_mm, Median)$TF)
+
 example_ribo_hg <- "RPL3"
 example_ribo_mm <- "Rpl3"
 
-max_tf_hg <- tf_sim_hg[[as.character(slice_max(tf_summ_hg, Median)$TF)]]$Sim_df
-max_tf_mm <- tf_sim_mm[[as.character(slice_max(tf_summ_mm, Median)$TF)]]$Sim_df
+max_tf_df_hg <- tf_sim_hg[[max_tf_hg]]$Sim_df
+max_tf_df_mm <- tf_sim_mm[[max_tf_mm]]$Sim_df
 
 tf_df_hg <- tf_sim_hg[[example_tf_hg]]$Sim_df
 tf_df_mm <- tf_sim_mm[[example_tf_mm]]$Sim_df
@@ -286,21 +289,21 @@ rep_null_mm <- null_topk_mm[[sample(1:length(null_topk_mm), 1)]]
 
 
 plot_df_hg <- data.frame(
-  Group = c(rep("Max", nrow(max_tf_hg)), 
+  Group = c(rep(max_tf_hg, nrow(max_tf_df_hg)), 
             rep(example_tf_hg, nrow(tf_df_hg)), 
             rep(example_ribo_hg, nrow(ribo_df_hg)), 
             rep("Null", nrow(rep_null_hg))),
-  Topk = c(max_tf_hg$Topk, tf_df_hg$Topk, ribo_df_hg$Topk, rep_null_hg$Topk)
+  Topk = c(max_tf_df_hg$Topk, tf_df_hg$Topk, ribo_df_hg$Topk, rep_null_hg$Topk)
 )
 
 
 
 plot_df_mm <- data.frame(
-  Group = c(rep("Max", nrow(max_tf_mm)), 
+  Group = c(rep(max_tf_mm, nrow(max_tf_df_mm)), 
             rep(example_tf_mm, nrow(tf_df_mm)), 
             rep(example_ribo_mm, nrow(ribo_df_mm)), 
             rep("Null", nrow(rep_null_mm))),
-  Topk = c(max_tf_mm$Topk, tf_df_mm$Topk, ribo_df_mm$Topk, rep_null_mm$Topk)
+  Topk = c(max_tf_df_mm$Topk, tf_df_mm$Topk, ribo_df_mm$Topk, rep_null_mm$Topk)
 )
 
 

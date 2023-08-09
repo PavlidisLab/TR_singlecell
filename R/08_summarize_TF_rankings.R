@@ -49,8 +49,10 @@ colnames(rank_mat_mm) <- names(summ_mm)
 # TODO: are these genes high because of technical aspect?
 
 rank_order_hg <- sort(rowMeans(rank_mat_hg, na.rm = TRUE))
-head(sort(rank_mat_hg["HNRNPA2B1",]), 50)
-head(sort(rank_mat_hg["DIXDC1",]), 50)
+head(rank_order_hg)
+head(sort(rank_order_hg, decreasing = TRUE))
+head(sort(rank_mat_hg["RPL3",]), 50)
+head(sort(rank_mat_hg["DLL3",]), 50)
 head(sort(rank_mat_hg["DIXDC1",], decreasing = TRUE), 50)
 
 
