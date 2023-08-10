@@ -1,4 +1,5 @@
-##
+## Organize examples like the most correlated gene pairs across datasets, such as
+## the ribosomal L/S genes, and provide plots of the underlying correlations
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -14,51 +15,18 @@ source("R/00_config.R")
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
-
-#
-pc_ortho <- read.delim(pc_ortho_path)
-
-# Ranked targets from paper
-evidence_l <- readRDS(evidence_path)
-tfs_mm <- names(evidence_l$Mouse)
-tfs_hg <- names(evidence_l$Human)
-
-# IDs for scRNA-seq datasets
 ids_hg <- filter(sc_meta, Species == "Human")$ID
 ids_mm <- filter(sc_meta, Species == "Mouse")$ID
-ids <- union(ids_hg, ids_mm)
 
-# Load aggregate matrix into list
-# agg_files <- list.files(amat_dir, pattern = "_RSR_allrank.RDS", recursive = TRUE, full.names = TRUE)
-# agg_l <- lapply(agg_files, readRDS)
-agg_hg <- lapply(ids_hg, function(x) readRDS(file.path(amat_dir, x, paste0(x, "_RSR_allrank.RDS"))))
-names(agg_hg) <- ids_hg
-agg_hg <- lapply(agg_hg, lowertri_to_symm)
-agg_mm <- lapply(ids_mm, function(x) readRDS(file.path(amat_dir, x, paste0(x, "_RSR_allrank.RDS"))))
-names(agg_mm) <- ids_mm
-agg_mm <- lapply(agg_mm, lowertri_to_symm)
-
-gc()
-
-# Load mat and meta
-# dat_files <- list.files(amat_dir, pattern = "_clean_mat_and_meta.RDS", recursive = TRUE, full.names = TRUE)
-# dat_l <- lapply(dat_files, readRDS)
-# dat_mm <- lapply(ids_mm, function(x) readRDS(file.path(amat_dir, x, paste0(x, "_clean_mat_and_meta.RDS")))
-# names(dat_mm) <- ids_mm
-# dat_hg <- lapply(ids_hg, function(x) readRDS(file.path(amat_dir, x, paste0(x, "_clean_mat_and_meta.RDS")))
-# names(dat_hg) <- ids_hg
-
-
-genes_hg <- rownames(agg_hg[[1]])
-genes_mm <- rownames(agg_mm[[1]])
-
-
-
+# Protein coding genes
+pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
+pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
+pc_ortho <- read.delim(pc_ortho_path)
 
 # Using ribosomal genes as a sanity check
-check_hg <- do.call(cbind, lapply(agg_hg, function(x) names(head(sort(x[, "RPL3"], decreasing = TRUE), 10))))
-check_mm <- do.call(cbind, lapply(agg_mm, function(x) names(head(sort(x[, "Rpl3"], decreasing = TRUE), 10))))
-
+sribo_hg <- read.csv("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
+lribo_hg <- read.csv("/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
+ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
 
 # List of max pairs for each data set
 
