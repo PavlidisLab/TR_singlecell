@@ -16,6 +16,8 @@ source("R/00_config.R")
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
+ids_hg <- filter(sc_meta, Species == "Human")$ID
+ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 
 # Protein coding genes
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
@@ -25,11 +27,7 @@ pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% pc_hg$Symbol)
 tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
 
-# IDs for scRNA-seq datasets
-ids_hg <- filter(sc_meta, Species == "Human")$ID
-ids_mm <- filter(sc_meta, Species == "Mouse")$ID
-
-# Ranked targets from paper
+# Ranked targets from Morin2023
 evidence_l <- readRDS(evidence_path)
 
 
@@ -47,7 +45,7 @@ load_na_mat_list <- function(ids,
   
   mat_l <- lapply(ids, function(x) {
     
-    path <- file.path(amat_dir, x, paste0(x, "_NA_mat.tsv"))
+    path <- file.path(dir, x, paste0(x, "_NA_mat.tsv"))
     
     if (!is.null(sub_genes)) {
       
@@ -90,7 +88,8 @@ get_gene_msr_mat <- function(ids, meta, genes) {
     
     na_mat <- load_na_mat_list(id, genes = genes)[[1]]
     n_celltype <- filter(meta, ID == id)$N_celltype
-    msr_mat[, id] <- as.integer(diag(na_mat) != n_celltype)
+    binary_msr <- as.integer(diag(na_mat) != n_celltype)
+    msr_mat[, id] <- binary_msr
     rm(na_mat)
     gc(verbose = FALSE)
     
@@ -120,56 +119,67 @@ if (!file.exists(msr_mat_mm_path)) {
 
 
 # Get the average/proportion of measurement across experiments
+# Human: all genes are measured at least twice and 5,183 genes always measured
+# TODO Mouse: 
 # ------------------------------------------------------------------------------
 
 
-avg_msr_hg <- sort(rowMeans(msr_mat_hg), decreasing = TRUE)
-avg_msr_mm <- sort(rowMeans(msr_mat_mm), decreasing = TRUE)
+count_msr_hg <- rowSums(msr_mat_hg)
+prop_msr_hg <- count_msr_hg / ncol(msr_mat_hg)
+
+count_msr_mm <- rowSums(msr_mat_mm)
+prop_msr_mm <- count_msr_mm / ncol(msr_mat_mm)
 
 
-never_msr_hg <- avg_msr_hg[avg_msr_hg == 0]
-never_msr_mm <- avg_msr_mm[avg_msr_mm == 0]
-
-
-always_msr_hg <- avg_msr_hg[avg_msr_hg == 1]
-always_msr_mm <- avg_msr_mm[avg_msr_mm == 1]
-
-
-
-# Focus on TFs
-
-
-tf_avg_msr_hg <- avg_msr_hg[tfs_hg$Symbol]
-tf_avg_msr_mm <- avg_msr_mm[tfs_mm$Symbol]
-
-
-avg_msr_df <- data.frame(
-  Prop_msr = c(avg_msr_hg, avg_msr_mm),
-  Symbol = c(names(avg_msr_hg), names(avg_msr_mm)),
-  Species = c(rep("Human", length(avg_msr_hg)), rep("Mouse", length(avg_msr_mm))),
-  TF = c(names(avg_msr_hg) %in% tfs_hg$Symbol, names(avg_msr_mm) %in% tfs_mm$Symbol)
+gene_msr_df <- data.frame(
+  Count_msr = c(count_msr_hg, count_msr_mm),
+  Proportion_msr = c(prop_msr_hg, prop_msr_mm),
+  Symbol = c(names(prop_msr_hg), names(prop_msr_mm)),
+  Species = c(rep("Human", length(prop_msr_hg)), rep("Mouse", length(prop_msr_mm))),
+  TF = c(names(prop_msr_hg) %in% tfs_hg$Symbol, names(prop_msr_mm) %in% tfs_mm$Symbol)
 )
 
 
-p1a <- ggplot(avg_msr_df, aes(x = Prop_msr, fill = TF)) +
-  facet_wrap(~Species) +
-  geom_density(alpha = 0.4, position = "stack") +
-  theme_classic()
-  
+never_msr <- gene_msr_df %>% 
+  filter(Proportion_msr == 0) %>%
+  split(.$Species)
 
-p1b <- ggplot(avg_msr_df, aes(y = Prop_msr, x = TF)) +
-  facet_wrap(~Species) +
-  geom_boxplot(alpha = 0.4) +
-  theme_classic()
+
+rarely_msr <- gene_msr_df %>% 
+  filter(Count_msr < 5) %>%
+  arrange(Count_msr) %>% 
+  split(.$Species)
+
+
+always_msr <- gene_msr_df %>% 
+  filter(Proportion_msr == 1) %>%
+  split(.$Species)
+
+
+tf_med_count <- gene_msr_df %>% 
+  group_by(Species, TF) %>% 
+  summarise(Median_count = median(Count_msr), .groups = "keep")
+
+
+tf_wilx_count <- gene_msr_df %>% 
+  group_by(Species) %>% 
+  do(W = wilcox.test(Count_msr ~ TF, data = ., paired = FALSE)) %>% 
+  summarise(Species, Wilcox = W$p.value)
 
 
 
 # Look at experiment-wise gene coverage
+# TabulaSapiens and Olah2020 measure every human gene, GSE85241 min at 8953
+# TODO: mouse
 # ------------------------------------------------------------------------------
 
 
 exp_hg <- sort(colSums(msr_mat_hg), decreasing = TRUE)
 exp_mm <- sort(colSums(msr_mat_mm), decreasing = TRUE)
+
+colSums(msr_mat_mm)
+sum(msr_mat_mm[, "GSE222956"])
+sum(msr_mat_mm[, "GSE225170"])
 
 
 exp_df <- data.frame(
@@ -179,12 +189,9 @@ exp_df <- data.frame(
 )
 
 
-p2 <- ggplot(exp_df, aes(x = Gene_count)) +
-  facet_wrap(~Species) +
-  geom_histogram(bins = 20) +
-  theme_classic()
 
 
+sum(msr_mat_mm[, "GSE222956"])
 
 
 # Examining instances of genes with strong regulation evidence but are never
@@ -297,3 +304,29 @@ top_mm <- gene_evidence_mm %>%
 
 rowSums(msr_mat_hg[top_hg$Symbol, ])
 rowSums(msr_mat_mm[top_mm$Symbol, ])
+
+
+# Plots
+# ------------------------------------------------------------------------------
+
+
+# Looking at the proportion of gene measurement split by TF status
+
+p1a <- ggplot(gene_msr_df, aes(x = Prop_msr, fill = TF)) +
+  facet_wrap(~Species) +
+  geom_density(alpha = 0.4, position = "stack") +
+  theme_classic()
+
+
+p1b <- ggplot(gene_msr_df, aes(y = Prop_msr, x = TF)) +
+  facet_wrap(~Species) +
+  geom_boxplot(alpha = 0.4) +
+  theme_classic()
+
+
+# Look at experiment counts of gene measurement 
+
+p2 <- ggplot(exp_df, aes(x = Gene_count)) +
+  facet_wrap(~Species) +
+  geom_histogram(bins = 20) +
+  theme_classic()
