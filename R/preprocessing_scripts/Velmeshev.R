@@ -16,8 +16,6 @@ genes_path <- file.path(sc_dir, "genes.tsv")
 out_dir <- file.path("/space/scratch/amorin/TR_singlecell", id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta.RDS"))
 allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.RDS"))
-colrank_path <- file.path(out_dir, paste0(id, "_RSR_colrank.RDS"))
-zcor_path <- file.path(out_dir, paste0(id, "_fishersZ.RDS"))
 pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 
 
@@ -33,10 +31,14 @@ if (!file.exists(processed_path)) {
   colnames(mat) <- meta$cell
   rownames(mat) <- genes$V2
   
+  
   # Ready metadata
   
+  change_colnames <- c(Cell_type = "cluster", ID = "cell")
+  
   meta <- meta %>% 
-    dplyr::rename(ID = cell, Cell_type = cluster) %>% 
+    dplyr::rename(any_of(change_colnames)) %>% 
+    mutate(assay = "10x 3' v1") %>% 
     add_count_info(mat = mat)
   
   # QC plots
@@ -57,8 +59,12 @@ if (!file.exists(processed_path)) {
     Seurat::LogNormalize(., verbose = FALSE)
   
   meta <- filter(meta, ID %in% colnames(mat))
+  mat <- mat[, meta$ID]
   
-  stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
+  stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
+  
+  message(paste("Count of cells:", ncol(mat),
+                "Count unique cell types: ", n_distinct(meta$Cell_type)))
   
   saveRDS(list(Mat = mat, Meta = meta), file = processed_path)
   
@@ -67,8 +73,8 @@ if (!file.exists(processed_path)) {
 } else {
   
   dat <- readRDS(processed_path)
-  meta <- dat[[2]]
-  mat <- dat[[1]]
+  meta <- dat$Meta
+  mat <- dat$Mat
   
 }
 
@@ -80,18 +86,29 @@ mat <- as.matrix(mat)
 
 
 if (!file.exists(allrank_path)) {
+  
   rsr_all <- RSR_allrank(mat, meta)
-  saveRDS(rsr_all, allrank_path)
+  
+  # Write as data.frames (preserve rownames) with data.table fwrite (fast)
+  
+  fwrite(
+    data.frame(rsr_all$Agg_mat, check.names = FALSE),
+    sep = "\t",
+    row.names = TRUE,
+    quote = FALSE,
+    verbose = FALSE,
+    showProgress = FALSE,
+    file = allrank_path
+  )
+  
+  
+  fwrite(
+    data.frame(rsr_all$NA_mat, check.names = FALSE),
+    sep = "\t",
+    row.names = TRUE,
+    quote = FALSE,
+    verbose = FALSE,
+    showProgress = FALSE,
+    file = namat_path
+  )
 }
-
-
-# if (!file.exists(colrank_path)) {
-#   rsr_col <- RSR_colrank(mat, meta)
-#   saveRDS(rsr_col, colrank_path)
-# }
-# 
-# 
-# if (!file.exists(zcor_path)) {
-#   zcor <- fishersZ_aggregate(mat, meta)
-#   saveRDS(zcor, zcor_path)
-# }

@@ -4,6 +4,7 @@
 library(WGCNA)
 library(tidyverse)
 library(data.table)
+library(Seurat)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
@@ -33,7 +34,6 @@ if (!file.exists(processed_path)) {
   # Load metadata and the count matrices, binding into one matrix
   
   dat <- readRDS(dat_path)
-  
   
   # Extract count matrix: default counts slot, but use data slot if counts empty
   

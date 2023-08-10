@@ -42,7 +42,7 @@ if (!file.exists(processed_path)) {
   mat <- mat[, intersect(colnames(mat), meta$Well_ID)]
   meta <- filter(meta, Well_ID %in% colnames(mat))
   
-  stopifnot(all(colnames(mat) %in% meta$Well_ID))
+  stopifnot(identical(colnames(mat), meta$Well_ID))
   
   
   # Ready metadata

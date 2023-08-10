@@ -75,6 +75,7 @@ if (!file.exists(processed_path)) {
     Seurat::LogNormalize(., verbose = FALSE)
   
   meta <- filter(meta, ID %in% colnames(mat))
+  mat <- mat[, meta$ID]
   
   stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
   

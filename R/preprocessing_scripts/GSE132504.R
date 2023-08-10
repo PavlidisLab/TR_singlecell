@@ -67,8 +67,9 @@ if (!file.exists(processed_path)) {
     Seurat::LogNormalize(., verbose = FALSE)
   
   meta <- filter(meta, ID %in% colnames(mat))
+  mat <- mat[, meta$ID]
   
-  stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
+  stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
   
   message(paste("Count of cells:", ncol(mat),
                 "Count unique cell types: ", n_distinct(meta$Cell_type)))

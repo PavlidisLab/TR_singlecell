@@ -26,10 +26,6 @@ pc <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
 
 # Files were directly downloaded from GEO, see GSE198582_download.sh in dat_dir
 dat_path <- list.files(dat_dir, pattern = "seurat", full.names = TRUE)
-meta_path <- file.path(dat_dir, "GSE210139_single_cell_CREST_barcode_qc_updated20230422.rds")
-
-meta <- readRDS(meta_path)
-meta <- do.call(rbind, meta)
 
 
 

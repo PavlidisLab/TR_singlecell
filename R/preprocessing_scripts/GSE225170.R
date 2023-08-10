@@ -10,7 +10,7 @@ source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 
 id <- "GSE225170"
-species <- "Mouse"
+species <- "Human"
 
 dat_dir <- file.path(sc_dir, id)
 if (!dir.exists(dat_dir)) dir.create(dat_dir)
@@ -21,7 +21,7 @@ allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.tsv"))
 namat_path <- file.path(out_dir, paste0(id, "_NA_mat.tsv"))
 
 
-pc <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
+pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 
 
 # Files were directly downloaded from GEO, see GSE225170_download.sh in dat_dir

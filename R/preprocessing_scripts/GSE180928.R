@@ -25,23 +25,25 @@ zcor_path <- file.path(out_dir, paste0(id, "_fishersZ.RDS"))
 pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 
 
+
 if (!file.exists(processed_path)) {
   
-  dat <- read.delim(dat_path, sep = ",")
   meta <- read.delim(meta_path, sep = ",")
   
-  # Preparing count matrix
+  mat <- read_count_mat(dat_path)
+  colnames(mat) <- str_replace_all(colnames(mat), "\\.", "-")
+  mat <- mat[, meta$X]
   
-  rownames(dat) <- dat$X
-  dat$X <- NULL
-  colnames(dat) <- str_replace_all(colnames(dat), "\\.", "_")
-  mat <- Matrix(as.matrix(dat), sparse = TRUE)
+  stopifnot(identical(colnames(mat), meta$X))
+  
   
   # Ready metadata
   
+  change_colnames <- c(Cell_type = "Lineage", ID = "X")
+  
   meta <- meta %>% 
-    dplyr::rename(ID = X, Cell_type = Lineage) %>% 
-    mutate(ID = str_replace_all(ID, "-", "_")) %>% 
+    dplyr::rename(any_of(change_colnames)) %>% 
+    mutate(assay = "10x 3' v2/v3") %>% 
     add_count_info(mat = mat)
   
   # QC plots
@@ -62,8 +64,9 @@ if (!file.exists(processed_path)) {
     Seurat::LogNormalize(., verbose = FALSE)
     
   meta <- filter(meta, ID %in% colnames(mat))
+  mat <- mat[, meta$ID]
   
-  stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
+  stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
   
   saveRDS(list(Mat = mat, Meta = meta), file = processed_path)
   

@@ -38,7 +38,7 @@ if (!file.exists(processed_path)) {
   # Extract count matrix: default counts slot, but use data slot if counts empty
   # "GSE179442" count slot was variable gene subset, have to extract RNA for all genes
   
-  mat <- dat@assays$RNA
+  mat <- dat@assays$RNA@counts
   
   
   # Ready metadata
@@ -66,15 +66,16 @@ if (!file.exists(processed_path)) {
   ggsave(p2, device = "png", dpi = 300, height = 8, width = 8,
          filename = file.path(out_dir, paste0(id, "_QC_scatter.png")))
   
-  # Remove cells failing QC, keep only protein coding genes
-  # "GSE179442" already shows signs of norm
+  # Remove cells failing QC, keep only protein coding genes, and normalize
   
   mat <- rm_low_qc_cells(mat, meta) %>%
-    get_pcoding_only(pcoding_df = pc)
+    get_pcoding_only(pcoding_df = pc) %>% 
+    Seurat::LogNormalize(., verbose = FALSE)
   
   meta <- filter(meta, ID %in% colnames(mat))
+  mat <- mat[, meta$ID]
   
-  stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
+  stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
   
   message(paste("Count of cells:", ncol(mat),
                 "Count unique cell types: ", n_distinct(meta$Cell_type)))

@@ -42,7 +42,7 @@ if (!file.exists(processed_path)) {
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
-    mutate(assay = "10x") %>% 
+    mutate(assay = "10x 3' v1") %>% 
     add_count_info(mat = mat)
   
   

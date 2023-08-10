@@ -62,11 +62,11 @@ if (!file.exists(processed_path)) {
   ggsave(p2, device = "png", dpi = 300, height = 8, width = 8,
          filename = file.path(out_dir, paste0(id, "_QC_scatter.png")))
   
-  # Remove cells failing QC, keep only protein coding genes, and normalize
+  # Remove cells failing QC, keep only protein coding genes
+  # "GSE231924" already norm
   
   mat <- rm_low_qc_cells(mat, meta) %>%
-    get_pcoding_only(pcoding_df = pc) %>% 
-    Seurat::LogNormalize(., verbose = FALSE)
+    get_pcoding_only(pcoding_df = pc) 
   
   meta <- filter(meta, ID %in% colnames(mat))
   mat <- mat[, meta$ID]

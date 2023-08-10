@@ -35,14 +35,9 @@ if (!file.exists(processed_path)) {
   
   dat <- readRDS(dat_path)
 
-  # Extract count matrix: default counts slot, but use data slot if counts empty
-  # "GSE201653" need to directly access counts
+  # Extract count matrix: "GSE201653" need to directly access counts
   
   mat <- dat@assays$RNA@counts
-  
-  if (length(mat) == 0 || all(rowSums(mat) == 0)) {
-    mat <- GetAssayData(dat, slot = "data")
-  }
   
   
   # Ready metadata

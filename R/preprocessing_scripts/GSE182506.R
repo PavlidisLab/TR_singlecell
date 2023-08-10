@@ -4,6 +4,7 @@
 library(WGCNA)
 library(tidyverse)
 library(data.table)
+library(Seurat)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
@@ -34,14 +35,12 @@ if (!file.exists(processed_path)) {
   
   dat <- readRDS(dat_path)
   
-  
   # Extract count matrix: default counts slot, but use data slot if counts empty
-  # "GSE182506" already normalized
   
   mat <- GetAssayData(dat, slot = "counts")
   
   if (length(mat) == 0 || all(rowSums(mat) == 0)) {
-    mat <- GetAssayData(dat, slot = "data")
+    mat <- dat@assays$RNA@counts
   }
   
   
@@ -72,13 +71,15 @@ if (!file.exists(processed_path)) {
          filename = file.path(out_dir, paste0(id, "_QC_scatter.png")))
   
   # Remove cells failing QC, keep only protein coding genes
-  # "GSE182506" already normalized and so remove QC step as requires raw counts
-  
-  mat <- get_pcoding_only(mat, pcoding_df = pc)
+
+  mat <- rm_low_qc_cells(mat, meta) %>%
+    get_pcoding_only(pcoding_df = pc) %>% 
+    Seurat::LogNormalize(., verbose = FALSE)
     
   meta <- filter(meta, ID %in% colnames(mat))
+  mat <- mat[, meta$ID]
   
-  stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
+  stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
   
   message(paste("Count of cells:", ncol(mat),
                 "Count unique cell types: ", n_distinct(meta$Cell_type)))

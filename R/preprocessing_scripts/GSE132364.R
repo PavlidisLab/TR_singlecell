@@ -36,7 +36,6 @@ if (!file.exists(processed_path)) {
   load(dat_path)
   dat <- UpdateSeuratObject(full.seurat)
   
-  
   # Extract count matrix: default counts slot, but use data slot if counts empty
   
   mat <- GetAssayData(dat, slot = "counts")
@@ -75,8 +74,9 @@ if (!file.exists(processed_path)) {
     get_pcoding_only(pcoding_df = pc)
 
   meta <- filter(meta, ID %in% colnames(mat))
+  mat <- mat[, meta$ID]
   
-  stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
+  stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
   
   message(paste("Count of cells:", ncol(mat),
                 "Count unique cell types: ", n_distinct(meta$Cell_type)))
