@@ -15,38 +15,45 @@ library(Matrix)
 # ------------------------------------------------------------------------------
 
 
+# Calls data.table::fread() to read in a table where the first column corresponds
+# to gene names, and convert this table to a gene x gene matrix. 
+# sub_genes controls if only a subset of column genes should be loaded 
 
-# Loads aggregate correlation matrices into a list. Data is saved as tsv (using 
-# fread/fwrite for speed) with symbols/rownames as first column, and must be 
-# converted back to matrix with rownames and colnames set
+fread_to_mat <- function(path, genes, sub_genes = NULL) {
+  
+  if (!is.null(sub_genes)) {
+    
+    dat <- fread(path, sep = "\t", select = c("V1", sub_genes))
+    mat <- as.matrix(dat[, -1, drop = FALSE])
+    rownames(mat) <- dat$V1
+    colnames(mat) <- sub_genes
+    mat <- mat[genes, sub_genes, drop = FALSE]
+    
+  } else {
+    
+    dat <- fread(path, sep = "\t")
+    mat <- as.matrix(dat[, -1, drop = FALSE])
+    rownames(mat) <- colnames(mat) <- dat$V1
+    mat <- mat[genes, genes, drop = FALSE]
+  }
+  
+  return(mat)
+}
+
+
+
+# Loads aggregate correlation matrices or NA count matrices for the given dataset
+# ids into a list. 
 
 load_agg_mat_list  <- function(ids,
                                dir = "/space/scratch/amorin/TR_singlecell/",
-                               pattern = "_RSR_allrank.tsv",
+                               pattern = "_RSR_allrank.tsv",  # "_NA_mat.tsv" for NA counts
                                genes,
                                sub_genes = NULL) {
   
   mat_l <- lapply(ids, function(x) {
-    
     path <- file.path(dir, x, paste0(x, pattern))
-    
-    if (!is.null(sub_genes)) {
-      
-      dat <- fread(path, sep = "\t", select = c("V1", sub_genes))
-      mat <- as.matrix(dat[, -1, drop = FALSE])
-      rownames(mat) <- dat$V1
-      colnames(mat) <- sub_genes
-      mat <- mat[genes, sub_genes, drop = FALSE]
-      
-    } else {
-      
-      dat <- fread(path, sep = "\t")
-      mat <- as.matrix(dat[, -1, drop = FALSE])
-      rownames(mat) <- colnames(mat) <- dat$V1
-      mat <- mat[genes, genes, drop = FALSE]
-    }
-    
-    return(mat)
+    fread_to_mat(path, genes, sub_genes)
   })
   
   names(mat_l) <- ids
@@ -76,7 +83,8 @@ load_dat_list <- function(ids,
 
 
 # Uses fread() to read from path, assuming that the introduced V1 (rownames)
-# column is for genes. Coerces to matrix and assigns gene rownames.
+# column is for genes. Coerces to matrix and assigns gene rownames. Columns
+# are assumed to be cell IDs (thus distinct from fread_to_mat())
 
 read_count_mat <- function(dat_path) {
   
