@@ -1,4 +1,4 @@
-## GSE195445
+## GSE195445Mouse
 ## -----------------------------------------------------------------------------
 
 library(WGCNA)
@@ -9,7 +9,7 @@ source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 
-id <- "GSE195445"
+id <- "GSE195445Mouse"
 species <- "Mouse"
 
 dat_dir <- file.path(sc_dir, id)
@@ -24,7 +24,7 @@ namat_path <- file.path(out_dir, paste0(id, "_NA_mat.tsv"))
 pc <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
 
 
-# Files were directly downloaded from GEO, see GSE195445_download.sh in dat_dir
+# Files were directly downloaded from GEO, see GSE195445Mouse_download.sh in dat_dir
 dat_path <- file.path(dat_dir, paste0(id, "_counts.csv"))
 meta_path <- file.path(dat_dir, paste0(id, "_metadata.csv"))
 

@@ -1,14 +1,15 @@
-## GSE129788
+## GSE212606Mouse
 ## -----------------------------------------------------------------------------
 
 library(WGCNA)
 library(tidyverse)
 library(data.table)
+library(Seurat)
 source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 
-id <- "GSE129788"
+id <- "GSE212606Mouse"
 species <- "Mouse"
 
 dat_dir <- file.path(sc_dir, id)
@@ -23,9 +24,10 @@ namat_path <- file.path(out_dir, paste0(id, "_NA_mat.tsv"))
 pc <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
 
 
-# Files were directly downloaded from GEO, see GSE129788_download.sh in dat_dir
-dat_path <- list.files(dat_dir, pattern = "GSM37", full.names = TRUE)
-meta_path <- file.path(dat_dir, paste0(id, "_metadata.txt"))
+# Files were directly downloaded from GEO, see GSE212606Mouse_download.sh in dat_dir
+dat_path <- file.path(dat_dir, "GSM6538356_RNA_gene_count.txt")
+features_path <- file.path(dat_dir, "GSM6538356_RNA_gene_annotation.csv")
+meta_path <- file.path(dat_dir, "GSM6538356_RNA_cell_annotation.csv")
 
 
 
@@ -33,25 +35,27 @@ if (!file.exists(processed_path)) {
   
   # Load metadata and the count matrix
   
-  meta <- as.data.frame(fread(meta_path))
-  meta <- meta[-1, ]
-  meta$NAME <- str_replace(meta$NAME, "^Aging_mouse_brain_portal_data_", "")
-  
-  mat_l <- lapply(dat_path, read_count_mat)
-  stopifnot(identical(rownames(mat_l[[1]]), rownames(mat_l[[length(mat_l)]])))
-  mat <- do.call(cbind, mat_l)
-  mat <- mat[, meta$NAME]
+  meta <- read.csv(meta_path)
+  features <- read.csv(features_path)
+  mat <- Matrix::readMM(dat_path)
 
-  stopifnot(identical(colnames(mat), meta$NAME))
+  colnames(mat) <- meta$sample
+  rownames(mat) <- features$gene_short_name
   
+  stopifnot(identical(colnames(mat), meta$sample))
   
+
   # Ready metadata
+  # "GSE212606Mouse" collapse cell types with integer IDs
   
-  change_colnames <- c(Cell_type = "cluster", ID = "NAME")
+  change_colnames <- c(Cell_type = "Main_cluster_name", ID = "sample")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
-    mutate(assay = "10x 3' v2") %>% 
+    mutate(
+      assay = "EasySci-RNA",
+      Cell_type = str_replace(Cell_type, " [:digit:]$", "")
+      ) %>% 
     add_count_info(mat = mat)
   
   
@@ -66,11 +70,11 @@ if (!file.exists(processed_path)) {
   ggsave(p2, device = "png", dpi = 300, height = 8, width = 8,
          filename = file.path(out_dir, paste0(id, "_QC_scatter.png")))
   
-  # Remove cells failing QC, keep only protein coding genes
-  # "GSE129788" already normalized
+  # Remove cells failing QC, keep only protein coding genes, and normalize
   
   mat <- rm_low_qc_cells(mat, meta) %>%
-    get_pcoding_only(pcoding_df = pc)
+    get_pcoding_only(pcoding_df = pc) %>% 
+    Seurat::LogNormalize(., verbose = FALSE)
   
   meta <- filter(meta, ID %in% colnames(mat))
   mat <- mat[, meta$ID]
