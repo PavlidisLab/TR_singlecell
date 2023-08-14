@@ -24,27 +24,51 @@ pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 pc_ortho <- read.delim(pc_ortho_path)
 
 # Using ribosomal genes as a sanity check
-sribo_hg <- read.csv("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
-lribo_hg <- read.csv("/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
+sribo_hg <- read.csv(sribo_hg_path, stringsAsFactors = FALSE, skip = 1)
+lribo_hg <- read.csv(lribo_hg_path, stringsAsFactors = FALSE, skip = 1)
 ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
 
-# List of max pairs for each data set
 
-max_pair_l <- function(agg_l, ncores = 1) {
-  
-  l <- mclapply(agg_l, function(x) {
-    diag(x) <- NA
-    ix <- which(x == max(x, na.rm = TRUE), arr.ind = TRUE)
+# Iterate through each dataset, extracting the top cor pair
+# ------------------------------------------------------------------------------
+
+
+max_pair_l <- function(ids, genes, ncores = 8) {
+
+  l <- mclapply(ids, function(x) {
+    mat <- load_agg_mat_list(x, genes = genes)[[1]]
+    diag(mat) <- NA
+    ix <- which(mat == max(mat, na.rm = TRUE), arr.ind = TRUE)
     data.frame(Gene1 = rownames(ix)[1], Gene2 = rownames(ix)[2])
   }, mc.cores = ncores)
-  
-  # data.frame(Study = names(agg_l), do.call(rbind, l))
-  do.call(rbind, l)
+
+  df <- data.frame(Study = ids, do.call(rbind, l))
+  return(df)
 }
 
 
-max_pair_hg <- max_pair_l(agg_hg, ncore)
-max_pair_mm <- max_pair_l(agg_mm, ncore)
+
+if (!file.exists(max_pair_hg_path)) {
+  max_pair_hg <- max_pair_l(ids_hg, ncore)
+  saveRDS(max_pair_hg, max_pair_hg_path)
+} else {
+  max_pair_hg <- readRDS(max_pair_hg_path)
+}
+
+
+
+if (!file.exists(max_pair_mm_path)) {
+  max_pair_mm <- max_pair_l(ids_mm, ncore)
+  saveRDS(max_pair_mm, max_pair_mm_path)
+} else {
+  max_pair_mm <- readRDS(max_pair_mm_path)
+}
+
+
+
+
+stop()
+
 
 
 dat_files <- list.files(amat_dir, pattern = "_clean_mat_and_meta.RDS", recursive = TRUE, full.names = TRUE)
