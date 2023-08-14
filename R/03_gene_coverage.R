@@ -31,52 +31,12 @@ tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% 
 evidence_l <- readRDS(evidence_path)
 
 
-# Functions
-# ------------------------------------------------------------------------------
-
-
-# Load matrices that track counts of NA pairs (lack of mutual measurement)
-# across datasets/ids into a list
-
-load_na_mat_list <- function(ids,
-                             dir = "/space/scratch/amorin/TR_singlecell/",
-                             genes,
-                             sub_genes = NULL) {
-  
-  mat_l <- lapply(ids, function(x) {
-    
-    path <- file.path(dir, x, paste0(x, "_NA_mat.tsv"))
-    
-    if (!is.null(sub_genes)) {
-      
-      dat <- fread(path, sep = "\t", select = c("V1", sub_genes))
-      mat <- as.matrix(dat[, -1, drop = FALSE])
-      rownames(mat) <- dat$V1
-      colnames(mat) <- sub_genes
-      mat <- mat[genes, sub_genes, drop = FALSE]
-   
-     } else {
-       
-       dat <- fread(path, sep = "\t")
-       mat <- as.matrix(dat[, -1, drop = FALSE])
-       rownames(mat) <- colnames(mat) <- dat$V1
-       mat <- mat[genes, genes, drop = FALSE]
-     }
-    
-    return(mat)
-  })
-  
-  names(mat_l) <- ids
-  gc(verbose = FALSE)
-  
-  return(mat_l)
-}
-
-
 
 # Create a binary gene by experiment matrix that tracks whether a given gene
 # was measured (at least one count in at least 20 cells in at least one cell
 # type) for each dataset/id.
+# ------------------------------------------------------------------------------
+
 
 get_gene_msr_mat <- function(ids, meta, genes) {
   
@@ -84,9 +44,13 @@ get_gene_msr_mat <- function(ids, meta, genes) {
   colnames(msr_mat) <- ids
   rownames(msr_mat) <- genes
   
+  # For each dataset, load the matrix tracking NA counts of gene msrmt. pairs, 
+  # using the diagonal (identity) to binarize if a gene was measured at least
+  # once (1) or not (0)
+  
   for (id in ids) {
     
-    na_mat <- load_na_mat_list(id, genes = genes)[[1]]
+    na_mat <- load_agg_mat_list(id, genes = genes, pattern = "_NA_mat.tsv")[[1]]
     n_celltype <- filter(meta, ID == id)$N_celltype
     binary_msr <- as.integer(diag(na_mat) != n_celltype)
     msr_mat[, id] <- binary_msr
@@ -116,6 +80,7 @@ if (!file.exists(msr_mat_mm_path)) {
   msr_mat_mm <- readRDS(msr_mat_mm_path)
 }
 
+stop()
 
 
 # Get the average/proportion of measurement across experiments
