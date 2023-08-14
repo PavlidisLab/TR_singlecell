@@ -45,6 +45,8 @@ if (!file.exists(processed_path)) {
     mat <- GetAssayData(dat, slot = "data")
   }
   
+  stopifnot(typeof(mat@i) == "integer")
+  
   
   # Ready metadata
   
