@@ -33,7 +33,7 @@ ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_
 # ------------------------------------------------------------------------------
 
 
-max_pair_l <- function(ids, genes, ncores = 8) {
+max_pair_l <- function(ids, genes, ncores = 4) {
 
   l <- mclapply(ids, function(x) {
     mat <- load_agg_mat_list(x, genes = genes)[[1]]
@@ -49,7 +49,7 @@ max_pair_l <- function(ids, genes, ncores = 8) {
 
 
 if (!file.exists(max_pair_hg_path)) {
-  max_pair_hg <- max_pair_l(ids_hg, ncore)
+  max_pair_hg <- max_pair_l(ids_hg, genes = pc_hg$Symbol)
   saveRDS(max_pair_hg, max_pair_hg_path)
 } else {
   max_pair_hg <- readRDS(max_pair_hg_path)
@@ -58,7 +58,7 @@ if (!file.exists(max_pair_hg_path)) {
 
 
 if (!file.exists(max_pair_mm_path)) {
-  max_pair_mm <- max_pair_l(ids_mm, ncore)
+  max_pair_mm <- max_pair_l(ids_mm, genes = pc_mm$Symbol)
   saveRDS(max_pair_mm, max_pair_mm_path)
 } else {
   max_pair_mm <- readRDS(max_pair_mm_path)
@@ -70,13 +70,18 @@ if (!file.exists(max_pair_mm_path)) {
 stop()
 
 
+# Visualize top cor pairs
+# ------------------------------------------------------------------------------
 
-dat_files <- list.files(amat_dir, pattern = "_clean_mat_and_meta.RDS", recursive = TRUE, full.names = TRUE)
-dat <- readRDS("/space/scratch/amorin/TR_singlecell/GSE180928/GSE180928_clean_mat_and_meta.RDS")
-mat <- dat$Mat
-meta <- dat$Meta
+
+demo_id <- "GSE212606Human" # "GSE180928"
 gene1 <- "HBA1"
 gene2 <- "HBA2"
+
+dat <- load_dat_list(demo_id)[[1]]
+mat <- dat$Mat
+meta <- dat$Meta
+
 ct_cors <- all_celltype_cor(mat, meta, gene1, gene2)
 
 
@@ -87,7 +92,6 @@ plot_scatter <- function(df, cell_type) {
     geom_smooth(method = "lm", formula = y ~ x, colour = "black") +
     xlab(colnames(df)[1]) +
     ylab(colnames(df)[2]) +
-    # ggtitle(paste0(x, ": ", round(cor_l[[x]][tf, gene], 3))) +
     ggtitle(cell_type) +
     theme_classic() +
     theme(plot.title = element_text(size = 15),
@@ -103,8 +107,6 @@ all_celltype_scatter <- function(mat,
                                  gene2,
                                  min_cell = 20,
                                  cor_method = "pearson") {
-  
-  
   
   stopifnot(c("Cell_type", "ID") %in% colnames(meta),
             c(gene1, gene2) %in% rownames(mat))
