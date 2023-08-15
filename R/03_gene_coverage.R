@@ -72,7 +72,6 @@ if (!file.exists(msr_mat_hg_path)) {
 }
 
 
-
 if (!file.exists(msr_mat_mm_path)) {
   msr_mat_mm <- get_gene_msr_mat(ids_mm, sc_meta, pc_mm$Symbol)
   saveRDS(msr_mat_mm, msr_mat_mm_path)
@@ -80,12 +79,10 @@ if (!file.exists(msr_mat_mm_path)) {
   msr_mat_mm <- readRDS(msr_mat_mm_path)
 }
 
-stop()
-
 
 # Get the average/proportion of measurement across experiments
 # Human: all genes are measured at least twice and 5,183 genes always measured
-# TODO Mouse: 
+# Mouse: 
 # ------------------------------------------------------------------------------
 
 
@@ -111,13 +108,18 @@ never_msr <- gene_msr_df %>%
 
 
 rarely_msr <- gene_msr_df %>% 
-  filter(Count_msr < 5) %>%
+  filter(Proportion_msr <= 0.1) %>%
   arrange(Count_msr) %>% 
   split(.$Species)
 
 
 always_msr <- gene_msr_df %>% 
   filter(Proportion_msr == 1) %>%
+  split(.$Species)
+
+
+mostly_msr <- gene_msr_df %>% 
+  filter(Proportion_msr >= 0.9) %>%
   split(.$Species)
 
 
@@ -142,10 +144,6 @@ tf_wilx_count <- gene_msr_df %>%
 exp_hg <- sort(colSums(msr_mat_hg), decreasing = TRUE)
 exp_mm <- sort(colSums(msr_mat_mm), decreasing = TRUE)
 
-colSums(msr_mat_mm)
-sum(msr_mat_mm[, "GSE222956"])
-sum(msr_mat_mm[, "GSE225170"])
-
 
 exp_df <- data.frame(
   Gene_count = c(exp_hg, exp_mm),
@@ -154,9 +152,7 @@ exp_df <- data.frame(
 )
 
 
-
-
-sum(msr_mat_mm[, "GSE222956"])
+exp_summ <- lapply(split(exp_df, exp_df$Species), function(x) summary(x$Gene_count))
 
 
 # Examining instances of genes with strong regulation evidence but are never
