@@ -22,13 +22,11 @@ ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 # Protein coding genes
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
+pc_ortho <- read.delim(pc_ortho_path)
 
 # Transcription Factors
 tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% pc_hg$Symbol)
 tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
-
-# Ranked targets from Morin2023
-evidence_l <- readRDS(evidence_path)
 
 
 
@@ -80,9 +78,11 @@ if (!file.exists(msr_mat_mm_path)) {
 }
 
 
-# Get the average/proportion of measurement across experiments
-# Human: all genes are measured at least twice and 5,183 genes always measured
-# Mouse: 
+# Get the average/proportion of gene measurement across experiments
+# Human: all genes are measured at least twice and 5,140 genes always measured
+# Mouse: all genes are measured at least 4 times and 864 genes are always measured
+# Ortho: 649 genes measured in every mouse and human dataset
+# TFs: In both species TF genes show small trend of being measured more than non-TF genes 
 # ------------------------------------------------------------------------------
 
 
@@ -123,6 +123,11 @@ mostly_msr <- gene_msr_df %>%
   split(.$Species)
 
 
+always_ortho <- filter(pc_ortho, 
+                       Symbol_hg %in% always_msr$Human$Symbol &
+                       Symbol_mm %in% always_msr$Mouse$Symbol)
+
+
 tf_med_count <- gene_msr_df %>% 
   group_by(Species, TF) %>% 
   summarise(Median_count = median(Count_msr), .groups = "keep")
@@ -136,8 +141,9 @@ tf_wilx_count <- gene_msr_df %>%
 
 
 # Look at experiment-wise gene coverage
-# TabulaSapiens and Olah2020 measure every human gene, GSE85241 min at 8953
-# TODO: mouse
+# Human: TabulaSapiens and Olah2020 measure every gene, GSE85241 min at 8953
+# Mouse: No experiment measures all genes, but TabulaMuris closest at 20339.
+# GSE160193 min at 2046 genes.
 # ------------------------------------------------------------------------------
 
 
@@ -155,139 +161,88 @@ exp_df <- data.frame(
 exp_summ <- lapply(split(exp_df, exp_df$Species), function(x) summary(x$Gene_count))
 
 
-# Examining instances of genes with strong regulation evidence but are never
-# measured with the TF itself
-# ------------------------------------------------------------------------------
-
-
-# Loading
-
-na_hg <- load_na_mat_list(ids_hg, genes = pc_hg$Symbol, sub_genes = names(evidence_l$Human))
-na_mm <- load_na_mat_list(ids_mm, genes = pc_mm$Symbol, sub_genes = names(evidence_l$Mouse))
-
-stopifnot(all(unlist(lapply(na_hg, function(x) identical(rownames(x), pc_hg$Symbol)))))
-stopifnot(all(unlist(lapply(na_mm, function(x) identical(rownames(x), pc_mm$Symbol)))))
-
-# Convert count matrices to proportions
-
-n_ct_hg <- filter(sc_meta, ID %in% ids_hg)$N_celltype
-n_ct_mm <- filter(sc_meta, ID %in% ids_mm)$N_celltype
-
-na_hg <- lapply(1:length(na_hg), function(x) sweep(na_hg[[x]], 2, n_ct_hg[x], `/`))
-names(na_hg) <- ids_hg
-na_mm <- lapply(1:length(na_mm), function(x) sweep(na_mm[[x]], 2, n_ct_mm[x], `/`))
-names(na_mm) <- ids_mm
-
-# Extract a single TF's vector across datasets ino a single matrix
-
-gene_hg <- "ASCL1"
-gene_mm <- str_to_title(gene_hg)
-stopifnot(gene_mm %in% pc_mm$Symbol)
-
-gene_mat_hg <- gene_vec_to_mat(na_hg, gene_hg)
-gene_mat_mm <- gene_vec_to_mat(na_mm, gene_mm)
-
-# Order genes by their average measurement with the gene of interest. 
-# A value of 1 means that the gene pair were never measured together (possibly
-# because the gene itself isn't expressed). Lower values mean that a gene pair
-# are more commonly measured in the same cell types
-
-gene_order_hg <- sort(rowMeans(gene_mat_hg))
-gene_order_mm <- sort(rowMeans(gene_mat_mm))
-
-# hist(gene_order_hg, breaks = 100)
-# hist(gene_order_mm, breaks = 100)
-
-# Compare this order to the regulation evidence
-
-gene_evidence_hg <- left_join(
-  evidence_l$Human[[gene_hg]],
-  rownames_to_column(data.frame(NA_prop = gene_order_hg), var = "Symbol"),
-  by = "Symbol")
-
-
-gene_evidence_mm <- left_join(
-  evidence_l$Mouse[[gene_mm]],
-  rownames_to_column(data.frame(NA_prop = gene_order_mm), var = "Symbol"),
-  by = "Symbol")
-
-
-evidence_col <- "Rank_integrated"
-
-
-# cor(gene_evidence_hg[[evidence_col]], gene_evidence_hg$NA_prop, method = "spearman")
-# cor(gene_evidence_mm[[evidence_col]], gene_evidence_mm$NA_prop, method = "spearman")
-
-
-# Cut evidence into discrete groups for visualizing relationship with NA proportion.
-
-
-p3a <- gene_evidence_hg %>% 
-  mutate(Group_evidence = cut(gene_evidence_hg[[evidence_col]], breaks = 50)) %>% 
-  ggplot(aes(x = Group_evidence, y = NA_prop)) + 
-  geom_boxplot() +
-  xlab("Binned regulation evidence") + 
-  ylab("Proportion of NA measurements") +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.text.x = element_blank(),
-        axis.title = element_text(size = 20))
-
-
-
-p3b <- gene_evidence_mm %>% 
-  mutate(Group_evidence = cut(gene_evidence_mm[[evidence_col]], breaks = 50)) %>% 
-  ggplot(aes(x = Group_evidence, y = NA_prop)) + 
-  geom_boxplot() +
-  xlab("Binned regulation evidence") + 
-  ylab("Proportion of NA measurements") +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.text.x = element_blank(),
-        axis.title = element_text(size = 20))
-
-
-# Inspecting highest ranked gene that is not ever detected with the TF, and 
-# whether they are actually measured at all
-
-
-top_hg <- gene_evidence_hg %>% 
-  filter(NA_prop == 1) %>% 
-  slice_min(Rank_integrated, n = 20) %>% 
-  select(Symbol, Count_DE, Count_NA, Rank_binding, Rank_perturbation, Rank_integrated)
-
-
-top_mm <- gene_evidence_mm %>% 
-  filter(NA_prop == 1) %>% 
-  slice_min(Rank_integrated, n = 20) %>% 
-  select(Symbol, Count_DE, Count_NA, Rank_binding, Rank_perturbation, Rank_integrated)
-
-
-rowSums(msr_mat_hg[top_hg$Symbol, ])
-rowSums(msr_mat_mm[top_mm$Symbol, ])
-
-
 # Plots
 # ------------------------------------------------------------------------------
 
 
-# Looking at the proportion of gene measurement split by TF status
-
-p1a <- ggplot(gene_msr_df, aes(x = Prop_msr, fill = TF)) +
-  facet_wrap(~Species) +
-  geom_density(alpha = 0.4, position = "stack") +
-  theme_classic()
+# Binary heatmap of gene measurement: gene x experiment where colour denotes
+# that the gene was measured in the given experiment
 
 
-p1b <- ggplot(gene_msr_df, aes(y = Prop_msr, x = TF)) +
-  facet_wrap(~Species) +
-  geom_boxplot(alpha = 0.4) +
-  theme_classic()
+pheatmap(
+  msr_mat_hg,
+  col = c("black", "royalblue"),
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  show_rownames = FALSE,
+  show_colnames = FALSE,
+  height = 12,
+  width = 12,
+  treeheight_row = 0,
+  treeheight_col = 0,
+  filename = file.path(plot_dir, "measurement_heatmap_human.png")
+)
+
+
+pheatmap(
+  msr_mat_mm,
+  col = c("black", "royalblue"),
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  show_rownames = FALSE,
+  show_colnames = FALSE,
+  height = 12,
+  width = 12,
+  treeheight_row = 0,
+  treeheight_col = 0,
+  filename = file.path(plot_dir, "measurement_heatmap_mouse.png")
+)
 
 
 # Look at experiment counts of gene measurement 
 
-p2 <- ggplot(exp_df, aes(x = Gene_count)) +
+p1 <- ggplot(gene_msr_df, aes(x = Proportion_msr)) +
+  facet_wrap(~Species, nrow = 2) +
+  geom_histogram(bins = 100) +
+  ylab("Count of genes") +
+  xlab("Proportion of experiments with measurement") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        strip.text = element_text(size = 25))
+        
+
+ggsave(p1, height = 9, width = 12, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "gene_proportion_measurement_hist.png"))
+
+
+# Looking at the proportion of gene measurement split by TF status
+
+p2 <- ggplot(gene_msr_df, aes(y = Proportion_msr, x = TF)) +
   facet_wrap(~Species) +
+  geom_boxplot() +
+  ylab("Proportion of experiments with measurement") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        strip.text = element_text(size = 25))
+
+
+ggsave(p2, height = 9, width = 9, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "TF_proportion_measurement_boxplot.png"))
+
+
+# Look at experiment counts of gene measurement 
+
+p3 <- ggplot(exp_df, aes(x = Gene_count)) +
+  facet_wrap(~Species, nrow = 2) +
   geom_histogram(bins = 20) +
-  theme_classic()
+  ylab("Count of experiments") +
+  xlab("Count of genes measured") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        strip.text = element_text(size = 25))
+
+ggsave(p3, height = 9, width = 9, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "experiment_gene_measurement_hist.png"))
