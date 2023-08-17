@@ -66,17 +66,79 @@ if (!file.exists(max_pair_mm_path)) {
 
 
 
-
-stop()
-
-
-# Visualize top cor pairs
+# Most common gene in top pairs: ribosomal genes in general top heavy. 
+# Human: HSPA1A most common, always paired with HSPA1B or HSP90AA1. RPL13 also
+# common, often with RPRS18.
+# Mouse: Rps29 most common, paired with Rps28, Rps39... 
+# Also note GSE160512: Ttll3-Arpc4 neighbouring genes described by refseq as 
+# having run-through transcription 
+# https://pubmed.ncbi.nlm.nih.gov/20967262/  
+# https://www.ncbi.nlm.nih.gov/gene?Db=gene&Cmd=DetailsSearch&Term=10093
 # ------------------------------------------------------------------------------
 
 
-demo_id <- "GSE212606Human" # "GSE180928"
-gene1 <- "HBA1"
-gene2 <- "HBA2"
+sort_max_hg <- 
+  sort(table(c(max_pair_hg$Gene1, max_pair_hg$Gene2)), decreasing = TRUE)
+
+sort_max_mm <- 
+  sort(table(c(max_pair_mm$Gene1, max_pair_mm$Gene2)), decreasing = TRUE)
+
+
+most_common_hg <- lapply(names(sort_max_hg)[1:3], function(x) {
+  filter(max_pair_hg, Gene1 == x | Gene2  == x)
+})
+
+most_common_mm <- lapply(names(sort_max_mm)[1:3], function(x) {
+  filter(max_pair_mm, Gene1 == x | Gene2  == x)
+})
+
+
+
+# Visualize top cor pairs 
+# ------------------------------------------------------------------------------
+
+
+demo_id <- "GSE196638"  # "GSE160512"
+gene1 <- "HSPA1A"       # "Ttll3"
+gene2 <- "HSPA1B"       # "Arpc4"
+
+
+
+# Forest plot
+
+
+get_all_cor_l <- function(ids, gene1, gene2) {
+  
+  cor_l <- lapply(ids, function(x) {
+    dat <- load_dat_list(x)[[1]]
+    mat <- dat$Mat
+    meta <- dat$Meta
+    all_celltype_cor(mat, meta, gene1, gene2)
+  })
+  
+  names(cor_l) <- ids
+  return(cor_l)
+}
+
+
+outfile <- "/space/scratch/amorin/R_objects/top_cor_pair_l.RDS"
+
+
+if (!file.exists(outfile)) {
+  
+  cor_l <- list(
+    Human = get_all_cor_l(ids_hg, gene1 = "HSPA1A", gene2 = "HSPA1B"),
+    Mouse = get_all_cor_l(ids_mm, gene1 = "Rpl13", gene2 = "Rpl32"))
+  
+  saveRDS(cor_l, outfile)
+  
+} else {
+  
+  cor_l <- readRDS(outfile)
+  
+}
+
+stop()
 
 dat <- load_dat_list(demo_id)[[1]]
 mat <- dat$Mat
@@ -100,7 +162,6 @@ plot_scatter <- function(df, cell_type) {
 }
 
 
-
 all_celltype_scatter <- function(mat,
                                  meta,
                                  gene1,
@@ -114,31 +175,17 @@ all_celltype_scatter <- function(mat,
   cts <- unique(meta$Cell_type)
   
   plot_l <- lapply(cts, function(ct) {
-    
     ct_mat <- t(mat[c(gene1, gene2), filter(meta, Cell_type == ct)$ID])
-    
-    # if (sum(ct_mat[, 1] != 0) < min_cell || sum(ct_mat[, 2] != 0) < min_cell) {
-    #   return(NA)
-    # } else {
-    # WGCNA::cor(ct_mat[, gene1], ct_mat[, gene2], method = cor_method)
-    # }
-    
-    p <- plot_scatter(data.frame(ct_mat), cell_type = ct)
-    
+    plot_scatter(data.frame(ct_mat), cell_type = ct)
   })
+  
   names(plot_l) <- cts
-  
   plot_l <- plot_l[!is.na(plot_l)]
-  
-  # plot_l <- cowplot::plot_grid(plotlist = plot_l)
-  
-  # cor_vec <- sort(unlist(cor_l), decreasing = TRUE)
-  
   return(plot_l)
 }
 
 
-# ct_cors <- all_celltype_cor(mat, meta, gene1, gene2)
+
 ct_scatter_l <- all_celltype_scatter(mat, meta, gene1, gene2)
 ct_scatter_plot <- plot_grid(plotlist = ct_scatter_l)
 ct_heatmap_h <- cor_heatmap(ct_cors)
@@ -160,3 +207,5 @@ ct_scatter_plot_3 <- plot_grid(
 
 px3_h <- plot_grid(ct_scatter_plot_3, ct_heatmap_h$gtable, nrow = 2, rel_heights = c(2, 1))
 px3_v <- plot_grid(ct_scatter_plot_3, ct_heatmap_v$gtable, ncol = 2, rel_widths = c(2, 1))
+
+
