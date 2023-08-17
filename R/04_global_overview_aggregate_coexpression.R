@@ -98,12 +98,6 @@ most_common_mm <- lapply(names(sort_max_mm)[1:3], function(x) {
 # ------------------------------------------------------------------------------
 
 
-demo_id <- "GSE196638"  # "GSE160512"
-gene1 <- "HSPA1A"       # "Ttll3"
-gene2 <- "HSPA1B"       # "Arpc4"
-
-
-
 # Forest plot
 
 
@@ -138,8 +132,33 @@ if (!file.exists(outfile)) {
   
 }
 
-stop()
 
+tt1 <- unlist(lapply(cor_l$Human, function(x) length(x) > 0))
+
+tt2 <- lapply(cor_l$Human[tt1], summary)
+
+tt3 <- as.data.frame(do.call(rbind, tt2)) %>% 
+  rownames_to_column(var = "ID") %>% 
+  arrange(Median) %>% 
+  mutate(ID = factor(ID, levels = unique(ID)))
+
+ggplot(tt3) +
+  geom_errorbarh(aes(xmin = `1st Qu.`, xmax = `3rd Qu.`, y = ID)) +
+  xlab("Pearson's correlation across cell types") +
+  theme_classic() +
+  theme(axis.title.y = element_blank(),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_text(size = 15),
+        axis.text.y = element_text(size = 10))
+
+
+# Cell-type scatter plots + cor heatmap of representative experiment and gene pair
+
+
+
+demo_id <- "GSE196638"  # "GSE160512"
+gene1 <- "HSPA1A"       # "Ttll3"
+gene2 <- "HSPA1B"       # "Arpc4"
 dat <- load_dat_list(demo_id)[[1]]
 mat <- dat$Mat
 meta <- dat$Meta
