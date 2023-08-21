@@ -28,10 +28,15 @@ pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 pc_ortho <- read.delim(pc_ortho_path)
 
-# Loading genes of interest
+# Ribosomal genes
 sribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
 lribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
 ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
+
+# Transcription Factors
+tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% pc_hg$Symbol)
+tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
+tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
 
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
@@ -42,13 +47,13 @@ tf_sim_hg <- readRDS(tf_sim_hg_path)
 tf_sim_mm <- readRDS(tf_sim_mm_path)
 
 # Null topk overlap
-null_topk_hg <- readRDS("/space/scratch/amorin/R_objects/06-07-2023_sampled_topk_intesect_human.RDS")
-null_topk_mm <- readRDS("/space/scratch/amorin/R_objects/06-07-2023_sampled_topk_intesect_mouse.RDS")
+null_topk_hg <- readRDS("/space/scratch/amorin/R_objects/sampled_TF_null_topk_intersect_human.RDS")
+null_topk_mm <- readRDS("/space/scratch/amorin/R_objects/sampled_TF_null_topk_intersect_mouse.RDS")
 
 # Query/subject all rank matrices
-allrank_dir <- "/space/scratch/amorin/R_objects/04-07-2023/"
-allrank_l <- lapply(list.files(allrank_dir, full.names = TRUE), function(x) readRDS(x))
-names(allrank_l) <- str_replace(list.files(allrank_dir), "\\.RDS", "")
+# allrank_dir <- "/space/scratch/amorin/R_objects/04-07-2023/"
+# allrank_l <- lapply(list.files(allrank_dir, full.names = TRUE), function(x) readRDS(x))
+# names(allrank_l) <- str_replace(list.files(allrank_dir), "\\.RDS", "")
 
 
 # Functions
@@ -57,18 +62,17 @@ names(allrank_l) <- str_replace(list.files(allrank_dir), "\\.RDS", "")
 
 # Returns a dataframe of summary stats for topk for each TF in sim_l
 
-get_summary_df <- function(sim_l) {
+get_summary_df <- function(sim_l, msr_mat) {
   
-  lapply(sim_l, function(x) summary(x$Sim_df$Topk)) %>% 
+  lapply(sim_l, function(x) summary(x$Topk)) %>% 
     do.call(rbind, .) %>%
     as.data.frame() %>% 
-    rownames_to_column(var = "TF") %>% 
-    mutate(N_exp = unlist(lapply(sim_l, `[[`, "N_exp"))) %>% 
+    rownames_to_column(var = "Symbol") %>% 
+    mutate(N_exp = rowSums(msr_mat[names(sim_l), ])) %>%
     arrange(Median) %>% 
-    mutate(TF = factor(TF, levels = unique(TF)))
+    mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
   
 }
-
 
 
 # Organizing summary of topk intersects
@@ -77,12 +81,12 @@ get_summary_df <- function(sim_l) {
 
 # Summary of null topk overlap
 null_summ_hg <- summary(unlist(lapply(null_topk_hg, function(x) median(x$Topk))))
-null_summ_mm <- summary(unlist(lapply(null_topk_hg, function(x) median(x$Topk))))
+null_summ_mm <- summary(unlist(lapply(null_topk_mm, function(x) median(x$Topk))))
 
 
 # Summarize each TF's topk overlap and organize into a df
-tf_summ_hg <- get_summary_df(tf_sim_hg)
-tf_summ_mm <- get_summary_df(tf_sim_mm)
+tf_summ_hg <- get_summary_df(tf_sim_hg, msr_hg)
+tf_summ_mm <- get_summary_df(tf_sim_mm, msr_mm)
 
 
 # Relationship between median topk intersect and the number of non-NA experiments
@@ -111,8 +115,22 @@ ribo_sim_mm <- get_all_similarity(agg_l = ribo_agg_mm, msr_mat = msr_mm, genes =
 
 
 # Summaries of self topk intersect of ribosomal genes across datasets
-ribo_summ_hg <- get_summary_df(ribo_sim_hg)
-ribo_summ_mm <- get_summary_df(ribo_sim_mm)
+ribo_summ_hg <- get_summary_df(ribo_sim_hg, msr_hg)
+ribo_summ_mm <- get_summary_df(ribo_sim_mm, msr_mm)
+
+
+# Look at similarity by TF family
+# ------------------------------------------------------------------------------
+
+
+family_hg <- tf_summ_hg %>% 
+  left_join(tfs_hg[, c("Symbol", "Family")], by = "Symbol") %>% 
+  group_by(Family) %>% 
+  summarise(Med = median(Median), N = n(), Med_exp = median(N_exp)) %>% 
+  arrange(desc(Med))
+
+
+boxplot(tf_summ_hg$Median ~ tf_summ_hg$Family)
 
 
 
@@ -159,7 +177,7 @@ topk_rank <- query_gene_rank_topk(
 
 # Relationship between similarity stats
 
-p1 <- ggplot(tf_sim_hg[[gene_hg]]$Sim_df, aes(x = Scor, y = Topk)) +
+p1 <- ggplot(tf_sim_hg[[gene_hg]], aes(x = Scor, y = Topk)) +
   geom_point(shape = 19, size = 3) +
   ggtitle(gene_hg) +
   theme_classic() +
@@ -176,12 +194,12 @@ p1 <- ggplot(tf_sim_hg[[gene_hg]]$Sim_df, aes(x = Scor, y = Topk)) +
 scatter_topk_median <- function(summary_df, null_summary, topn_label = 30) {
   
   summary_df <- summary_df %>%  
-    mutate(Group = TF %in% slice_max(summary_df, Median, n = topn_label)$TF)
+    mutate(Group = Symbol %in% slice_max(summary_df, Median, n = topn_label)$Symbol)
   
-  ggplot(summary_df, aes(y = Median, x = TF)) +
+  ggplot(summary_df, aes(y = Median, x = Symbol)) +
     geom_point() +
     geom_text_repel(data = filter(summary_df, Group),
-                    aes(x = TF, y = Median, label = TF, fontface = "italic"),
+                    aes(x = Symbol, y = Median, label = Symbol, fontface = "italic"),
                     max.overlaps = 20, 
                     force = 0.5,
                     nudge_x = -0.25,
@@ -208,14 +226,13 @@ p2b <- scatter_topk_median(tf_summ_mm, null_summ_mm)
 
 
 
-
-
 # Boxplot (show 1st and 3rd IQR) of TF median topk intersect
+
 
 
 boxplot_topk_median <- function(summary_df, null_summary) {
   
-  ggplot(summary_df, aes(x = TF)) +
+  ggplot(summary_df, aes(x = Symbol)) +
     geom_boxplot(
       # aes(ymin = Min., lower = `1st Qu.`, middle = Median, upper = `3rd Qu.`, ymax = Max.),
       aes(ymin = `1st Qu.`, lower = `1st Qu.`, middle = Median, upper = `3rd Qu.`, ymax = `3rd Qu.`),
@@ -266,23 +283,23 @@ density_topk <- function(plot_df) {
 example_tf_hg <- "ASCL1"
 example_tf_mm <- "Ascl1"
 
-max_tf_hg <- as.character(slice_max(tf_summ_hg, Median)$TF)
-max_tf_mm <- as.character(slice_max(tf_summ_mm, Median)$TF)
+max_tf_hg <- as.character(slice_max(tf_summ_hg, Median)$Symbol)
+max_tf_mm <- as.character(slice_max(tf_summ_mm, Median)$Symbol)
 
-example_ribo_hg <- "RPL3"
+example_ribo_hg <- "RPL7A"
 example_ribo_mm <- "Rpl3"
 
-max_tf_df_hg <- tf_sim_hg[[max_tf_hg]]$Sim_df
-max_tf_df_mm <- tf_sim_mm[[max_tf_mm]]$Sim_df
+max_tf_df_hg <- tf_sim_hg[[max_tf_hg]]
+max_tf_df_mm <- tf_sim_mm[[max_tf_mm]]
 
-tf_df_hg <- tf_sim_hg[[example_tf_hg]]$Sim_df
-tf_df_mm <- tf_sim_mm[[example_tf_mm]]$Sim_df
+tf_df_hg <- tf_sim_hg[[example_tf_hg]]
+tf_df_mm <- tf_sim_mm[[example_tf_mm]]
 
-ribo_df_hg <- ribo_sim_hg[[example_ribo_hg]]$Sim_df
-ribo_df_mm <- ribo_sim_mm[[example_ribo_mm]]$Sim_df
+ribo_df_hg <- ribo_sim_hg[[example_ribo_hg]]
+ribo_df_mm <- ribo_sim_mm[[example_ribo_mm]]
 
 
-set.seed(67)
+set.seed(154)
 rep_null_hg <- null_topk_hg[[sample(1:length(null_topk_hg), 1)]]
 rep_null_mm <- null_topk_mm[[sample(1:length(null_topk_mm), 1)]]
 
