@@ -31,9 +31,41 @@ pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
-# Saved list RDS of the sampled topk overlaps
-out_hg <- "/space/scratch/amorin/R_objects/06-07-2023_sampled_topk_intesect_human.RDS"
-out_mm <- "/space/scratch/amorin/R_objects/06-07-2023_sampled_topk_intesect_mouse.RDS"
+
+
+check_k <- function(vec_sort, k) {
+  
+  if (vec_sort[k] == vec_sort[k - 1]) {
+    tie_start <- head(sort(table(vec_sort), decreasing = TRUE))[1]
+    k <- sum(vec_sort > as.numeric(names(tie_start)), na.rm = TRUE)
+  }
+  
+  return(k)
+}
+
+
+
+topk_sort <- function(vec, k, check_k_arg = TRUE) {
+  vec_sort <- sort(vec, decreasing = TRUE)
+  if (check_k_arg) k <- check_k(vec_sort, k)
+  names(vec_sort[1:k])
+}
+
+
+
+topk_intersect <- function(vec1, vec2) length(intersect(vec1, vec2))
+
+
+
+colwise_topk_intersect <- function(mat, k = 1000, check_k_arg = TRUE) {
+  
+  col_list <- asplit(mat, 2)
+  topk_list <- lapply(col_list, topk_sort, k = k, check_k_arg = check_k_arg)
+  topk_mat <- outer(topk_list, topk_list, Vectorize(topk_intersect))
+  
+  return(topk_mat)
+}
+
 
 
 
@@ -57,7 +89,7 @@ sample_topk_intersect <- function(ids, genes, msr_mat, k = 1000) {
   
   # Load the sampled gene for each experiment and bind into a matrix
   sample_mat <- lapply(1:length(ids), function(x) {
-    load_agg_mat_list(ids = ids[x], sub_genes = sample_genes[[x]], genes = genes)[[1]]
+    load_agg_mat_list(ids = ids[x], genes = genes, sub_genes = sample_genes[[x]])[[1]]
   })
   sample_mat <- do.call(cbind, sample_mat)
   
@@ -70,19 +102,10 @@ sample_topk_intersect <- function(ids, genes, msr_mat, k = 1000) {
 
 
 
-
-
-# Use all experiments, or choose a subset in which a a given gene is measured
-# gene_hg <- "ASCL1"
-# gene_mm <- "Ascl1"
-# ids_hg <- names(which(msr_hg[gene_hg, ] == 1))
-# ids_mm <- names(which(msr_mm[gene_mm, ] == 1))
-
-
 set.seed(5)
 
 
-if (!file.exists(out_hg)) {
+if (!file.exists(null_topk_hg_path)) {
   
   topk_hg <- lapply(1:n_samps, function(x) {
     
@@ -94,17 +117,13 @@ if (!file.exists(out_hg)) {
                           k = k)
   })
   
-  saveRDS(topk_hg, out_hg)
+  saveRDS(topk_hg, null_topk_hg_path)
   
-} else {
-  
-  topk_hg <- readRDS(out_hg)
-  
-}
+} 
 
 
 
-if (!file.exists(out_mm)) {
+if (!file.exists(null_topk_mm_path)) {
   
   topk_mm <- lapply(1:n_samps, function(x) {
     
@@ -116,25 +135,6 @@ if (!file.exists(out_mm)) {
                           k = k)
   })
   
-  saveRDS(topk_mm, out_mm)
+  saveRDS(topk_mm, null_topk_mm_path)
   
-} else {
-  
-  topk_mm <- readRDS(out_mm)
-  
-}
-
-
-
-# Summarize
-
-med_hg <- lapply(topk_hg, function(x) median(x$Topk))
-med_mm <- lapply(topk_mm, function(x) median(x$Topk))
-hist(unlist(med_hg), breaks = 20)
-hist(unlist(med_mm), breaks = 20)
-
-
-sd_hg <- lapply(topk_hg, function(x) sd(x$Topk))
-sd_mm <- lapply(topk_mm, function(x) median(x$Topk))
-hist(unlist(sd_hg), breaks = 20)
-hist(unlist(sd_mm), breaks = 20)
+} 
