@@ -8,9 +8,11 @@ library(parallel)
 library(pheatmap)
 library(RColorBrewer)
 library(cowplot)
+source("R/utils/vector_comparison_functions.R")
 source("R/utils/functions.R")
-source("R/utils/plot_functions.R")
 source("R/00_config.R")
+
+k <- 1000
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -22,23 +24,32 @@ ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 # Protein coding genes 
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
-pc_ortho <- read.delim(pc_ortho_path)
 
 # Transcription Factors
 tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% pc_hg$Symbol)
 tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
 tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
 
-# Load aggregate matrix into list
-agg_hg <- load_agg_mat_list(ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
-agg_mm <- load_agg_mat_list(ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
-
-stopifnot(all(unlist(lapply(agg_hg, function(x) identical(rownames(x), pc_hg$Symbol)))))
-stopifnot(all(unlist(lapply(agg_mm, function(x) identical(rownames(x), pc_mm$Symbol)))))
-
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
+
+# For each dataset, load the subset gene x TF aggregation matrix 
+
+if (!file.exists(agg_tf_hg_path)) {
+  agg_tf_hg <- load_agg_mat_list(ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+  saveRDS(agg_tf_hg, agg_tf_hg_path)
+} else {
+  agg_tf_hg <- readRDS(agg_tf_hg_path)
+}
+
+
+if (!file.exists(agg_tf_mm_path)) {
+  agg_tf_mm <- load_agg_mat_list(ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
+  saveRDS(agg_tf_mm, agg_tf_mm_path)
+} else {
+  agg_tf_mm <- readRDS(agg_tf_mm_path)
+}
 
 
 #
@@ -113,6 +124,8 @@ all_rank_summary <- function(agg_l, msr_mat, genes, k = 1000) {
     
     topk_count <- get_topk_count(gene_mat, k)
     
+    topk_prop <- round(topk_count / ncol(gene_mat), 3)
+    
     data.frame(
       Symbol = rownames(gene_mat),
       Avg_RSR = avg_rsr,
@@ -120,7 +133,9 @@ all_rank_summary <- function(agg_l, msr_mat, genes, k = 1000) {
       Rank_RSR = rank_rsr,
       Rank_colrank = rank_colrank,
       Best_rank = best_rank,
-      Topk_count = topk_count)
+      Topk_count = topk_count,
+      Topk_proportion = topk_prop)
+    
   })
   
   names(summ_l) <- genes
@@ -132,13 +147,25 @@ all_rank_summary <- function(agg_l, msr_mat, genes, k = 1000) {
 
 
 if (!file.exists(tf_summ_hg_path)) {
-  summ_hg <- all_rank_summary(agg_l = agg_hg, msr_mat = msr_hg, genes = tfs_hg$Symbol)
+  
+  summ_hg <- all_rank_summary(agg_l = agg_tf_hg, 
+                              msr_mat = msr_hg, 
+                              genes = tfs_hg$Symbol,
+                              k = k)
+  
   saveRDS(summ_hg, tf_summ_hg_path)
+
 }
 
 
 
 if (!file.exists(tf_summ_mm_path)) {
-  summ_mm <- all_rank_summary(agg_l = agg_mm, msr_mat = msr_mm, genes = tfs_mm$Symbol)
+  
+  summ_mm <- all_rank_summary(agg_l = agg_tf_mm, 
+                              msr_mat = msr_mm, 
+                              genes = tfs_mm$Symbol,
+                              k = k)
+  
   saveRDS(summ_mm, tf_summ_mm_path)
+  
 }
