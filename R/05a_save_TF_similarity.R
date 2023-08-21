@@ -12,6 +12,8 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/functions.R")
 source("R/00_config.R")
 
+k <- 1000
+
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 
@@ -172,15 +174,28 @@ get_all_similarity <- function(agg_l,
 
 
 if (!file.exists(tf_sim_hg_path)) {
-  sim_hg <- get_all_similarity(agg_l = agg_tf_hg, msr_mat = msr_hg, genes = tfs_hg$Symbol, k = 1000)
+  
+  sim_hg <- get_all_similarity(agg_l = agg_tf_hg, 
+                               msr_mat = msr_hg, 
+                               genes = tfs_hg$Symbol, 
+                               k = k)
+  
   sim_hg <- sim_hg[!is.na(sim_hg)]
+  
   saveRDS(sim_hg, tf_sim_hg_path)
+  
 }
 
 
 
 if (!file.exists(tf_sim_mm_path)) {
-  sim_mm <- get_all_similarity(agg_l = agg_tf_mm, msr_mat = msr_mm, genes = tfs_mm$Symbol, k = 1000)
+  
+  sim_mm <- get_all_similarity(agg_l = agg_tf_mm, 
+                               msr_mat = msr_mm, 
+                               genes = tfs_mm$Symbol, 
+                               k = k)
+  
   sim_mm <- sim_mm[!is.na(sim_mm)]
+  
   saveRDS(sim_mm, tf_sim_mm_path)
 }
