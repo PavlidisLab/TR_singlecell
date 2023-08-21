@@ -80,6 +80,11 @@ tf_sim_hg_path <- "/space/scratch/amorin/R_objects/TF_similarity_human.RDS"
 tf_sim_mm_path <- "/space/scratch/amorin/R_objects/TF_similarity_mouse.RDS"
 
 
+# List of null sampled gene vector topk similarities
+null_topk_hg_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersect_human.RDS"
+null_topk_mm_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersect_mouse.RDS"
+
+
 # List of summarized TF rankings
 tf_summ_hg_path <- "/space/scratch/amorin/R_objects/10-07-2023_TF_summary_human.RDS"
 tf_summ_mm_path <- "/space/scratch/amorin/R_objects/10-07-2023_TF_summary_mouse.RDS"
