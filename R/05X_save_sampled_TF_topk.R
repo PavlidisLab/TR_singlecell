@@ -16,7 +16,7 @@ source("R/00_config.R")
 k <- 1000 
 n_samps <- 1000
 null_topk_hg_path <- "/space/scratch/amorin/R_objects/sampled_TF_null_topk_intersect_human.RDS"
-null_topk_hg_path <- "/space/scratch/amorin/R_objects/sampled_TF_null_topk_intersect_mouse.RDS"
+null_topk_mm_path <- "/space/scratch/amorin/R_objects/sampled_TF_null_topk_intersect_mouse.RDS"
 
 
 # Table of assembled scRNA-seq datasets
