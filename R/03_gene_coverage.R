@@ -173,13 +173,14 @@ pheatmap(
   msr_mat_hg,
   col = c("black", "royalblue"),
   cluster_rows = TRUE,
-  cluster_cols = TRUE,
+  cluster_cols = FALSE,
   show_rownames = FALSE,
   show_colnames = FALSE,
-  height = 12,
-  width = 12,
+  height = 10,
+  width = 10,
   treeheight_row = 0,
   treeheight_col = 0,
+  legend = FALSE,
   filename = file.path(plot_dir, "measurement_heatmap_human.png")
 )
 
@@ -188,13 +189,14 @@ pheatmap(
   msr_mat_mm,
   col = c("black", "royalblue"),
   cluster_rows = TRUE,
-  cluster_cols = TRUE,
+  cluster_cols = FALSE,
   show_rownames = FALSE,
   show_colnames = FALSE,
-  height = 12,
-  width = 12,
+  height = 10,
+  width = 10,
   treeheight_row = 0,
   treeheight_col = 0,
+  legend = FALSE,
   filename = file.path(plot_dir, "measurement_heatmap_mouse.png")
 )
 
