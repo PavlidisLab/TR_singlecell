@@ -35,11 +35,16 @@ n_platform <- sort(table(meta$Platform))
 # the first which counts the cells and cell types, and the second which tallies
 # the count of cells for each unique cell type
 
+# NOTE: as.character() call in ct_count is done to prevent counting cell types 
+# with 0 counts (cell type is a factor), consistent with how NA counts are 
+# tracked in the main RSR_allrank() function. Cell types with counts above 0 but
+# still under the min filter (default 20) are still tallied, however.
+
 add_meta <- function(id) {
   
   dat <- load_dat_list(id)[[1]]
   
-  ct_count <- data.frame(table(dat$Meta$Cell_type))
+  ct_count <- data.frame(table(as.character(dat$Meta$Cell_type)))
   colnames(ct_count) <- c("Cell_type", "N_cells")
   
   dat_count <- data.frame(
