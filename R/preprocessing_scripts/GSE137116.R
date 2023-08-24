@@ -45,13 +45,17 @@ if (!file.exists(processed_path)) {
   
   
   # Ready metadata
+  # "GSE137116" remove NA cell types
   
   change_colnames <- c(ID = "X")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
     mutate(assay = "10x 5' v2") %>% 
-    add_count_info(mat = mat)
+    filter(!is.na(Cell_type))
+  
+  mat <- mat[, meta$ID]
+  meta <- add_count_info(mat, meta)
   
   
   # QC plots

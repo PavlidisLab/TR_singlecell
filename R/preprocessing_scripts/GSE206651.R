@@ -42,16 +42,17 @@ if (!file.exists(processed_path)) {
   
   
   # Ready metadata
-  # "GSE206651" keeping Unknown cell type, instead of usual splitting, as assume
-  # that these are discrete but undescribed cell types, rather than a general 
-  # bin of unclassified cells
+  # "GSE206651" remove "Unknown" cell types
   
   change_colnames <- c(Cell_type = "CellType", ID = "cell_ID")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
     mutate(assay = "Seq-well") %>%
-    add_count_info(mat = mat)
+    filter(!str_detect(Cell_type, "Unknown[:digit:]+"))
+  
+  mat <- mat[, meta$ID]
+  meta <- add_count_info(mat = mat, meta = meta)
   
   
   # QC plots

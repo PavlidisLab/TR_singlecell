@@ -1,4 +1,4 @@
-## GSE200202
+## GSE231924
 ## -----------------------------------------------------------------------------
 
 library(WGCNA)
@@ -9,7 +9,7 @@ source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 
-id <- "GSE200202"
+id <- "GSE231924"
 species <- "Mouse"
 
 dat_dir <- file.path(sc_dir, id)
@@ -24,7 +24,7 @@ namat_path <- file.path(out_dir, paste0(id, "_NA_mat_CPM.tsv"))
 pc <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
 
 
-# Files were directly downloaded from GEO, see GSE200202_download.sh in dat_dir
+# Files were directly downloaded from GEO, see GSE231924_download.sh in dat_dir
 dat_path <- file.path(dat_dir, paste0(id, "_counts.csv"))
 meta_path <- file.path(dat_dir, paste0(id, "_metadata.csv"))
 
@@ -34,30 +34,26 @@ if (!file.exists(processed_path)) {
   
   # Load metadata and the count matrix
   
-  meta <- as.data.frame(fread(meta_path))
-  
+  meta <- read.csv(meta_path)
   mat <- t(read_count_mat(dat_path))
-  colnames(mat) <- str_replace(colnames(mat), "-[:digit:]-", "-")
-  mat <- mat[, meta$cellID]
-  
-  stopifnot(identical(colnames(mat), meta$cellID))
+  mat <- mat[, meta$X]
 
+  stopifnot(identical(colnames(mat), meta$X))
+  
   
   # Ready metadata
-  # "GSE200202" collapse cell types by removing integer delim and remove NA cell types
+  # "GSE231924" collapse cell types with integer delim (note that NA is not a
+  # missing value here but a cell type)
   
-  change_colnames <- c(Cell_type = "annot_leiden_full", ID = "cellID")
+  change_colnames <- c(Cell_type = "subtypes", ID = "X")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
     mutate(
       assay = "10x 3' v3",
-      Cell_type = str_replace(Cell_type, " \\[[:digit:]\\]", "")
+      Cell_type = str_replace(Cell_type, "[:digit:]$", "")
       ) %>% 
-    filter(!is.na(Cell_type))
-  
-  mat <- mat[, meta$ID]
-  meta <- add_count_info(mat, meta)
+    add_count_info(mat = mat)
   
   
   # QC plots
@@ -71,15 +67,16 @@ if (!file.exists(processed_path)) {
   ggsave(p2, device = "png", dpi = 300, height = 8, width = 8,
          filename = file.path(out_dir, paste0(id, "_QC_scatter.png")))
   
-  # Remove cells failing QC, keep only protein coding genes, and normalize
+  # Remove cells failing QC, keep only protein coding genes
+  # "GSE231924" already norm
   
   mat <- rm_low_qc_cells(mat, meta) %>%
-    get_pcoding_only(pcoding_df = pc) %>% 
-    Seurat::NormalizeData(., normalization.method = "RC", scale.factor = 1e6, verbose = FALSE)
+    get_pcoding_only(pcoding_df = pc) 
   
   meta <- filter(meta, ID %in% colnames(mat))
+  mat <- mat[, meta$ID]
   
-  stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
+  stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
   
   message(paste("Count of cells:", ncol(mat),
                 "Count unique cell types: ", n_distinct(meta$Cell_type)))

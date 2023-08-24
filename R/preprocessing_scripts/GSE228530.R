@@ -48,7 +48,7 @@ if (!file.exists(processed_path)) {
 
   
   # Ready metadata
-  # "GSE228530" clean up cell type names and remove ambiguous
+  # "GSE228530" clean up cell type names, remove ambiguous, and collapse integer delim
   
   change_colnames <- c(Cell_type = "cluster_ann")
   
@@ -56,7 +56,8 @@ if (!file.exists(processed_path)) {
     dplyr::rename(any_of(change_colnames)) %>% 
     mutate(
       assay = "10x 3' v3",
-      Cell_type = str_replace(Cell_type, "^[:digit:]+\\.", "")
+      Cell_type = str_replace(Cell_type, "^[:digit:]+\\.", ""),
+      Cell_type = str_replace(Cell_type, "_[:digit:]$", "")
       ) %>% 
     add_count_info(mat = mat)
   

@@ -1,4 +1,4 @@
-## GSE200202
+## GSE206651
 ## -----------------------------------------------------------------------------
 
 library(WGCNA)
@@ -9,7 +9,7 @@ source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 
-id <- "GSE200202"
+id <- "GSE206651"
 species <- "Mouse"
 
 dat_dir <- file.path(sc_dir, id)
@@ -24,8 +24,8 @@ namat_path <- file.path(out_dir, paste0(id, "_NA_mat_CPM.tsv"))
 pc <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
 
 
-# Files were directly downloaded from GEO, see GSE200202_download.sh in dat_dir
-dat_path <- file.path(dat_dir, paste0(id, "_counts.csv"))
+# Files were directly downloaded from GEO, see GSE206651_download.sh in dat_dir
+dat_path <- file.path(dat_dir, paste0(id, "_counts.txt"))
 meta_path <- file.path(dat_dir, paste0(id, "_metadata.csv"))
 
 
@@ -33,31 +33,26 @@ meta_path <- file.path(dat_dir, paste0(id, "_metadata.csv"))
 if (!file.exists(processed_path)) {
   
   # Load metadata and the count matrix
+ 
+  meta <- read.csv(meta_path)
+  mat <- read_count_mat(dat_path)
+  mat <- mat[, meta$cell_ID]
   
-  meta <- as.data.frame(fread(meta_path))
+  stopifnot(identical(colnames(mat), meta$cell_ID))
   
-  mat <- t(read_count_mat(dat_path))
-  colnames(mat) <- str_replace(colnames(mat), "-[:digit:]-", "-")
-  mat <- mat[, meta$cellID]
-  
-  stopifnot(identical(colnames(mat), meta$cellID))
-
   
   # Ready metadata
-  # "GSE200202" collapse cell types by removing integer delim and remove NA cell types
+  # "GSE206651" remove "Unknown" cell types
   
-  change_colnames <- c(Cell_type = "annot_leiden_full", ID = "cellID")
+  change_colnames <- c(Cell_type = "CellType", ID = "cell_ID")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
-    mutate(
-      assay = "10x 3' v3",
-      Cell_type = str_replace(Cell_type, " \\[[:digit:]\\]", "")
-      ) %>% 
-    filter(!is.na(Cell_type))
+    mutate(assay = "Seq-well") %>%
+    filter(!str_detect(Cell_type, "Unknown[:digit:]+"))
   
   mat <- mat[, meta$ID]
-  meta <- add_count_info(mat, meta)
+  meta <- add_count_info(mat = mat, meta = meta)
   
   
   # QC plots
@@ -78,8 +73,9 @@ if (!file.exists(processed_path)) {
     Seurat::NormalizeData(., normalization.method = "RC", scale.factor = 1e6, verbose = FALSE)
   
   meta <- filter(meta, ID %in% colnames(mat))
+  mat <- mat[, meta$ID]
   
-  stopifnot(all(colnames(mat) %in% meta$ID), length(meta$ID) > 0)
+  stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
   
   message(paste("Count of cells:", ncol(mat),
                 "Count unique cell types: ", n_distinct(meta$Cell_type)))

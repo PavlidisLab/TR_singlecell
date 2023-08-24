@@ -42,13 +42,17 @@ if (!file.exists(processed_path)) {
 
   
   # Ready metadata
+  # "GSE204759" removed "Undetermined" cell type
   
   change_colnames <- c(Cell_type = "CellType", ID = "cellId")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
     mutate(assay = "10x 3' v2") %>% 
-    add_count_info(mat = mat)
+    filter(Cell_type != "Undetermined")
+  
+  mat <- mat[, meta$ID]
+  meta <- add_count_info(mat = mat, meta = meta)
   
   
   # QC plots

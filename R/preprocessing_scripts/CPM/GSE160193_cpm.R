@@ -46,14 +46,17 @@ if (!file.exists(processed_path)) {
   
   
   # Ready metadata
-  # GSE160193 has a ton of blank of cell types... have to remove
+  # GSE160193 remove NA cell types
   
   change_colnames <- c(Cell_type = "annotations", ID = "Well_ID")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
     mutate(assay = "MARS-seq") %>% 
-    add_count_info(mat = mat)
+    filter(!is.na(Cell_type))
+  
+  mat <- mat[, meta$ID]
+  meta <- add_count_info(mat, meta)
   
   
   # QC plots

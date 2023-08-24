@@ -31,11 +31,17 @@ mat_path <- file.path(dat_dir, paste0(id, "_counts.csv"))
 if (!file.exists(processed_path)) {
   
   # Load count matrix and extract cell types from column names
+  # "GSE167597" cell types are cholinergic neurons by dissected region, collapse
+  # cell types by integer delim
   
   mat <- read_count_mat(mat_path)
   
+  cell_types <- paste0(
+    "Cholingeric_neurons_",
+    str_replace_all(colnames(mat), "[A|C|G|T]+-1-|_[:digit:]$", ""))
+  
   meta <- data.frame(
-    Cell_type = str_replace(colnames(mat), "[A|C|G|T]+-1-", ""),
+    Cell_type = cell_types,
     ID = colnames(mat),
     assay = "10x 3' v3"
     ) %>%

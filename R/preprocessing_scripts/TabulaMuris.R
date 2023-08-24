@@ -57,7 +57,6 @@ if (!file.exists(processed_path)) {
   dat <- reduce(dat_l, merge)
   gc(verbose = FALSE)
 
-  
   # Extract count matrix: default counts slot, but use data slot if counts empty
   
   mat <- GetAssayData(dat, slot = "counts")
@@ -68,11 +67,15 @@ if (!file.exists(processed_path)) {
   
   
   # Ready metadata
+  # "TabulaMuris" remove NA cell types
   
   meta <- dat[[]] %>% 
     dplyr::rename(Cell_type = cell_ontology_class) %>% 
     rownames_to_column(var = "ID") %>% 
-    add_count_info(mat = mat)
+    filter(!is.na(Cell_type))
+  
+  mat <- mat[, meta$ID]
+  meta <- add_count_info(mat, meta)
   
   
   # QC plots

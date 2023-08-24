@@ -55,12 +55,16 @@ if (!file.exists(processed_path)) {
   
   
   # Ready metadata
+  # "GSE183310" collapse cell types with integer delim
   
   change_colnames <- c(Cell_type = "celltype_detailed", ID = "Barcode")
   
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
-    mutate(assay = "10x 3' v1") %>% 
+    mutate(
+      assay = "10x 3' v1",
+      Cell_type = str_replace(Cell_type, "[:digit:]+$", "")
+      ) %>% 
     add_count_info(mat = mat)
   
   

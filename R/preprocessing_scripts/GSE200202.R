@@ -44,7 +44,7 @@ if (!file.exists(processed_path)) {
 
   
   # Ready metadata
-  # "GSE200202" collapse cell types by removing integer delim
+  # "GSE200202" collapse cell types by removing integer delim and remove NA cell types
   
   change_colnames <- c(Cell_type = "annot_leiden_full", ID = "cellID")
   
@@ -54,7 +54,10 @@ if (!file.exists(processed_path)) {
       assay = "10x 3' v3",
       Cell_type = str_replace(Cell_type, " \\[[:digit:]\\]", "")
       ) %>% 
-    add_count_info(mat = mat)
+    filter(!is.na(Cell_type))
+  
+  mat <- mat[, meta$ID]
+  meta <- add_count_info(mat, meta)
   
   
   # QC plots
