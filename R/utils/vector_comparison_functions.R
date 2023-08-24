@@ -2,24 +2,57 @@
 ## ranked vectors
 
 # TODO: consider removal of self gene (and k+1) # rank_vec <- rank_vec[names(rank_vec) != gene]
-# TODO: row vs col gene in rank function when using a non-symmetrix matrix
-
+# TODO: topk_intersect() is just length of intersect, either rename or include topk sort
+# TODO: binarize top/bottom k needs to use check k arg
 
 source("R/utils/functions.R")
 
 
-# TODO:
 
-topk_sort <- function(vec, k) names(sort(vec, decreasing = TRUE)[1:k])
+# Aggregate vectors are ranked with ties which causes clumping of NA==0 values,
+# and so selecting the top k elements may include uninformative NAs. This checks
+# for ties at the kth position, and if found, returns the first non-tied k index
+# of vec_sort
+# vec: named numeric vector
+# k: an integer
+# returns: an integer
+
+check_k <- function(vec_sort, k) {
+  
+  if (vec_sort[k] == vec_sort[k - 1]) {
+    tie_start <- head(sort(table(vec_sort), decreasing = TRUE))[1]
+    k <- sum(vec_sort > as.numeric(names(tie_start)), na.rm = TRUE)
+  }
+  
+  return(k)
+}
 
 
-# TODO:
+
+# Sort (bigger = more important) the numeric vec and return the names of the top
+# k elements. 
+# vec: named numeric vector
+# k: an integer
+# check_k_arg: logical controls whether check_k() will be used
+# return: a character vector of the names of the top k elements of vec
+
+topk_sort <- function(vec, k, check_k_arg = TRUE) {
+  vec_sort <- sort(vec, decreasing = TRUE)
+  if (check_k_arg) k <- check_k(vec_sort, k)
+  names(vec_sort[1:k])
+}
+
+
+
+# Return the length of the intersect of vec1 and vec2
+# TODO: This is poorly named or should also perform sorting
 
 topk_intersect <- function(vec1, vec2) length(intersect(vec1, vec2))
 
 
 
-# TODO:
+# Return the AUPRC of vec1 as scores and vec2 as labels
+# TODO doc and better arg names
 
 vec_auprc <- function(vec1, vec2) {
   
@@ -31,8 +64,8 @@ vec_auprc <- function(vec1, vec2) {
 
 
   
-
 # Binarize matrix such that top k and bottom k is 1, everything else 0
+# TODO: doc
 
 binarize_topk_btmk <- function(mat, k = 1000) {
   
@@ -49,18 +82,23 @@ binarize_topk_btmk <- function(mat, k = 1000) {
 
 
 
-# TODO:
+# Return a matrix of the size of the top k intersect between all columns of mat
+# mat: a named numeric matrix
+# k: an integer
+# check_k_arg: logical controls whether check_k() will be used
+# returns: an ncol(mat) * ncol(mat) integer matrix of top k overlap of mat's columns 
 
-colwise_topk_intersect <- function(mat, k = 1000) {
+colwise_topk_intersect <- function(mat, k = 1000, check_k_arg = TRUE) {
   
   col_list <- asplit(mat, 2)
-  topk_list <- lapply(col_list, topk_sort, k)
+  topk_list <- lapply(col_list, topk_sort, k = k, check_k_arg = check_k_arg)
   topk_mat <- outer(topk_list, topk_list, Vectorize(topk_intersect))
+  
   return(topk_mat)
 }
 
 
-# TODO:
+# TODO: doc
 
 colwise_cor <- function(mat, cor_method = "spearman", ncores = 1) {
   cor_mat <- WGCNA::cor(x = mat, method = cor_method, nThreads = ncores)
@@ -68,8 +106,7 @@ colwise_cor <- function(mat, cor_method = "spearman", ncores = 1) {
 }
 
 
-
-# TODO:
+# TODO: doc
 
 colwise_jaccard <- function(mat) {
   
@@ -85,6 +122,7 @@ colwise_jaccard <- function(mat) {
 
 
 # Nested loop faster than outer(): skipping diagonal outweighs vectorized
+# TODO: doc
 
 colwise_topk_auprc <- function(mat, k = 1000) {
   
