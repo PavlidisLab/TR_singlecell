@@ -1,5 +1,5 @@
-## Load a google sheets metadata table tracking scRNA-seq experiments, then
-## format and save a local copy for available experiments
+## Load a google sheets metadata table tracking scRNA-seq experiments, format 
+## and save a local copy for available experiments, and plot experiment counts
 ## -----------------------------------------------------------------------------
 
 library(googlesheets4)
@@ -11,41 +11,18 @@ source("R/utils/functions.R")
 meta <- read_sheet(gsheets_id, sheet = "Main", trim_ws = TRUE)
 
 
-loaded <- lapply(meta$ID, function(x) {
-  file.exists(file.path(amat_dir, x, paste0(x, "_RSR_allrank.tsv")))
-})
 
+# Load a dataset's count matrix and meta and return a list of two data.frames: 
+# 1) 1 x 3 of the experiment ID and the count of unique cell types and total number of cells 
+# 2) 1 x 2 of the count of cells for each unique cell type 
+# ------------------------------------------------------------------------------
 
-meta_loaded <- meta[unlist(loaded), ]
-
-
-# For inspecting those that are not loaded/failed
-missing <- setdiff(meta$ID, meta_loaded$ID)
-
-
-stopifnot(all(meta_loaded$Species %in% c("Human", "Mouse")))
-
-
-# Inspect assay/technology for consistency
-n_platform <- sort(table(meta$Platform))
-
-
-
-# Load a dataset's count matrix and meta and return a list of two data.frames, 
-# the first which counts the cells and cell types, and the second which tallies
-# the count of cells for each unique cell type
-
-# NOTE: as.character() call in ct_count is done to prevent counting cell types 
-# with 0 counts (cell type is a factor), consistent with how NA counts are 
-# tracked in the main RSR_allrank() function. Cell types with counts above 0 but
-# still under the min filter (default 20) are still tallied, however.
 
 add_meta <- function(id) {
   
   dat <- load_dat_list(id)[[1]]
   
-  ct_count <- data.frame(table(as.character(dat$Meta$Cell_type)))
-  colnames(ct_count) <- c("Cell_type", "N_cells")
+  ct_count <- dplyr::count(dat$Meta, Cell_type, name = "N_cells")
   
   dat_count <- data.frame(
     ID = id,
@@ -59,11 +36,36 @@ add_meta <- function(id) {
 
 
 
+# Check whether the given IDs have an aggregate coexpression matrix, then load,
+# inspect, and add count info
+# ------------------------------------------------------------------------------
+
+
+loaded <- lapply(meta$ID, function(x) {
+  file.exists(file.path(amat_dir, x, paste0(x, "_RSR_allrank.tsv")))
+})
+
+
+meta_loaded <- meta[unlist(loaded), ]
+
+
+missing <- setdiff(meta$ID, meta_loaded$ID)
+
+
+stopifnot(all(meta_loaded$Species %in% c("Human", "Mouse")))
+
+
+# Inspect assay/technology for consistency
+n_platform <- sort(table(meta$Platform))
+
+
+
+# Iteratively load each experiment and get cell/cell type counts
 meta_counts <- lapply(meta_loaded$ID, add_meta)
 
 
 
-# List of cell counts per cell type for each dataset for later inspection
+# Extract the list of cell counts per cell type for each dataset for later inspection
 counts_l <- lapply(meta_counts, `[`, "Ct_count")
 names(counts_l) <- meta_loaded$ID
 
