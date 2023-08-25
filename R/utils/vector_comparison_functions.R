@@ -337,44 +337,6 @@ get_similarity_pair_df <- function(cor_mat, topk_mat, jacc_mat) {
 
 
 
-# TODO:
-
-get_all_similarity <- function(agg_l, msr_mat, genes, k = 1000) {
-  
-  sim_l <- lapply(genes, function(x) {
-    
-    message(paste(x, Sys.time()))
-    
-    # Gene matrix with only measured experiments and prevent self gene inflating overlap
-    gene_mat <- gene_vec_to_mat(agg_l, x)
-    gene_mat <- gene_mat[setdiff(rownames(gene_mat), x), ]
-    gene_mat <- gene_mat[, which(msr_mat[x, ] == 1), drop = FALSE]
-    
-    if (ncol(gene_mat) < 2) {  # need more than one experiment for pairing
-      return(NA)
-    }
-    
-    # Cor, Topk, and Jaccard of top and bottom k
-    gene_cor <- colwise_cor(gene_mat, cor_method = "spearman")
-    gene_topk <- colwise_topk_intersect(gene_mat, k = k)
-    gene_jacc <- colwise_jaccard(binarize_topk_btmk(gene_mat, k = k))
-    
-    list(
-      Sim_df = get_similarity_pair_df(gene_cor, gene_topk, gene_jacc),
-      N_exp = ncol(gene_mat)
-    )
-    
-  })
-  
-  names(sim_l) <- genes
-  
-  return(sim_l)
-}
-
-
-
-
-
 # TODO: smarter
 
 # get_rank_df <- function(gene_vec, 
