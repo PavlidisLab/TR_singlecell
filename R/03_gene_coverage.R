@@ -79,9 +79,9 @@ if (!file.exists(msr_mat_mm_path)) {
 
 
 # Get the average/proportion of gene measurement across experiments
-# Human: 450 genes have never been measured and 5,119 genes always measured
-# Mouse: all genes are measured at least 4 times and 864 genes are always measured
-# Ortho: 648 genes measured in every mouse and human dataset
+# Human: 450 genes are never measured and 5,119 genes always measured
+# Mouse: 882 genes are never measured and 838 genes are always measured
+# Ortho: 627 genes measured in every mouse and human dataset
 # TFs: In both species TF genes show small trend of being measured more than non-TF genes 
 # ------------------------------------------------------------------------------
 
@@ -142,8 +142,7 @@ tf_wilx_count <- gene_msr_df %>%
 
 # Look at experiment-wise gene coverage
 # Human: HPA max coverage at 18299 genes, GSE85241 min at 8953
-# Mouse: No experiment measures all genes, but TabulaMuris closest at 20339.
-# GSE160193 min at 2046 genes.
+# Mouse: TabulaMuris max coverage at 17978 genes, GSE160193 min at 1988 genes.
 # ------------------------------------------------------------------------------
 
 
