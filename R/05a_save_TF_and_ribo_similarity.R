@@ -1,5 +1,5 @@
-## Generate various metrics of similarity for TF vectors across aggregate
-## coexpression networks
+## Generate various metrics of similarity for TF and L/S ribosomal vectors 
+## across aggregate coexpression networks
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -14,7 +14,6 @@ source("R/utils/functions.R")
 source("R/00_config.R")
 
 k <- 1000
-force_resave <- TRUE
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -26,32 +25,29 @@ ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 # Protein coding genes 
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
+pc_ortho <- read.delim(pc_ortho_path)
 
 # Transcription Factors
 tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% pc_hg$Symbol)
 tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
 tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
 
+# Ribosomal genes
+sribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
+lribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
+ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
+
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
-# For each dataset, load the subset gene x TF aggregation matrix 
+# Loading the subset TF and ribosomal aggregate matrices
 
-if (!file.exists(agg_tf_hg_path)) {
-  agg_tf_hg <- load_agg_mat_list(ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
-  saveRDS(agg_tf_hg, agg_tf_hg_path)
-} else {
-  agg_tf_hg <- readRDS(agg_tf_hg_path)
-}
+agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
 
-
-if (!file.exists(agg_tf_mm_path)) {
-  agg_tf_mm <- load_agg_mat_list(ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
-  saveRDS(agg_tf_mm, agg_tf_mm_path)
-} else {
-  agg_tf_mm <- readRDS(agg_tf_mm_path)
-}
+agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
+agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
 
 
 
@@ -108,33 +104,62 @@ get_all_similarity <- function(agg_l,
 
 
 
+save_all_similarity <- function(path, 
+                                agg_l, 
+                                msr_mat, 
+                                genes, 
+                                k = 1000, 
+                                check_k_arg = TRUE,
+                                force_resave = TRUE) {
+  
+  if (!file.exists(path) || force_resave) {
+    
+    sim <- get_all_similarity(agg_l = agg_l, 
+                              msr_mat = msr_mat, 
+                              genes = genes, 
+                              k = k,
+                              check_k_arg = check_k_arg)
+    
+    sim <- sim[!is.na(sim)]
+    saveRDS(sim, path)
+    return(invisible(NULL))
+    
+  }
+}
+
+
+
 # Run and save
 # ------------------------------------------------------------------------------
 
 
-if (!file.exists(tf_sim_hg_path) || force_resave) {
-  
-  sim_hg <- get_all_similarity(agg_l = agg_tf_hg, 
-                               msr_mat = msr_hg, 
-                               genes = tfs_hg$Symbol, 
-                               k = k)
-  
-  sim_hg <- sim_hg[!is.na(sim_hg)]
-  
-  saveRDS(sim_hg, tf_sim_hg_path)
-  
-}
+# Human TFs
+save_all_similarity(path = sim_tf_hg_path, 
+                    agg_l = agg_tf_hg, 
+                    msr_mat = msr_hg, 
+                    genes = tfs_hg$Symbol, 
+                    k = k)
 
 
+# Mouse TFs
+save_all_similarity(path = sim_tf_mm_path, 
+                    agg_l = agg_tf_mm, 
+                    msr_mat = msr_mm, 
+                    genes = tfs_mm$Symbol, 
+                    k = k)
 
-if (!file.exists(tf_sim_mm_path) || force_resave) {
-  
-  sim_mm <- get_all_similarity(agg_l = agg_tf_mm, 
-                               msr_mat = msr_mm, 
-                               genes = tfs_mm$Symbol, 
-                               k = k)
-  
-  sim_mm <- sim_mm[!is.na(sim_mm)]
-  
-  saveRDS(sim_mm, tf_sim_mm_path)
-}
+
+# Human ribo
+save_all_similarity(path = sim_ribo_hg_path, 
+                    agg_l = agg_ribo_hg, 
+                    msr_mat = msr_hg, 
+                    genes = ribo_genes$Symbol_hg, 
+                    k = k)
+
+
+# Mouse ribo
+save_all_similarity(path = sim_ribo_mm_path, 
+                    agg_l = agg_ribo_mm, 
+                    msr_mat = msr_mm, 
+                    genes = ribo_genes$Symbol_mm, 
+                    k = k)
