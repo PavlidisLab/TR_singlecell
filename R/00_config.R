@@ -70,14 +70,18 @@ max_pair_hg_path <- "/space/scratch/amorin/R_objects/max_cor_pair_hg.RDS"
 max_pair_mm_path <- "/space/scratch/amorin/R_objects/max_cor_pair_mm.RDS"
 
 
-# List of TF aggregate matrices
+# List of TF and L/S ribo aggregate matrices
 agg_tf_hg_path <- "/space/scratch/amorin/R_objects/TF_agg_mat_list_human.RDS"
 agg_tf_mm_path <- "/space/scratch/amorin/R_objects/TF_agg_mat_list_mouse.RDS"
+agg_ribo_hg_path <- "/space/scratch/amorin/R_objects/ribo_agg_mat_list_human.RDS"
+agg_ribo_mm_path <- "/space/scratch/amorin/R_objects/ribo_agg_mat_list_mouse.RDS"
 
 
-# List of TF vector similarities
-tf_sim_hg_path <- "/space/scratch/amorin/R_objects/TF_similarity_human.RDS"
-tf_sim_mm_path <- "/space/scratch/amorin/R_objects/TF_similarity_mouse.RDS"
+# List of TF and ribo vector similarities
+sim_tf_hg_path <- "/space/scratch/amorin/R_objects/similarity_TF_human.RDS"
+sim_tf_mm_path <- "/space/scratch/amorin/R_objects/similarity_TF_mouse.RDS"
+sim_ribo_hg_path <- "/space/scratch/amorin/R_objects/similarity_ribo_human.RDS"
+sim_ribo_mm_path <- "/space/scratch/amorin/R_objects/similarity_ribo_mouse.RDS"
 
 
 # List of null sampled gene vector topk similarities
