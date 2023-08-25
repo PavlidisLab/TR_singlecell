@@ -53,7 +53,7 @@ if (!file.exists(processed_path)) {
   meta <- meta %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
     mutate(assay = "MARS-seq") %>% 
-    filter(!is.na(Cell_type))
+    filter(!is.na(Cell_type) & Cell_type != "")
   
   mat <- mat[, meta$ID]
   meta <- add_count_info(mat, meta)
