@@ -1,23 +1,15 @@
-## Sample genes from experiments and calculate the topk intersect across 
-## experiments to generate a null. Save out the result as a list.
+## Sample TFs across experiments and calculate their topk intersect to generate
+## a null. Save out the results as a list.
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
 library(data.table)
-library(WGCNA)
-library(parallel)
-library(pheatmap)
-library(RColorBrewer)
-library(cowplot)
 source("R/utils/vector_comparison_functions.R")
 source("R/utils/functions.R")
 source("R/00_config.R")
 
 k <- 1000 
 n_samps <- 1000
-null_topk_hg_path <- "/space/scratch/amorin/R_objects/sampled_TF_null_topk_intersect_human.RDS"
-null_topk_mm_path <- "/space/scratch/amorin/R_objects/sampled_TF_null_topk_intersect_mouse.RDS"
-
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -40,62 +32,28 @@ msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
 # For each dataset, load the subset gene x TF aggregation matrix 
-
-if (!file.exists(agg_tf_hg_path)) {
-  agg_tf_hg <- load_agg_mat_list(ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
-  saveRDS(agg_tf_hg, agg_tf_hg_path)
-} else {
-  agg_tf_hg <- readRDS(agg_tf_hg_path)
-}
-
-
-if (!file.exists(agg_tf_mm_path)) {
-  agg_tf_mm <- load_agg_mat_list(ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
-  saveRDS(agg_tf_mm, agg_tf_mm_path)
-} else {
-  agg_tf_mm <- readRDS(agg_tf_mm_path)
-}
+agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
 
 
 
-check_k <- function(vec_sort, k) {
-  
-  if (vec_sort[k] == vec_sort[k - 1]) {
-    tie_start <- head(sort(table(vec_sort), decreasing = TRUE))[1]
-    k <- sum(vec_sort > as.numeric(names(tie_start)), na.rm = TRUE)
-  }
-  
-  return(k)
-}
+# For a given set of input genes and list of aggregate coexpression matrices, 
+# sample one gene that is measured in each experiment from the list of input
+# genes, and calculate the top k intersect between these sampled genes
+# agg_l: A list of aggregate coexpression matrices (gene x gene numeric matrix)
+# msr_mat: binary gene x experiment matrix tracking if a gene was measured
+# k: an integer of the top elements to select
+# check_k_arg: logical controls if k should be reduced to the largest non-tied element
+# returns: a list for each gene containing a dataframe of all unique experiment
+# pairs in which the given gene was measured, and their top k intersect
+# ------------------------------------------------------------------------------
 
 
-
-topk_sort <- function(vec, k, check_k_arg = TRUE) {
-  vec_sort <- sort(vec, decreasing = TRUE)
-  if (check_k_arg) k <- check_k(vec_sort, k)
-  names(vec_sort[1:k])
-}
-
-
-
-topk_intersect <- function(vec1, vec2) length(intersect(vec1, vec2))
-
-
-
-colwise_topk_intersect <- function(mat, k = 1000, check_k_arg = TRUE) {
-  
-  col_list <- asplit(mat, 2)
-  topk_list <- lapply(col_list, topk_sort, k = k, check_k_arg = check_k_arg)
-  topk_mat <- outer(topk_list, topk_list, Vectorize(topk_intersect))
-  
-  return(topk_mat)
-}
-
-
-
-# 
-
-sample_topk_intersect <- function(agg_l, genes, msr_mat, k = 1000) {
+sample_topk_intersect <- function(agg_l, 
+                                  genes, 
+                                  msr_mat,
+                                  k = 1000,
+                                  check_k_arg = TRUE) {
   
   ids <- names(agg_l)
   
@@ -113,7 +71,7 @@ sample_topk_intersect <- function(agg_l, genes, msr_mat, k = 1000) {
   colnames(sample_mat) <- paste0(ids, "_", sample_genes)
   
   # Get topk overlap between sampled genes
-  sample_topk <- colwise_topk_intersect(sample_mat)
+  sample_topk <- colwise_topk_intersect(sample_mat, k = k, check_k_arg = check_k_arg)
   sample_df <- mat_to_df(sample_topk, symmetric = TRUE, value_name = "Topk")
   
   return(sample_df)
