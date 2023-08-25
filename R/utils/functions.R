@@ -64,6 +64,20 @@ load_agg_mat_list  <- function(ids,
 
 
 
+# Call load_agg_mat_list to load/save a local copy
+
+load_or_generate_agg <- function(path, ids, genes, sub_genes) {
+  
+  if (!file.exists(path)) {
+    agg_l <- load_agg_mat_list(ids = ids, genes = genes, sub_genes = sub_genes)
+    saveRDS(agg_l, path)
+  } else {
+    readRDS(path)
+  }
+}
+
+
+
 # Given a vector of ids, will load the associated list of normalized matrices
 # and metadata into a list. 
 
@@ -79,7 +93,6 @@ load_dat_list <- function(ids,
   
   return(dat_l)
 }
-
 
 
 # Uses fread() to read from path, assuming that the introduced V1 (rownames)
