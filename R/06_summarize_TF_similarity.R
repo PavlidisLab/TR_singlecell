@@ -28,11 +28,6 @@ pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 pc_ortho <- read.delim(pc_ortho_path)
 
-# Ribosomal genes
-sribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
-lribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
-ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
-
 # Transcription Factors
 tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% pc_hg$Symbol)
 tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
@@ -43,12 +38,12 @@ msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
 # List of paired experiment similarities for TFs
-tf_sim_hg <- readRDS(tf_sim_hg_path)
-tf_sim_mm <- readRDS(tf_sim_mm_path)
+sim_tf_hg <- readRDS(sim_tf_hg_path)
+sim_tf_mm <- readRDS(sim_tf_mm_path)
 
 # Null topk overlap
-null_topk_hg <- readRDS("/space/scratch/amorin/R_objects/sampled_TF_null_topk_intersect_human.RDS")
-null_topk_mm <- readRDS("/space/scratch/amorin/R_objects/sampled_TF_null_topk_intersect_mouse.RDS")
+null_topk_hg <- readRDS(null_topk_hg_path)
+null_topk_mm <- readRDS(null_topk_mm_path)
 
 # Query/subject all rank matrices
 # allrank_dir <- "/space/scratch/amorin/R_objects/04-07-2023/"
@@ -85,8 +80,8 @@ null_summ_mm <- summary(unlist(lapply(null_topk_mm, function(x) median(x$Topk)))
 
 
 # Summarize each TF's topk overlap and organize into a df
-tf_summ_hg <- get_summary_df(tf_sim_hg, msr_hg)
-tf_summ_mm <- get_summary_df(tf_sim_mm, msr_mm)
+tf_summ_hg <- get_summary_df(sim_tf_hg, msr_hg)
+tf_summ_mm <- get_summary_df(sim_tf_mm, msr_mm)
 
 
 # Relationship between median topk intersect and the number of non-NA experiments
@@ -152,7 +147,7 @@ diag(allrank_mat) <- NA
 # similar pair across all experiment pairs by magnitude may not actually be the
 # top ranked gene within the subject dataset
 
-sim_df <- tf_sim_hg[[gene_hg]]$Sim_df
+sim_df <- sim_tf_hg[[gene_hg]]$Sim_df
 best_value_id <- slice_max(sim_df, Topk, n = 1)
 best_rank_ix <- which(allrank_mat == min(allrank_mat, na.rm = TRUE), arr.ind = TRUE)
 
@@ -177,7 +172,7 @@ topk_rank <- query_gene_rank_topk(
 
 # Relationship between similarity stats
 
-p1 <- ggplot(tf_sim_hg[[gene_hg]], aes(x = Scor, y = Topk)) +
+p1 <- ggplot(sim_tf_hg[[gene_hg]], aes(x = Scor, y = Topk)) +
   geom_point(shape = 19, size = 3) +
   ggtitle(gene_hg) +
   theme_classic() +
@@ -289,11 +284,11 @@ max_tf_mm <- as.character(slice_max(tf_summ_mm, Median)$Symbol)
 example_ribo_hg <- "RPL7A"
 example_ribo_mm <- "Rpl3"
 
-max_tf_df_hg <- tf_sim_hg[[max_tf_hg]]
-max_tf_df_mm <- tf_sim_mm[[max_tf_mm]]
+max_tf_df_hg <- sim_tf_hg[[max_tf_hg]]
+max_tf_df_mm <- sim_tf_mm[[max_tf_mm]]
 
-tf_df_hg <- tf_sim_hg[[example_tf_hg]]
-tf_df_mm <- tf_sim_mm[[example_tf_mm]]
+tf_df_hg <- sim_tf_hg[[example_tf_hg]]
+tf_df_mm <- sim_tf_mm[[example_tf_mm]]
 
 ribo_df_hg <- ribo_sim_hg[[example_ribo_hg]]
 ribo_df_mm <- ribo_sim_mm[[example_ribo_mm]]
