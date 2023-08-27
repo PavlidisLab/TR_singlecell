@@ -1,4 +1,5 @@
-## TODO
+## For each TF generate a dataframe ranking genes by their aggregate coexpression
+## with the given TF, and save out as a list
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -35,21 +36,9 @@ msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
 # For each dataset, load the subset gene x TF aggregation matrix 
+agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
 
-if (!file.exists(agg_tf_hg_path)) {
-  agg_tf_hg <- load_agg_mat_list(ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
-  saveRDS(agg_tf_hg, agg_tf_hg_path)
-} else {
-  agg_tf_hg <- readRDS(agg_tf_hg_path)
-}
-
-
-if (!file.exists(agg_tf_mm_path)) {
-  agg_tf_mm <- load_agg_mat_list(ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
-  saveRDS(agg_tf_mm, agg_tf_mm_path)
-} else {
-  agg_tf_mm <- readRDS(agg_tf_mm_path)
-}
 
 
 #
@@ -57,28 +46,17 @@ if (!file.exists(agg_tf_mm_path)) {
 
 
 
-# Return k, or the count of observations before the ties pileup if it less than k
-
-check_k <- function(vec_sort, k) {
-
-  if (vec_sort[k] == vec_sort[k - 1]) {
-    tie_start <- head(sort(table(vec_sort), decreasing = TRUE))[1]
-    k <- sum(vec_sort > as.numeric(names(tie_start)), na.rm = TRUE)
-  }
-  
-  return(k)
-}
-
-
 
 # TODO:
 
-get_topk_count <- function(gene_mat, k) {
+get_topk_count <- function(gene_mat, k, check_k_arg = TRUE) {
   
   bin_l <- lapply(1:ncol(gene_mat), function(x) {
+    
     vec_sort <- sort(gene_mat[, x], decreasing = TRUE)
-    k <- check_k(vec_sort, k)
+    if (check_k_arg) k <- check_k(vec_sort, k)
     gene_mat[, x] >= vec_sort[k]
+    
   })
   
   bin_mat <- do.call(cbind, bin_l)
@@ -98,7 +76,10 @@ get_topk_count <- function(gene_mat, k) {
 # 4) For the best correlation partner, what was its best rank across datasets?
 # 5) And in what dataset did it achieve this best rank?
 
-all_rank_summary <- function(agg_l, msr_mat, genes, k = 1000) {
+all_rank_summary <- function(agg_l, 
+                             msr_mat, 
+                             genes, 
+                             k = 1000) {
   
   summ_l <- lapply(genes, function(x) {
     
@@ -153,6 +134,8 @@ if (!file.exists(tf_summ_hg_path)) {
                               genes = tfs_hg$Symbol,
                               k = k)
   
+  summ_hg <- summ_hg[!is.na(summ_hg)]
+  
   saveRDS(summ_hg, tf_summ_hg_path)
 
 }
@@ -165,6 +148,8 @@ if (!file.exists(tf_summ_mm_path)) {
                               msr_mat = msr_mm, 
                               genes = tfs_mm$Symbol,
                               k = k)
+  
+  summ_mm <- summ_mm[!is.na(summ_mm)]
   
   saveRDS(summ_mm, tf_summ_mm_path)
   
