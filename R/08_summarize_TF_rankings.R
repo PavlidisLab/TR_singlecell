@@ -30,8 +30,130 @@ summ_mm <- readRDS(tf_summ_mm_path)
 
 evidence_l <- readRDS(evidence_path)
 
-arrange(summ_hg$E2F8, desc(Topk_count)) %>% head(30)
-arrange(summ_mm$E2f8, desc(Topk_count)) %>% head(30)
+
+
+# Inspecting targets from the most similar TFs
+arrange(summ_hg$E2F8, desc(Avg_RSR)) %>% head(30)
+arrange(summ_mm$E2f8, desc(Avg_RSR)) %>% head(30)
+
+
+# global top
+
+top_hg <- lapply(summ_hg, function(x) {
+  if (is.logical(x)) {
+    return(NA)}
+  slice_min(x, Rank_RSR)
+})
+
+top_hg <- top_hg[!is.na(top_hg)]
+top_hg <- do.call(rbind, top_hg)
+which(is.na(top_hg))
+
+
+# TODO: Rank_RSR versus stat var
+
+slice_topk_genes <- function(df, topk) {
+  stopifnot(c("Symbol", "Rank_RSR") %in% colnames(df))
+  slice_min(df, Rank_RSR, n = topk)[["Symbol"]]
+}
+
+
+# get_stat <- function() {
+#   lapply(rank_l, function(y) filter(y, Symbol == x)$Rank_RSR)
+# }
+
+
+
+get_stat_by_genes <- function(rank_l, genes) {
+  
+  # stopifnot(stat %in% colnames(rank_l[[1]]), genes %in% rownames(rank_l[[1]]))
+  stopifnot(genes %in% rownames(rank_l[[1]]))
+  
+  lapply(genes, function(gene) {
+    unlist(
+      lapply(rank_l, function(rank_df) filter(rank_df, Symbol == gene)[["Rank_RSR"]])
+      )
+    })
+}
+
+
+
+
+
+get_topk_rank_mat <- function(rank_l, topk = 5) {
+  
+  topk_each_l <- lapply(rank_l, slice_topk_genes, topk = topk)
+  
+  all_topk_genes <- unlist(topk_each_l, use.names = FALSE)
+  
+  if (any(duplicated(all_topk_genes))) message("Duplicate topk genes between TFs")
+  
+  topk_all_l <- get_stat_by_genes(rank_l, genes = all_topk_genes)
+  topk_all_mat <- as.matrix(do.call(rbind, topk_all_l))
+  rownames(topk_all_mat) <- all_topk_genes
+  
+  return(topk_all_mat)
+}
+
+
+
+# TODO: brush up stringr str extract+NA or str detect logical
+
+extract_pc_pattern <- function(pattern, pc_hg, pc_mm, pc_ortho) {
+  
+  hg <- str_detect(str_to_lower(pc_hg$Symbol), pattern)
+  hg <- sort(pc_hg$Symbol[hg])
+  
+  mm <- str_detect(str_to_lower(pc_mm$Symbol), pattern)
+  mm <- sort(pc_mm$Symbol[mm])
+  
+  ortho <- filter(pc_ortho, Symbol_hg %in% hg | Symbol_mm %in% mm)
+  
+  return(list(Human = hg, Mouse = mm, Ortho = ortho))
+  
+}
+
+
+pax <- extract_pc_pattern("^pax[:digit:]+$", pc_hg, pc_mm, pc_ortho)
+pax_rank_hg <- get_topk_rank_mat(summ_hg[pax$Human], topk = 8)
+pax_rank_mm <- get_topk_rank_mat(summ_mm[pax$Mouse], topk = 8)
+
+ascl <- extract_pc_pattern("^ascl[:digit:]+$", pc_hg, pc_mm, pc_ortho)
+ascl_rank_hg <- get_topk_rank_mat(summ_hg[ascl$Human], topk = 8)
+ascl_rank_mm <- get_topk_rank_mat(summ_mm[ascl$Mouse], topk = 8)
+
+sample <- sample(names(summ_hg), 9)  # testing sample
+sample_rank <- get_topk_rank_mat(summ_hg[sample])
+
+
+rank_heatmap <- function(rank_mat) {
+  
+  pheatmap(rank_mat, 
+           color = rev(c('#fcfbfd','#efedf5','#dadaeb','#bcbddc','#9e9ac8','#807dba','#6a51a3','#54278f','#3f007d')),
+           cluster_rows = FALSE, 
+           cluster_cols = FALSE)
+}
+
+
+
+# TODO: better way of binarizing to mat? logical->integer dropped str
+
+rank_binary_heatmap <- function(rank_mat, rank_cutoff) {
+  
+  rank_mat <- rank_mat < rank_cutoff
+  rank_mat <- ifelse(rank_mat, 1, 0)
+  
+  pheatmap(rank_mat, 
+           color = c("white", "black"),
+           cluster_rows = FALSE, 
+           cluster_cols = FALSE)
+  
+}
+
+
+
+rank_binary_heatmap(ascl_rank_mm, rank_cutoff = 100)
+rank_heatmap(ascl_rank_mm)
 
 
 # Create a gene x TF matrix of summarized ranks
@@ -50,14 +172,14 @@ colnames(rank_mat_mm) <- names(summ_mm)
 
 rank_order_hg <- sort(rowMeans(rank_mat_hg, na.rm = TRUE))
 head(rank_order_hg)
-head(sort(rank_order_hg, decreasing = TRUE))
-head(sort(rank_mat_hg["RPL3",]), 50)
-head(sort(rank_mat_hg["DLL3",]), 50)
-head(sort(rank_mat_hg["DIXDC1",], decreasing = TRUE), 50)
+tail(rank_order_hg)
 
+head(sort(rank_mat_hg["RUNX1",]), 50)
 
 
 rank_order_mm <- sort(rowMeans(rank_mat_mm, na.rm = TRUE))
-head(sort(rank_mat_mm["Bnc1",]), 50)
-head(sort(rank_mat_mm["Esrrg",]), 50)
-head(sort(rank_mat_mm["Nbl1",], decreasing = TRUE), 50)
+head(rank_order_mm)
+tail(rank_order_mm)
+
+
+head(sort(rank_mat_mm["Pax6",]), 50)
