@@ -46,6 +46,9 @@ msr_mm <- readRDS(msr_mat_mm_path)
 agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
 agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
 
+tfs_hg <- filter(tfs_hg, Symbol %in% colnames(agg_tf_hg[[1]]))
+tfs_mm <- filter(tfs_mm, Symbol %in% colnames(agg_tf_mm[[1]]))
+
 agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
 agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
 
@@ -110,7 +113,7 @@ save_all_similarity <- function(path,
                                 genes, 
                                 k = 1000, 
                                 check_k_arg = TRUE,
-                                force_resave = TRUE) {
+                                force_resave = FALSE) {
   
   if (!file.exists(path) || force_resave) {
     
