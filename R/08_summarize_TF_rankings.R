@@ -25,29 +25,31 @@ pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 pc_ortho <- read.delim(pc_ortho_path)
 
 # Saved list RDS of the summaries
-summ_hg <- readRDS(tf_summ_hg_path)
-summ_mm <- readRDS(tf_summ_mm_path)
+rank_tf_hg <- readRDS(rank_tf_hg_path)
+rank_tf_mm <- readRDS(rank_tf_mm_path)
 
 evidence_l <- readRDS(evidence_path)
 
 
 
+# Global top
+# ------------------------------------------------------------------------------
+
+
+top_hg <- do.call(rbind, lapply(rank_tf_hg, slice_min, Rank_RSR))
+top_mm <- do.call(rbind, lapply(rank_tf_mm, slice_min, Rank_RSR))
+
+hist(top_hg$Topk_count)
+hist(top_hg$Topk_proportion)
+
+
 # Inspecting targets from the most similar TFs
-arrange(summ_hg$E2F8, desc(Avg_RSR)) %>% head(30)
-arrange(summ_mm$E2f8, desc(Avg_RSR)) %>% head(30)
+arrange(rank_tf_hg$E2F8, desc(Avg_RSR)) %>% head(30)
+arrange(rank_tf_mm$E2f8, desc(Avg_RSR)) %>% head(30)
 
 
-# global top
 
-top_hg <- lapply(summ_hg, function(x) {
-  if (is.logical(x)) {
-    return(NA)}
-  slice_min(x, Rank_RSR)
-})
 
-top_hg <- top_hg[!is.na(top_hg)]
-top_hg <- do.call(rbind, top_hg)
-which(is.na(top_hg))
 
 
 # TODO: Rank_RSR versus stat var
@@ -115,16 +117,19 @@ extract_pc_pattern <- function(pattern, pc_hg, pc_mm, pc_ortho) {
 
 
 pax <- extract_pc_pattern("^pax[:digit:]+$", pc_hg, pc_mm, pc_ortho)
-pax_rank_hg <- get_topk_rank_mat(summ_hg[pax$Human], topk = 8)
-pax_rank_mm <- get_topk_rank_mat(summ_mm[pax$Mouse], topk = 8)
+pax_rank_hg <- get_topk_rank_mat(rank_tf_hg[pax$Human], topk = 8)
+pax_rank_mm <- get_topk_rank_mat(rank_tf_mm[pax$Mouse], topk = 8)
 
 ascl <- extract_pc_pattern("^ascl[:digit:]+$", pc_hg, pc_mm, pc_ortho)
-ascl_rank_hg <- get_topk_rank_mat(summ_hg[ascl$Human], topk = 8)
-ascl_rank_mm <- get_topk_rank_mat(summ_mm[ascl$Mouse], topk = 8)
+ascl_rank_hg <- get_topk_rank_mat(rank_tf_hg[ascl$Human], topk = 8)
+ascl_rank_mm <- get_topk_rank_mat(rank_tf_mm[ascl$Mouse], topk = 8)
 
-sample <- sample(names(summ_hg), 9)  # testing sample
-sample_rank <- get_topk_rank_mat(summ_hg[sample])
+sample <- sample(names(rank_tf_hg), 9)  # testing sample
+sample_rank <- get_topk_rank_mat(rank_tf_hg[sample])
 
+
+# TODO: rank range is not informative. Consider breaks like 1-500, 501-1000,
+# 2000-3000...
 
 rank_heatmap <- function(rank_mat) {
   
@@ -159,12 +164,12 @@ rank_heatmap(ascl_rank_mm)
 # Create a gene x TF matrix of summarized ranks
 
 
-rank_mat_hg <- as.matrix(do.call(cbind, lapply(summ_hg, `[`, "Rank_RSR")))
-colnames(rank_mat_hg) <- names(summ_hg)
+rank_mat_hg <- as.matrix(do.call(cbind, lapply(rank_tf_hg, `[`, "Rank_RSR")))
+colnames(rank_mat_hg) <- names(rank_tf_hg)
 
 
-rank_mat_mm <- as.matrix(do.call(cbind, lapply(summ_mm, `[`, "Rank_RSR")))
-colnames(rank_mat_mm) <- names(summ_mm)
+rank_mat_mm <- as.matrix(do.call(cbind, lapply(rank_tf_mm, `[`, "Rank_RSR")))
+colnames(rank_mat_mm) <- names(rank_tf_mm)
 
 
 # Most commonly highly ranked genes
@@ -183,3 +188,23 @@ tail(rank_order_mm)
 
 
 head(sort(rank_mat_mm["Pax6",]), 50)
+
+
+
+# Distn of top k
+
+ggplot(rank_tf_hg$ASCL1, aes(x = Topk_count)) +
+  geom_histogram(bins = 32) +
+  geom_vline(xintercept = filter(rank_tf_hg$ASCL1, Symbol == "HES6")$Topk_count) +
+  geom_vline(xintercept = filter(rank_tf_hg$ASCL1, Symbol == "DLL1")$Topk_count) +
+  geom_vline(xintercept = filter(rank_tf_hg$ASCL1, Symbol == "DLL3")$Topk_count) +
+  ggtitle("Human ASCL1") +
+  xlab("Top k (k=1000) count") +
+  ylab("Gene count") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 10, 10, 10)))
+
+
