@@ -41,6 +41,10 @@ msr_mm <- readRDS(msr_mat_mm_path)
 sim_tf_hg <- readRDS(sim_tf_hg_path)
 sim_tf_mm <- readRDS(sim_tf_mm_path)
 
+# L/S ribo topk overlap
+sim_ribo_hg <- readRDS(sim_ribo_hg_path)
+sim_ribo_mm <- readRDS(sim_ribo_hg_path)
+
 # Null topk overlap
 null_topk_hg <- readRDS(null_topk_hg_path)
 null_topk_mm <- readRDS(null_topk_mm_path)
@@ -74,58 +78,54 @@ get_summary_df <- function(sim_l, msr_mat) {
 # ------------------------------------------------------------------------------
 
 
+# Summarize each TF's similarity and organize into a df
+summ_tf_hg <- get_summary_df(sim_tf_hg, msr_hg)
+summ_tf_mm <- get_summary_df(sim_tf_mm, msr_mm)
+
+
+# Summarize ribo similarity and organize into a df
+summ_ribo_hg <- get_summary_df(sim_ribo_hg, msr_hg)
+summ_ribo_mm <- get_summary_df(sim_ribo_mm, msr_mm)
+
+
 # Summary of null topk overlap
-null_summ_hg <- summary(unlist(lapply(null_topk_hg, function(x) median(x$Topk))))
-null_summ_mm <- summary(unlist(lapply(null_topk_mm, function(x) median(x$Topk))))
-
-
-# Summarize each TF's topk overlap and organize into a df
-tf_summ_hg <- get_summary_df(sim_tf_hg, msr_hg)
-tf_summ_mm <- get_summary_df(sim_tf_mm, msr_mm)
+summ_null_hg <- summary(unlist(lapply(null_topk_hg, function(x) median(x$Topk))))
+summ_null_mm <- summary(unlist(lapply(null_topk_mm, function(x) median(x$Topk))))
 
 
 # Relationship between median topk intersect and the number of non-NA experiments
-topk_na_cor_hg <- suppressWarnings(cor.test(tf_summ_hg$Median, tf_summ_hg$N_exp, method = "spearman"))
-topk_na_cor_mm <- suppressWarnings(cor.test(tf_summ_mm$Median, tf_summ_mm$N_exp, method = "spearman"))
+topk_na_cor_hg <- suppressWarnings(cor.test(summ_tf_hg$Median, summ_tf_hg$N_exp, method = "spearman"))
+topk_na_cor_mm <- suppressWarnings(cor.test(summ_tf_mm$Median, summ_tf_mm$N_exp, method = "spearman"))
 
 
 # Count of TFs whose median topk is greater than the null
-topk_gt_hg <- sum(tf_summ_hg$Median > null_summ_hg["Median"]) / nrow(tf_summ_hg)
-topk_gt_mm <- sum(tf_summ_mm$Median > null_summ_mm["Median"]) / nrow(tf_summ_mm)
+topk_gt_hg <- sum(summ_tf_hg$Median > summ_null_hg["Median"]) / nrow(summ_tf_hg)
+topk_gt_mm <- sum(summ_tf_mm$Median > summ_null_mm["Median"]) / nrow(summ_tf_mm)
 
-
-
-# For generating/inspecting similarity of L/S ribosomal genes
-# ------------------------------------------------------------------------------
-
-
-# Load aggregate matrices by gene into a list
-ribo_agg_hg <- load_agg_mat_list(ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
-ribo_agg_mm <- load_agg_mat_list(ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
-
-
-# List of paired similarity dfs
-ribo_sim_hg <- get_all_similarity(agg_l = ribo_agg_hg, msr_mat = msr_hg, genes = ribo_genes$Symbol_hg)
-ribo_sim_mm <- get_all_similarity(agg_l = ribo_agg_mm, msr_mat = msr_mm, genes = ribo_genes$Symbol_mm)
-
-
-# Summaries of self topk intersect of ribosomal genes across datasets
-ribo_summ_hg <- get_summary_df(ribo_sim_hg, msr_hg)
-ribo_summ_mm <- get_summary_df(ribo_sim_mm, msr_mm)
 
 
 # Look at similarity by TF family
+# TODO: repetition of factor ordering after join
 # ------------------------------------------------------------------------------
 
 
-family_hg <- tf_summ_hg %>% 
-  left_join(tfs_hg[, c("Symbol", "Family")], by = "Symbol") %>% 
+summ_tf_hg <- summ_tf_hg %>% 
+  left_join(., tfs_hg[, c("Symbol", "Family")], by = "Symbol") %>% 
+  arrange(Median) %>% 
+  mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
+
+
+family_hg <- summ_tf_hg %>% 
   group_by(Family) %>% 
-  summarise(Med = median(Median), N = n(), Med_exp = median(N_exp)) %>% 
-  arrange(desc(Med))
+  summarise(
+    Med_topk = median(Median), 
+    N_TFs = n(),
+    Med_exp_msrd = median(N_exp)
+    ) %>% 
+  arrange(desc(Med_topk))
 
 
-boxplot(tf_summ_hg$Median ~ tf_summ_hg$Family)
+boxplot(summ_tf_hg$Med ~ summ_tf_hg$Family)
 
 
 
@@ -133,42 +133,44 @@ boxplot(tf_summ_hg$Median ~ tf_summ_hg$Family)
 # ------------------------------------------------------------------------------
 
 
-gene_hg <- "ASCL1"
-
-
-# Keep only measured genes and set diag to NA to remove self-ranking
-
-keep_exp <- which(msr_hg[gene_hg, ] == 1)
-allrank_mat <- allrank_l[[gene_hg]][keep_exp, keep_exp, drop = FALSE]
-diag(allrank_mat) <- NA
-
-
-# Inspecting top pairs: by topk magnitude, and by rank. The highest value/most
-# similar pair across all experiment pairs by magnitude may not actually be the
-# top ranked gene within the subject dataset
-
-sim_df <- sim_tf_hg[[gene_hg]]$Sim_df
-best_value_id <- slice_max(sim_df, Topk, n = 1)
-best_rank_ix <- which(allrank_mat == min(allrank_mat, na.rm = TRUE), arr.ind = TRUE)
-
-query_vec <- load_agg_mat_list(ids = best_value_id$Row,
-                               genes = pc_hg$Symbol,
-                               sub_genes = gene_hg)[[1]][, gene_hg]
-
-subject_mat <- load_agg_mat_list(ids = best_value_id$Col, genes = pc_hg$Symbol)[[1]]
-
-
-topk_rank <- query_gene_rank_topk(
-  query_vec = query_vec,
-  subject_mat = subject_mat,
-  gene = gene_hg,
-  ncores = ncore)
+# gene_hg <- "ASCL1"
+# 
+# 
+# # Keep only measured genes and set diag to NA to remove self-ranking
+# 
+# keep_exp <- which(msr_hg[gene_hg, ] == 1)
+# allrank_mat <- allrank_l[[gene_hg]][keep_exp, keep_exp, drop = FALSE]
+# diag(allrank_mat) <- NA
+# 
+# 
+# # Inspecting top pairs: by topk magnitude, and by rank. The highest value/most
+# # similar pair across all experiment pairs by magnitude may not actually be the
+# # top ranked gene within the subject dataset
+# 
+# sim_df <- sim_tf_hg[[gene_hg]]$Sim_df
+# best_value_id <- slice_max(sim_df, Topk, n = 1)
+# best_rank_ix <- which(allrank_mat == min(allrank_mat, na.rm = TRUE), arr.ind = TRUE)
+# 
+# query_vec <- load_agg_mat_list(ids = best_value_id$Row,
+#                                genes = pc_hg$Symbol,
+#                                sub_genes = gene_hg)[[1]][, gene_hg]
+# 
+# subject_mat <- load_agg_mat_list(ids = best_value_id$Col, genes = pc_hg$Symbol)[[1]]
+# 
+# 
+# topk_rank <- query_gene_rank_topk(
+#   query_vec = query_vec,
+#   subject_mat = subject_mat,
+#   gene = gene_hg,
+#   ncores = ncore)
 
 
 
 # Plotting
 # ------------------------------------------------------------------------------
 
+
+gene_hg <- "ASCL1"
 
 # Relationship between similarity stats
 
@@ -186,7 +188,7 @@ p1 <- ggplot(sim_tf_hg[[gene_hg]], aes(x = Scor, y = Topk)) +
 # Scatterplot of TF median topk intersect with text overlay for top n TFs
 
 
-scatter_topk_median <- function(summary_df, null_summary, topn_label = 30) {
+scatter_topk_median <- function(summary_df, summ_nullary, topn_label = 30) {
   
   summary_df <- summary_df %>%  
     mutate(Group = Symbol %in% slice_max(summary_df, Median, n = topn_label)$Symbol)
@@ -195,29 +197,34 @@ scatter_topk_median <- function(summary_df, null_summary, topn_label = 30) {
     geom_point() +
     geom_text_repel(data = filter(summary_df, Group),
                     aes(x = Symbol, y = Median, label = Symbol, fontface = "italic"),
-                    max.overlaps = 20, 
+                    max.overlaps = 30, 
                     force = 0.5,
                     nudge_x = -0.25,
                     hjust = 0,
                     size = 5,
                     segment.size = 0.2) +
-    geom_hline(yintercept = null_summary["Median"], colour = "firebrick") +
-    geom_hline(yintercept = null_summary["1st Qu."], colour = "grey85") +
-    geom_hline(yintercept = null_summary["3rd Qu."], colour = "grey85") +
+    geom_hline(yintercept = summ_nullary["Median"], colour = "firebrick") +
+    geom_hline(yintercept = summ_nullary["1st Qu."], colour = "grey85") +
+    geom_hline(yintercept = summ_nullary["3rd Qu."], colour = "grey85") +
     ylab(paste0("Median Top k (k=", k, ")")) +
-    expand_limits(x = nrow(tf_summ_hg) + 50) +  # prevent point cut off
+    expand_limits(x = nrow(summ_tf_hg) + 50) +  # prevent point cut off
     theme_classic() +
     theme(axis.text = element_text(size = 20),
           axis.text.x = element_blank(),
           axis.ticks.x = element_blank(),
           axis.title = element_text(size = 20),
-          plot.title = element_text(size = 20))
+          plot.title = element_text(size = 20),
+          plot.margin = margin(c(10, 10, 10, 10)))
 }
 
 
 
-p2a <- scatter_topk_median(tf_summ_hg, null_summ_hg)
-p2b <- scatter_topk_median(tf_summ_mm, null_summ_mm)
+p2a <- scatter_topk_median(summ_tf_hg, summ_null_hg)
+p2b <- scatter_topk_median(summ_tf_mm, summ_null_mm)
+p2 <- plot_grid(p2a, p2b)
+
+ggsave(p2, height = 9, width = 12, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "scatter_topk_median.png"))
 
 
 
@@ -225,16 +232,16 @@ p2b <- scatter_topk_median(tf_summ_mm, null_summ_mm)
 
 
 
-boxplot_topk_median <- function(summary_df, null_summary) {
+boxplot_topk_median <- function(summary_df, summ_nullary) {
   
   ggplot(summary_df, aes(x = Symbol)) +
     geom_boxplot(
       # aes(ymin = Min., lower = `1st Qu.`, middle = Median, upper = `3rd Qu.`, ymax = Max.),
       aes(ymin = `1st Qu.`, lower = `1st Qu.`, middle = Median, upper = `3rd Qu.`, ymax = `3rd Qu.`),
       stat = "identity") +
-    geom_hline(yintercept = null_summary["Median"], colour = "firebrick", linewidth = 1.6) +
-    geom_hline(yintercept = null_summary["1st Qu."], colour = "grey85") +
-    geom_hline(yintercept = null_summary["3rd Qu."], colour = "grey40") +
+    geom_hline(yintercept = summ_nullary["Median"], colour = "firebrick", linewidth = 1.6) +
+    geom_hline(yintercept = summ_nullary["1st Qu."], colour = "grey85") +
+    geom_hline(yintercept = summ_nullary["3rd Qu."], colour = "grey40") +
     ylab(paste0("Median Top k (k=", k, ")")) +
     theme_classic() +
     theme(axis.text = element_text(size = 20),
@@ -246,8 +253,8 @@ boxplot_topk_median <- function(summary_df, null_summary) {
 }
 
 
-p3a <- boxplot_topk_median(tf_summ_hg, null_summ_hg)
-p3b <- boxplot_topk_median(tf_summ_mm, null_summ_mm)
+p3a <- boxplot_topk_median(summ_tf_hg, summ_null_hg)
+p3b <- boxplot_topk_median(summ_tf_mm, summ_null_mm)
 
 
 # Density plot of topk intersect for select genes + null
@@ -278,8 +285,8 @@ density_topk <- function(plot_df) {
 example_tf_hg <- "ASCL1"
 example_tf_mm <- "Ascl1"
 
-max_tf_hg <- as.character(slice_max(tf_summ_hg, Median)$Symbol)
-max_tf_mm <- as.character(slice_max(tf_summ_mm, Median)$Symbol)
+max_tf_hg <- as.character(slice_max(summ_tf_hg, Median)$Symbol)
+max_tf_mm <- as.character(slice_max(summ_tf_mm, Median)$Symbol)
 
 example_ribo_hg <- "RPL7A"
 example_ribo_mm <- "Rpl3"
@@ -290,8 +297,8 @@ max_tf_df_mm <- sim_tf_mm[[max_tf_mm]]
 tf_df_hg <- sim_tf_hg[[example_tf_hg]]
 tf_df_mm <- sim_tf_mm[[example_tf_mm]]
 
-ribo_df_hg <- ribo_sim_hg[[example_ribo_hg]]
-ribo_df_mm <- ribo_sim_mm[[example_ribo_mm]]
+ribo_df_hg <- sim_ribo_hg[[example_ribo_hg]]
+ribo_df_mm <- sim_ribo_mm[[example_ribo_mm]]
 
 
 set.seed(154)
@@ -326,19 +333,19 @@ p4b <- density_topk(plot_df_mm)
 
 # Relationship between topk median and count of experiments
 
-# plot(tf_summ_hg$N_exp, y = tf_summ_hg$Median)
-# plot(tf_summ_mm$N_exp, y = tf_summ_mm$Median)
+# plot(summ_tf_hg$N_exp, y = summ_tf_hg$Median)
+# plot(summ_tf_mm$N_exp, y = summ_tf_mm$Median)
 
 n_break <- length(ids_mm)
 
-p5a <- tf_summ_hg %>% 
+p5a <- summ_tf_hg %>% 
   mutate(Group_nexp = cut(N_exp, n_break, include.lowest = TRUE)) %>% 
   ggplot(aes(x = Group_nexp, y = Median)) +
   geom_boxplot() +
   theme_classic()
 
 
-p5b <- tf_summ_mm %>% 
+p5b <- summ_tf_mm %>% 
   mutate(Group_nexp = cut(N_exp, n_break, include.lowest = TRUE)) %>% 
   ggplot(aes(x = Group_nexp, y = Median)) +
   geom_boxplot() +
