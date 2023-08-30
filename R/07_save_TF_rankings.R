@@ -96,23 +96,23 @@ all_rank_summary <- function(agg_l,
     colrank_gene_mat <- colrank_mat(gene_mat, ties_arg = "min")
     
     avg_rsr <- rowMeans(gene_mat, na.rm = TRUE)
-    avg_colrank <- rowMeans(colrank_gene_mat, na.rm = TRUE)
+    # avg_colrank <- rowMeans(colrank_gene_mat, na.rm = TRUE)
     
     rank_rsr <- rank(-avg_rsr, ties.method = "min")
-    rank_colrank <- rank(avg_colrank, ties.method = "min")
+    # rank_colrank <- rank(avg_colrank, ties.method = "min")
     
     best_rank <- apply(colrank_gene_mat, 1, min)
     
     topk_count <- get_topk_count(gene_mat, k)
-    
     topk_prop <- round(topk_count / ncol(gene_mat), 3)
     
     data.frame(
       Symbol = rownames(gene_mat),
+      N_measured = rowSums(gene_mat),
       Avg_RSR = avg_rsr,
-      Avg_colrank = avg_colrank,
+      # Avg_colrank = avg_colrank,
       Rank_RSR = rank_rsr,
-      Rank_colrank = rank_colrank,
+      # Rank_colrank = rank_colrank,
       Best_rank = best_rank,
       Topk_count = topk_count,
       Topk_proportion = topk_prop)
@@ -127,7 +127,7 @@ all_rank_summary <- function(agg_l,
 
 
 
-if (!file.exists(tf_summ_hg_path)) {
+if (!file.exists(rank_tf_hg_path)) {
   
   summ_hg <- all_rank_summary(agg_l = agg_tf_hg, 
                               msr_mat = msr_hg, 
@@ -136,13 +136,13 @@ if (!file.exists(tf_summ_hg_path)) {
   
   summ_hg <- summ_hg[!is.na(summ_hg)]
   
-  saveRDS(summ_hg, tf_summ_hg_path)
+  saveRDS(summ_hg, rank_tf_hg_path)
 
 }
 
 
 
-if (!file.exists(tf_summ_mm_path)) {
+if (!file.exists(rank_tf_mm_path)) {
   
   summ_mm <- all_rank_summary(agg_l = agg_tf_mm, 
                               msr_mat = msr_mm, 
@@ -151,6 +151,6 @@ if (!file.exists(tf_summ_mm_path)) {
   
   summ_mm <- summ_mm[!is.na(summ_mm)]
   
-  saveRDS(summ_mm, tf_summ_mm_path)
+  saveRDS(summ_mm, rank_tf_mm_path)
   
 }
