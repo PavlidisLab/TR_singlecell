@@ -90,8 +90,8 @@ null_topk_mm_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersec
 
 
 # List of summarized TF rankings
-tf_summ_hg_path <- "/space/scratch/amorin/R_objects/TF_ranking_summary_human.RDS"
-tf_summ_mm_path <- "/space/scratch/amorin/R_objects/TF_ranking_summary_mouse.RDS"
+rank_tf_hg_path <- "/space/scratch/amorin/R_objects/ranking_TF_human.RDS"
+rank_tf_mm_path <- "/space/scratch/amorin/R_objects/ranking_TF_mouse.RDS"
 
 
 # Human Protein Atlas
