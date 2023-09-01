@@ -23,45 +23,48 @@ pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 pc_ortho <- read.delim(pc_ortho_path)
 
-# Using ribosomal genes as a sanity check
-sribo_hg <- read.csv(sribo_hg_path, stringsAsFactors = FALSE, skip = 1)
-lribo_hg <- read.csv(lribo_hg_path, stringsAsFactors = FALSE, skip = 1)
-ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
 
 
-# Iterate through each dataset, extracting the top cor pair
+# Get the average aggregate coexpression across all datasets
 # ------------------------------------------------------------------------------
 
 
-max_pair_l <- function(ids, genes, ncores = 4) {
-
-  l <- mclapply(ids, function(x) {
+get_avg_coexpr <- function(ids, genes) {
+  
+  avg_mat <- matrix(0, nrow = length(genes), ncol = length(genes))
+  colnames(avg_mat) <- rownames(avg_mat) <- genes
+  
+  for (id in ids) {
     mat <- load_agg_mat_list(x, genes = genes)[[1]]
-    diag(mat) <- NA
-    ix <- which(mat == max(mat, na.rm = TRUE), arr.ind = TRUE)
-    data.frame(Gene1 = rownames(ix)[1], Gene2 = rownames(ix)[2])
-  }, mc.cores = ncores)
-
-  df <- data.frame(Study = ids, do.call(rbind, l))
-  return(df)
+    avg_mat <- avg_mat + mat
+  }
+  
+  avg_mat <- avg_mat / length(ids)
+  
+  avg_df <- mat_to_df(avg_mat, symmetric = TRUE, value_name = "Avg_coexpr")
+  avg_df <- arrange(avg_df, desc(Avg_coexpr))
+  
+  return(avg_df)
+  
 }
 
 
 
-if (!file.exists(max_pair_hg_path)) {
-  max_pair_hg <- max_pair_l(ids_hg, genes = pc_hg$Symbol)
-  saveRDS(max_pair_hg, max_pair_hg_path)
+
+if (!file.exists(avg_coexpr_hg_path)) {
+  avg_coexpr_hg <- get_avg_coexpr(ids_hg, genes = pc_hg$Symbol)
+  saveRDS(avg_coexpr_hg, avg_coexpr_hg_path)
 } else {
-  max_pair_hg <- readRDS(max_pair_hg_path)
+  avg_coexpr_hg <- readRDS(avg_coexpr_hg_path)
 }
 
 
 
-if (!file.exists(max_pair_mm_path)) {
-  max_pair_mm <- max_pair_l(ids_mm, genes = pc_mm$Symbol)
-  saveRDS(max_pair_mm, max_pair_mm_path)
+if (!file.exists(avg_coexpr_mm_path)) {
+  avg_coexpr_mm <- get_avg_coexpr(ids_mm, genes = pc_mm$Symbol)
+  saveRDS(avg_coexpr_mm, avg_coexpr_mm_path)
 } else {
-  max_pair_mm <- readRDS(max_pair_mm_path)
+  avg_coexpr_mm <- readRDS(avg_coexpr_mm_path)
 }
 
 
@@ -77,42 +80,17 @@ if (!file.exists(max_pair_mm_path)) {
 # ------------------------------------------------------------------------------
 
 
-sort_max_hg <- 
-  sort(table(c(max_pair_hg$Gene1, max_pair_hg$Gene2)), decreasing = TRUE)
-
-sort_max_mm <- 
-  sort(table(c(max_pair_mm$Gene1, max_pair_mm$Gene2)), decreasing = TRUE)
-
-
-most_common_hg <- lapply(names(sort_max_hg)[1:3], function(x) {
-  filter(max_pair_hg, Gene1 == x | Gene2  == x)
-})
-
-most_common_mm <- lapply(names(sort_max_mm)[1:3], function(x) {
-  filter(max_pair_mm, Gene1 == x | Gene2  == x)
-})
-
+head(avg_coexpr_hg)
+head(avg_coexpr_mm)
 
 
 # Visualize top cor pairs 
 # ------------------------------------------------------------------------------
 
 
-# Forest plot
+# Akin to a forest plot, show the spread of cell-type correlations for a given
+# gene pair across all experiments
 
-
-get_all_cor_l <- function(ids, gene1, gene2) {
-  
-  cor_l <- lapply(ids, function(x) {
-    dat <- load_dat_list(x)[[1]]
-    mat <- dat$Mat
-    meta <- dat$Meta
-    all_celltype_cor(mat, meta, gene1, gene2)
-  })
-  
-  names(cor_l) <- ids
-  return(cor_l)
-}
 
 
 outfile <- "/space/scratch/amorin/R_objects/top_cor_pair_l.RDS"
@@ -133,16 +111,63 @@ if (!file.exists(outfile)) {
 }
 
 
-tt1 <- unlist(lapply(cor_l$Human, function(x) length(x) > 0))
 
-tt2 <- lapply(cor_l$Human[tt1], summary)
+# TODO: finalize plotting
+# cor_forest_plot <- function(cor_l) { }
 
-tt3 <- as.data.frame(do.call(rbind, tt2)) %>% 
+
+cor_df <- do.call(
+  rbind, 
+  lapply(names(cor_l), function(x) data.frame(Cor = cor_l[[x]], ID = x))
+)
+
+
+cor_summ <- do.call(rbind, lapply(cor_l, summary)) %>%
+  as.data.frame() %>% 
   rownames_to_column(var = "ID") %>% 
   arrange(Median) %>% 
   mutate(ID = factor(ID, levels = unique(ID)))
 
-ggplot(tt3) +
+
+
+# Cor of every cell type for each dataset as points
+
+ggplot(cor_df, aes(x = Cor, y = reorder(ID, Cor, FUN = median))) +
+  geom_point(alpha = 0.4) +
+  geom_boxplot(outlier.shape = NA, coef = 0) +
+  xlab("Pearson's correlation across cell types") +
+  theme_classic() +
+  theme(axis.title.y = element_blank(),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_text(size = 15),
+        axis.text.y = element_text(size = 10))
+
+
+ggplot(cor_df, aes(x = Cor, y = reorder(ID, Cor, FUN = median))) +
+  geom_point() +
+  xlab("Pearson's correlation across cell types") +
+  theme_classic() +
+  theme(axis.title.y = element_blank(),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_text(size = 15),
+        axis.text.y = element_text(size = 10))
+
+
+
+# Cor of every cell type for each dataset as a bar (IRQ or min/max?)
+
+ggplot(cor_summ) +
+  geom_errorbarh(aes(xmin = `Min.`, xmax = `Max.`, y = ID)) +
+  xlab("Pearson's correlation across cell types") +
+  theme_classic() +
+  theme(axis.title.y = element_blank(),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_text(size = 15),
+        axis.text.y = element_text(size = 10))
+
+
+
+ggplot(cor_summ) +
   geom_errorbarh(aes(xmin = `1st Qu.`, xmax = `3rd Qu.`, y = ID)) +
   xlab("Pearson's correlation across cell types") +
   theme_classic() +
@@ -152,13 +177,14 @@ ggplot(tt3) +
         axis.text.y = element_text(size = 10))
 
 
+
 # Cell-type scatter plots + cor heatmap of representative experiment and gene pair
 
 
 
-demo_id <- "GSE196638"  # "GSE160512"
-gene1 <- "HSPA1A"       # "Ttll3"
-gene2 <- "HSPA1B"       # "Arpc4"
+demo_id <- "GSE163252"  # "GSE160512"
+gene1 <- "Rpl13"       # "Ttll3"
+gene2 <- "Rpl32"       # "Arpc4"
 dat <- load_dat_list(demo_id)[[1]]
 mat <- dat$Mat
 meta <- dat$Meta
@@ -166,10 +192,12 @@ meta <- dat$Meta
 ct_cors <- all_celltype_cor(mat, meta, gene1, gene2)
 
 
+
+
 plot_scatter <- function(df, cell_type) {
   
   ggplot(df, aes(x = df[, 1], y = df[, 2])) + 
-    geom_point(size = 2.5, shape = 21, fill = "#756bb1", alpha = 0.3) +
+    geom_point(size = 2.5, shape = 21, fill = "#756bb1", alpha = 0.8) +
     geom_smooth(method = "lm", formula = y ~ x, colour = "black") +
     xlab(colnames(df)[1]) +
     ylab(colnames(df)[2]) +
@@ -181,12 +209,12 @@ plot_scatter <- function(df, cell_type) {
 }
 
 
+
 all_celltype_scatter <- function(mat,
                                  meta,
                                  gene1,
                                  gene2,
-                                 min_cell = 20,
-                                 cor_method = "pearson") {
+                                 min_cell = 20) {
   
   stopifnot(c("Cell_type", "ID") %in% colnames(meta),
             c(gene1, gene2) %in% rownames(mat))
@@ -225,6 +253,4 @@ ct_scatter_plot_3 <- plot_grid(
 
 
 px3_h <- plot_grid(ct_scatter_plot_3, ct_heatmap_h$gtable, nrow = 2, rel_heights = c(2, 1))
-px3_v <- plot_grid(ct_scatter_plot_3, ct_heatmap_v$gtable, ncol = 2, rel_widths = c(2, 1))
-
-
+px3_v <- plot_grid(ct_scatter_plot_3, ct_heatmap_v$gtable, ncol = 2, rel_widths = c(0.5, 0.25))
