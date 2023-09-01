@@ -66,8 +66,8 @@ msr_mat_mm_path <- "/space/scratch/amorin/TR_singlecell/binary_measurement_matri
 
 
 # List of the most correlated gene pair per experiment
-max_pair_hg_path <- "/space/scratch/amorin/R_objects/max_cor_pair_hg.RDS"
-max_pair_mm_path <- "/space/scratch/amorin/R_objects/max_cor_pair_mm.RDS"
+avg_coexpr_hg_path <- "/space/scratch/amorin/R_objects/avg_coexpr_hg.RDS"
+avg_coexpr_mm_path <- "/space/scratch/amorin/R_objects/avg_coexpr_mm.RDS"
 
 
 # List of TF and L/S ribo aggregate matrices
