@@ -129,7 +129,8 @@ p2 <- ggplot(meta_loaded, aes(x = log10(N_cells), fill = Species)) +
         axis.title = element_text(size = 25),
         legend.text = element_text(size = 20),
         legend.title = element_text(size = 20),
-        legend.position = c(0.85, 0.75))
+        legend.position = c(0.85, 0.75),
+        plot.margin = margin(10, 5, 5, 5))
 
 
 ggsave(p2, height = 6, width = 6, device = "png", dpi = 300,
