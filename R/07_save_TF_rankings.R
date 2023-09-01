@@ -41,7 +41,7 @@ agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = p
 
 
 
-#
+# TODO:
 # ------------------------------------------------------------------------------
 
 
@@ -67,6 +67,8 @@ get_topk_count <- function(gene_mat, k, check_k_arg = TRUE) {
 
 
 
+# TODO: make explicit that proportion is count of datasets in which both
+# genes are measured, not just TF
 
 # For each gene in genes, generate a summary dataframe that includes:
 # TODO: update
@@ -93,6 +95,12 @@ all_rank_summary <- function(agg_l,
       return(NA)
     }
     
+    # Co-measurement between TF and genes
+    comsr <- vapply(rownames(gene_mat), function(y) {
+      sum(msr_mat[x,] & msr_mat[y,])
+    }, integer(1))
+    
+    
     colrank_gene_mat <- colrank_mat(gene_mat, ties_arg = "min")
     
     avg_rsr <- rowMeans(gene_mat, na.rm = TRUE)
@@ -104,11 +112,11 @@ all_rank_summary <- function(agg_l,
     best_rank <- apply(colrank_gene_mat, 1, min)
     
     topk_count <- get_topk_count(gene_mat, k)
-    topk_prop <- round(topk_count / ncol(gene_mat), 3)
+    topk_prop <- round(topk_count / comsr, 3)
     
     data.frame(
       Symbol = rownames(gene_mat),
-      N_measured = rowSums(gene_mat),
+      N_comeasured = comsr,
       Avg_RSR = avg_rsr,
       # Avg_colrank = avg_colrank,
       Rank_RSR = rank_rsr,
