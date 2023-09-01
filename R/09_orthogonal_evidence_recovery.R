@@ -54,8 +54,8 @@ evidence_l <- readRDS(evidence_path)
 # ------------------------------------------------------------------------------
 
 
-tf_mm <- "Pax6"
-tf_hg <- "PAX6"
+tf_mm <- "Runx1"
+tf_hg <- "RUNX1"
 evidence_col <- "Rank_integrated"
 k <- 500
 
@@ -321,9 +321,9 @@ p_mm_curated <- plot_grid(p_auroc_mm_curated, p_auprc_mm_curated)
 
 # Look at ability of genomic + coexpr to recover curated
 
-species <- "Mouse"
+species <- "Human"
 measure <- "ROC"
-tf <- "Pax6"
+tf <- "RUNX1"
 
 integrated <- get_perf_df(rank_df = arrange(evidence_l[[species]][[tf]], Rank_integrated),
                           "Curated_target",
@@ -332,12 +332,26 @@ integrated <- get_perf_df(rank_df = arrange(evidence_l[[species]][[tf]], Rank_in
 
 integrated$ID <- "Integrated"
 
+
+get_au_perf(rank_df = arrange(evidence_l[[species]][[tf]], Rank_integrated),
+            "Curated_target",
+            # score_col = "Rank_integrated",
+            measure = "AUROC")
+
+
 perturb <- get_perf_df(rank_df = arrange(evidence_l[[species]][[tf]], Rank_perturbation),
                        "Curated_target",
                        # score_col = "Rank_perturbation",
                        measure = measure)
 
 perturb$ID <- "Perturbation"
+
+
+get_au_perf(rank_df = arrange(evidence_l[[species]][[tf]], Rank_perturbation),
+            "Curated_target",
+            # score_col = "Rank_integrated",
+            measure = "AUROC")
+
 
 binding <- get_perf_df(rank_df = arrange(evidence_l[[species]][[tf]], Rank_binding),
                        "Curated_target",
@@ -346,9 +360,23 @@ binding <- get_perf_df(rank_df = arrange(evidence_l[[species]][[tf]], Rank_bindi
 
 binding$ID <- "Binding"
 
+get_au_perf(rank_df = arrange(evidence_l[[species]][[tf]], Rank_binding),
+            "Curated_target",
+            # score_col = "Rank_integrated",
+            measure = "AUROC")
 
-all <-  rbind(roc_df_mm_curated, 
-              do.call(rbind, list(integrated, perturb, binding)))
+
+
+
+sort(auroc_mm_curated)
+median(auroc_mm_curated[names(auroc_mm_curated) != "Aggregate"])
+
+
+
+
+
+all <- rbind(roc_df_mm_curated, 
+            do.call(rbind, list(integrated, perturb, binding)))
 
 
 
