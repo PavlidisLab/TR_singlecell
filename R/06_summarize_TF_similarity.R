@@ -43,7 +43,7 @@ sim_tf_mm <- readRDS(sim_tf_mm_path)
 
 # L/S ribo topk overlap
 sim_ribo_hg <- readRDS(sim_ribo_hg_path)
-sim_ribo_mm <- readRDS(sim_ribo_hg_path)
+sim_ribo_mm <- readRDS(sim_ribo_mm_path)
 
 # Null topk overlap
 null_topk_hg <- readRDS(null_topk_hg_path)
@@ -101,6 +101,18 @@ topk_na_cor_mm <- suppressWarnings(cor.test(summ_tf_mm$Median, summ_tf_mm$N_exp,
 # Count of TFs whose median topk is greater than the null
 topk_gt_hg <- sum(summ_tf_hg$Median > summ_null_hg["Median"]) / nrow(summ_tf_hg)
 topk_gt_mm <- sum(summ_tf_mm$Median > summ_null_mm["Median"]) / nrow(summ_tf_mm)
+
+
+
+
+# Example of TFs with good measurement coverage but low similarity. 
+# ------------------------------------------------------------------------------
+
+
+arrange(summ_tf_hg, Median, desc(N_exp)) %>% head
+arrange(summ_tf_mm, Median, desc(N_exp)) %>% head
+
+
 
 
 
@@ -188,7 +200,10 @@ p1 <- ggplot(sim_tf_hg[[gene_hg]], aes(x = Scor, y = Topk)) +
 # Scatterplot of TF median topk intersect with text overlay for top n TFs
 
 
-scatter_topk_median <- function(summary_df, summ_nullary, topn_label = 30) {
+scatter_topk_median <- function(summary_df, 
+                                summ_nullary, 
+                                topn_label = 30,
+                                title) {
   
   summary_df <- summary_df %>%  
     mutate(Group = Symbol %in% slice_max(summary_df, Median, n = topn_label)$Symbol)
@@ -206,6 +221,7 @@ scatter_topk_median <- function(summary_df, summ_nullary, topn_label = 30) {
     geom_hline(yintercept = summ_nullary["Median"], colour = "firebrick") +
     geom_hline(yintercept = summ_nullary["1st Qu."], colour = "grey85") +
     geom_hline(yintercept = summ_nullary["3rd Qu."], colour = "grey85") +
+    ggtitle(title) +
     ylab(paste0("Median Top k (k=", k, ")")) +
     expand_limits(x = nrow(summ_tf_hg) + 50) +  # prevent point cut off
     theme_classic() +
@@ -219,11 +235,11 @@ scatter_topk_median <- function(summary_df, summ_nullary, topn_label = 30) {
 
 
 
-p2a <- scatter_topk_median(summ_tf_hg, summ_null_hg)
-p2b <- scatter_topk_median(summ_tf_mm, summ_null_mm)
+p2a <- scatter_topk_median(summ_tf_hg, summ_null_hg, title = "Human")
+p2b <- scatter_topk_median(summ_tf_mm, summ_null_mm, title = "Mouse")
 p2 <- plot_grid(p2a, p2b)
 
-ggsave(p2, height = 9, width = 12, device = "png", dpi = 300,
+ggsave(p2, height = 9, width = 18, device = "png", dpi = 300,
        filename = file.path(plot_dir, "scatter_topk_median.png"))
 
 
@@ -329,6 +345,11 @@ plot_df_mm <- data.frame(
 
 p4a <- density_topk(plot_df_hg)
 p4b <- density_topk(plot_df_mm)
+p4 <- plot_grid(p4a, p4b)
+
+ggsave(p4, height = 9, width = 18, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "density_topk_example.png"))
+
 
 
 # Relationship between topk median and count of experiments
