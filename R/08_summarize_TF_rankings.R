@@ -9,6 +9,7 @@ library(pheatmap)
 library(RColorBrewer)
 library(cowplot)
 source("R/utils/functions.R")
+source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
@@ -166,10 +167,14 @@ rank_heatmap(ascl_rank_mm)
 
 rank_mat_hg <- as.matrix(do.call(cbind, lapply(rank_tf_hg, `[`, "Rank_RSR")))
 colnames(rank_mat_hg) <- names(rank_tf_hg)
+rank_cor_hg <- mat_to_df(colwise_cor(rank_mat_hg), symmetric = TRUE)
+rank_topk_hg <- mat_to_df(colwise_topk_intersect(rank_mat_hg, k = 200), symmetric = TRUE)
 
 
 rank_mat_mm <- as.matrix(do.call(cbind, lapply(rank_tf_mm, `[`, "Rank_RSR")))
 colnames(rank_mat_mm) <- names(rank_tf_mm)
+rank_cor_mm <- mat_to_df(colwise_cor(rank_mat_mm), symmetric = TRUE)
+rank_topk_mm <- mat_to_df(colwise_topk_intersect(rank_mat_mm, k = 200), symmetric = TRUE)
 
 
 # Most commonly highly ranked genes
