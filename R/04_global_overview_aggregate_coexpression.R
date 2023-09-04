@@ -35,7 +35,7 @@ get_avg_coexpr <- function(ids, genes) {
   colnames(avg_mat) <- rownames(avg_mat) <- genes
   
   for (id in ids) {
-    mat <- load_agg_mat_list(x, genes = genes)[[1]]
+    mat <- load_agg_mat_list(id, genes = genes)[[1]]
     avg_mat <- avg_mat + mat
   }
   
