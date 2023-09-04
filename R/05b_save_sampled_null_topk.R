@@ -10,6 +10,7 @@ source("R/00_config.R")
 
 k <- 1000 
 n_samps <- 1000
+force_resave <- FALSE
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -83,7 +84,7 @@ set.seed(5)
 
 
 
-if (!file.exists(null_topk_hg_path)) {
+if (!file.exists(null_topk_hg_path) || force_resave) {
   
   topk_hg <- lapply(1:n_samps, function(x) {
     
@@ -101,7 +102,7 @@ if (!file.exists(null_topk_hg_path)) {
 
 
 
-if (!file.exists(null_topk_mm_path)) {
+if (!file.exists(null_topk_mm_path) || force_resave) {
   
   topk_mm <- lapply(1:n_samps, function(x) {
     
