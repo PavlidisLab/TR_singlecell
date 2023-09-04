@@ -14,6 +14,7 @@ source("R/utils/functions.R")
 source("R/00_config.R")
 
 k <- 1000
+force_resave <- TRUE
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -135,7 +136,7 @@ all_rank_summary <- function(agg_l,
 
 
 
-if (!file.exists(rank_tf_hg_path)) {
+if (!file.exists(rank_tf_hg_path) || force_resave) {
   
   summ_hg <- all_rank_summary(agg_l = agg_tf_hg, 
                               msr_mat = msr_hg, 
@@ -150,7 +151,7 @@ if (!file.exists(rank_tf_hg_path)) {
 
 
 
-if (!file.exists(rank_tf_mm_path)) {
+if (!file.exists(rank_tf_mm_path) || force_resave) {
   
   summ_mm <- all_rank_summary(agg_l = agg_tf_mm, 
                               msr_mat = msr_mm, 
