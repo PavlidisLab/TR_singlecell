@@ -26,6 +26,9 @@ pc_ortho <- read.delim(pc_ortho_path)
 
 
 # Get the average aggregate coexpression across all datasets
+# Highest average RSR: 
+# Ribosomal genes in general top heavy for both species. Similar for AP-1
+# (FOS/B, JUN/B), EGR1 (FOS/B, IER2), DUSP1 (FOS/B, JUN/B), CALR-HSPA5
 # ------------------------------------------------------------------------------
 
 
@@ -69,27 +72,14 @@ if (!file.exists(avg_coexpr_mm_path)) {
 
 
 
-# Most common gene in top pairs: ribosomal genes in general top heavy. 
-# Human: HSPA1A most common, always paired with HSPA1B or HSP90AA1. RPL13 also
-# common, often with RPRS18.
-# Mouse: Rps29 most common, paired with Rps28, Rps39... 
-# Also note GSE160512: Ttll3-Arpc4 neighbouring genes described by refseq as 
-# having run-through transcription 
-# https://pubmed.ncbi.nlm.nih.gov/20967262/  
-# https://www.ncbi.nlm.nih.gov/gene?Db=gene&Cmd=DetailsSearch&Term=10093
+
+head(avg_coexpr_hg, 30)
+head(avg_coexpr_mm, 30)
+
+
+
+# Generate a list of gene-gene cor for every cell type in each dataset
 # ------------------------------------------------------------------------------
-
-
-head(avg_coexpr_hg)
-head(avg_coexpr_mm)
-
-
-# Visualize top cor pairs 
-# ------------------------------------------------------------------------------
-
-
-# Akin to a forest plot, show the spread of cell-type correlations for a given
-# gene pair across all experiments
 
 
 
@@ -99,8 +89,8 @@ outfile <- "/space/scratch/amorin/R_objects/top_cor_pair_l.RDS"
 if (!file.exists(outfile)) {
   
   cor_l <- list(
-    Human = get_all_cor_l(ids_hg, gene1 = "HSPA1A", gene2 = "HSPA1B"),
-    Mouse = get_all_cor_l(ids_mm, gene1 = "Rpl13", gene2 = "Rpl32"))
+    Human = get_all_cor_l(ids_hg, gene1 = "FOSB", gene2 = "FOS"),
+    Mouse = get_all_cor_l(ids_mm, gene1 = "Egr1", gene2 = "Junb"))
   
   saveRDS(cor_l, outfile)
   
@@ -112,17 +102,30 @@ if (!file.exists(outfile)) {
 
 
 
+
+# Plotting
+# ------------------------------------------------------------------------------
+
+
+# Akin to a forest plot, show the spread of cell-type correlations for a given
+# gene pair across all experiments
+
+
 # TODO: finalize plotting
 # cor_forest_plot <- function(cor_l) { }
 
 
+# species <- "Human"
+species <- "Mouse"
+
+
 cor_df <- do.call(
   rbind, 
-  lapply(names(cor_l), function(x) data.frame(Cor = cor_l[[x]], ID = x))
+  lapply(names(cor_l[[species]]), function(x) data.frame(Cor = cor_l[[species]][[x]], ID = x))
 )
 
 
-cor_summ <- do.call(rbind, lapply(cor_l, summary)) %>%
+cor_summ <- do.call(rbind, lapply(cor_l[[species]], summary)) %>%
   as.data.frame() %>% 
   rownames_to_column(var = "ID") %>% 
   arrange(Median) %>% 
@@ -182,12 +185,14 @@ ggplot(cor_summ) +
 
 
 
-demo_id <- "GSE163252"  # "GSE160512"
-gene1 <- "Rpl13"       # "Ttll3"
-gene2 <- "Rpl32"       # "Arpc4"
+demo_id <- "GSE212606Human"  
+gene1 <- "RPL3" 
+gene2 <- "RPL13"
 dat <- load_dat_list(demo_id)[[1]]
 mat <- dat$Mat
 meta <- dat$Meta
+
+
 
 ct_cors <- all_celltype_cor(mat, meta, gene1, gene2)
 
@@ -254,3 +259,25 @@ ct_scatter_plot_3 <- plot_grid(
 
 px3_h <- plot_grid(ct_scatter_plot_3, ct_heatmap_h$gtable, nrow = 2, rel_heights = c(2, 1))
 px3_v <- plot_grid(ct_scatter_plot_3, ct_heatmap_v$gtable, ncol = 2, rel_widths = c(0.5, 0.25))
+
+
+
+# Inspecting lowest cor
+
+# dat <- load_dat_list("GSE212606Human")[[1]]
+# mat <- dat$Mat
+# meta <- dat$Meta
+# agg <- load_agg_mat_list("GSE212606Human", genes = pc_hg$Symbol)[[1]]
+# agg_df <- mat_to_df(agg, symmetric = TRUE)
+# head(arrange(agg_df, desc(Value)))
+# ct_cors <- all_celltype_cor(mat, meta, "MAP1A", "CLU")
+
+
+
+# dat <- load_dat_list("GSE165003")[[1]]
+# mat <- dat$Mat
+# meta <- dat$Meta
+# agg <- load_agg_mat_list("GSE165003", genes = pc_mm$Symbol)[[1]]
+# agg_df <- mat_to_df(agg, symmetric = TRUE)
+# head(arrange(agg_df, desc(Value)))
+# ct_cors <- all_celltype_cor(mat, meta, "Srsf2", "Mettl23")
