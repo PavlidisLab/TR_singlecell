@@ -142,6 +142,11 @@ n_target <- lt_final %>%
   mutate(TF_Symbol = factor(TF_Symbol, levels = unique(TF_Symbol)))
   
 
+
+#
+# ------------------------------------------------------------------------------
+
+
 ggplot(n_target, aes(x = TF_Symbol, y = N_target)) +
   geom_bar(stat = "identity") +
   ylab("Count of distinct curated targets") +
@@ -153,10 +158,19 @@ ggplot(n_target, aes(x = TF_Symbol, y = N_target)) +
         axis.ticks.x = element_blank())
 
 
+n_distinct(str_to_upper(lt_final$Target_Symbol))
+n_distinct(str_to_upper(lt_final$TF_Symbol))
+
+
 table(n_target$TF_Symbol %in% c(tfs_hg$Symbol, str_to_upper(tfs_mm$Symbol)))
+
 non_tfs <- setdiff(n_target$TF_Symbol, c(tfs_hg$Symbol, str_to_upper(tfs_mm$Symbol)))
+
 filter(n_target, TF_Symbol %in% non_tfs) %>% view
 
+
+sort(table(filter(lt_final, str_to_upper(TF_Symbol) == "CTNNB1")$Databases))
+sort(table(filter(lt_final, str_to_upper(TF_Symbol) == "SP1")$Databases))
 
 
 write.table(lt_final, 
