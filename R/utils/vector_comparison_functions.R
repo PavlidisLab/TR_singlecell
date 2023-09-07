@@ -54,12 +54,20 @@ topk_intersect <- function(vec1, vec2) length(intersect(vec1, vec2))
 # Return the AUPRC of vec1 as scores and vec2 as labels
 # TODO doc and better arg names
 
-vec_auprc <- function(vec1, vec2) {
+vec_auc <- function(vec_scores, vec_labels, measure) {
   
-  rank_df <- data.frame(Score = vec1, Label = names(vec1) %in% vec2)
+  stopifnot(measure %in% c("AUROC", "AUPRC"))
+  
+  rank_df <- data.frame(Score = vec_scores, 
+                        Label = names(vec_scores) %in% vec_labels)
+  
   if (all(rank_df$Label)) return(1)
   if (all(!rank_df$Label)) return(0)
-  get_au_perf(rank_df, label_col = "Label", score_col = "Score", measure = "AUPRC")
+  
+  get_au_perf(rank_df, 
+              label_col = "Label", 
+              score_col = "Score", 
+              measure = measure)
 }
 
 
