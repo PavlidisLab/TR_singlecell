@@ -18,11 +18,17 @@ tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% 
 tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
 
 # Tables downloaded from supplement of Chu 2021 (all includes external dbs)
-lt_chu2021 <- read.delim(chu2021_path_records, stringsAsFactors = FALSE, skip = 1)
-lt_all <- read.delim(chu2021_path_all, stringsAsFactors = FALSE, skip = 1)
+lt_chu2021 <- read.delim(chu2021_records_path, stringsAsFactors = FALSE, skip = 1)
+lt_all <- read.delim(chu2021_all_path, stringsAsFactors = FALSE, skip = 1)
 
 # On-going curation on googlesheets
-pavlab <- read_sheet(ss = gsheets_curated, sheet = "Master_Curation", trim_ws = TRUE, col_types = "c", range = "A:M")
+
+if (!file.exists(pavlab_curation_path)) {
+  pavlab <- read_sheet(ss = gsheets_curated, sheet = "Master_Curation", trim_ws = TRUE, col_types = "c", range = "A:M")
+  write.table(pavlab, quote = FALSE, row.names = FALSE, sep = "\t", file = pavlab_curation_path)
+} else {
+  pavlab <- read.delim(pavlab_curation_path, stringsAsFactors = FALSE)
+}
 
 
 # Format and join targets curated in Chu2021 and aggregated from external dbs. 
@@ -58,7 +64,7 @@ lt_all <- lt_all %>%
     TF_Symbol = TF_Symbol_Human,
     Target_Symbol = Target_Symbol_Human) %>%
   dplyr::select(any_of(keep_cols)) %>% 
-  mutate(Databases = str_replace(Databases, "Current", "Pavlab"))
+  mutate(Databases = str_replace(Databases, "Current", "Chu2021"))
 
 
 lt_all <-
@@ -101,6 +107,15 @@ pavlab <- pavlab %>%
 
 
 lt_final <- rbind(lt_all, pavlab)
+
+
+
+# Keep:
+# TRRUST, Pavlab, Chu2021, TFe, InnateDB
+# TFactS may have some non-low throughput
+# HTRIdb_LC is only the literature curated part of HTRIdb
+sort(table(lt_final$Databases), decreasing = TRUE)
+unique(unlist(str_split(lt_final$Databases, ", ")))
 
 
 
