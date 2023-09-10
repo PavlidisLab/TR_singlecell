@@ -96,11 +96,21 @@ rank_tf_mm_path <- "/space/scratch/amorin/R_objects/ranking_TF_mouse.RDS"
 
 # Curated targets from on going curation and from Eric's 2021 paper
 gsheets_curated <- "1PB2P-9Xk2zV0RSZnkY5BdnV6E4KkDpEKvo68Sw_Rnx8"
+pavlab_curation_path <- "/home/amorin/Data/Metadata/pavlab_curation_sep2023.tsv"
 chu2021_records_path <- "/home/amorin/Data/Metadata/Chu2021_records_DTRI.tsv"
 chu2021_all_path <- "/home/amorin/Data/Metadata/Chu2021_all_DTRI.tsv"
 
 # Output of formatted curated targets
 curated_all_path <- "/home/amorin/Data/Metadata/Curated_targets_all_Sept2023.tsv"
+
+
+# List of ROCR performances
+coexpr_recover_curated_hg_path <- "/space/scratch/amorin/R_objects/coexpr_recover_curated_hg.RDS"
+coexpr_recover_curated_mm_path <- "/space/scratch/amorin/R_objects/coexpr_recover_curated_mm.RDS"
+unibind_recover_curated_hg_path <- "/space/scratch/amorin/R_objects/unibind_recover_curated_hg.RDS"
+unibind_recover_curated_mm_path <- "/space/scratch/amorin/R_objects/unibind_recover_curated_mm.RDS"
+
+
 
 
 # Human Protein Atlas
