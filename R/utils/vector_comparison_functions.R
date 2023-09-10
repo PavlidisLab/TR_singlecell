@@ -324,10 +324,6 @@ get_similarity_pair_df <- function(cor_mat, topk_mat, jacc_mat) {
 
 
 
-
-
-
-
 # Functions using ROCR:: for measuring ranked performance
 # ------------------------------------------------------------------------------
 
@@ -419,6 +415,32 @@ get_auc <- function(score_vec,
   }
   
   return(perf)
+}
+
+
+
+# TODO:
+
+get_curated_labels <- function(tf,
+                               curated_df,
+                               pc_df,
+                               species,
+                               remove_self = TRUE) {
+  
+  labels <- curated_df %>%
+    filter(str_to_upper(TF_Symbol) == str_to_upper(tf)) %>% 
+    distinct(Target_Symbol) %>%
+    pull(Target_Symbol)
+  
+  if (remove_self) labels <- setdiff(str_to_upper(labels), str_to_upper(tf))
+
+  labels <- if (species == "Human") {
+    intersect(str_to_upper(labels), pc_df$Symbol)
+  } else {
+    intersect(str_to_title(labels), pc_df$Symbol)
+  }
+  
+  return(labels)
 }
 
 
@@ -517,17 +539,11 @@ curated_obs_and_null_auc <- function(tf,
     
   # Extract the labels for the given TF, removing the TF itself as a target
     
-  labels <- curated_df %>%
-    filter(str_to_upper(TF_Symbol) == str_to_upper(tf) &
-             !(str_to_upper(Target_Symbol) == str_to_upper(tf))) %>%
-    distinct(Target_Symbol) %>% 
-    pull(Target_Symbol)
-  
-  labels <- if (species == "Human") {
-    intersect(str_to_upper(labels), pc_df$Symbol)
-  } else {
-    intersect(str_to_title(labels), pc_df$Symbol)
-  }
+  labels <- get_curated_labels(tf = tf,
+                               curated_df = curated_df,
+                               pc_df = pc_df,
+                               species = species,
+                               remove_self = TRUE)
   
   if (length(labels) == 0) stop(paste("No labels retrieved for", tf))
                    
@@ -624,199 +640,57 @@ save_curated_auc_list <- function(path,
 
 
 
-###
 
+# TODO:
 
-
-
-
-# TODO: check k
-# TODO: name structure more explicit
-# TODO: more explicit about removal of TF
-
-
-get_rank_df <- function(gene_vec,
-                        tf,
-                        evidence_df,
-                        evidence_col,
-                        k = NULL) {
-
-  gene_df <- data.frame(Symbol = names(gene_vec),
-                        Score = unname(gene_vec))
+get_colwise_auc <- function(score_mat,
+                            labels,
+                            ncores = 1) {
   
-  rank_df <- evidence_df %>%
-    dplyr::select(Symbol, !!sym(evidence_col)) %>% 
-    left_join(., gene_df, by = "Symbol") %>%
-    filter(Symbol != tf) %>%
-    arrange(!!sym(evidence_col))
+  auc_l <- mclapply(colnames(score_mat), function(x) {
+    
+    score_vec <- sort(score_mat[, x], decreasing = TRUE)
+    label_vec <- names(score_vec) %in% labels
+    get_auc(score_vec = score_vec, label_vec = label_vec, measure = "both")
+    
+  }, mc.cores = ncores)
   
-  
-  if (evidence_col == "Curated_target") {
-    
-    labels <- filter(evidence_df, Curated_target)[["Symbol"]]
-    
-    rank_df <- rank_df %>%
-      mutate(Label = Symbol %in% labels) %>%
-      arrange(desc(Score))
-    
-  } else {
-    
-    labels <- c(rep(1, k), rep(0, nrow(rank_df) - k))
-    
-    rank_df <- rank_df %>%
-      mutate(Label = labels) %>%
-      arrange(desc(Score))
-  }
-
-  return(rank_df)
+  names(auc_l) <- colnames(score_mat)
+  return(auc_l)
 }
-
-
-
-# TODO: better name
-# TODO: measure check
-
-get_tf_performance <- function(agg_l,
-                               msr_mat,
-                               evidence_df,
-                               evidence_col,
-                               tf,
-                               measure,
-                               k = NULL) {
-  
-  # TODO:
-  gene_mat <- gene_vec_to_mat(agg_l, tf)
-  gene_mat <- gene_mat[, which(msr_mat[tf, ] == 1), drop = FALSE]
-  gene_mat <- cbind(gene_mat, Aggregate = rowMeans(gene_mat))
-
-  # TODO:
-  auprc_l <- lapply(colnames(gene_mat), function(x) {
-    
-    message(x, Sys.time())
-    
-    gene_vec <- gene_mat[, x]
-    rank_df <- get_rank_df(gene_vec, tf, evidence_df, evidence_col, k)
-    get_auc(rank_df, label_col = "Label", score_col = "Score", measure = measure)
-    
-  })
-  
-  names(auprc_l) <- colnames(gene_mat)
-  auprc_l <- unlist(auprc_l)
-  return(auprc_l)
-}
-
 
 
 
 # TODO:
 
-get_all_perf_df <- function(agg_l,
-                            msr_mat,
-                            evidence_df,
-                            evidence_col,
-                            tf,
-                            measure,
-                            k = NULL) {
+get_colwise_curated_auc_list <- function(tfs,
+                                         agg_l,
+                                         msr_mat,
+                                         curated_df,
+                                         species,
+                                         ncores = 1,
+                                         verbose = TRUE) {
   
-  # TODO:
-  gene_mat <- gene_vec_to_mat(agg_l, tf)
-  gene_mat <- gene_mat[, which(msr_mat[tf, ] == 1), drop = FALSE]
-  gene_mat <- cbind(gene_mat, Aggregate = rowMeans(gene_mat))
-  
-  # TODO:
-  df_l <- lapply(colnames(gene_mat), function(x) {
+  tf_auc_l <- lapply(tfs, function(tf) {
     
-    message(x, Sys.time())
+    if (verbose) message(paste(tf, Sys.time()))
     
-    gene_vec <- gene_mat[, x]
-    rank_df <- get_rank_df(gene_vec, tf, evidence_df, evidence_col, k)
+    # Prepare matrix of aggregate coexpr vectors and their average score
+    score_mat <- gene_vec_to_mat(agg_l, tf)
+    score_mat <- score_mat[, which(msr_mat[tf, ] == 1), drop = FALSE]
+    score_mat <- cbind(score_mat, Aggregate = rowMeans(score_mat))
     
-    perf_df <- get_performance_df(rank_df,
-                                  label_col = "Label",
-                                  score_col = "Score",
-                                  measure = measure)
-    perf_df$ID <- x
-    perf_df
+    # Prepare curated labels, removing the TF itself if it is a target
+    labels <- get_curated_labels(tf = tf,
+                                 curated_df = curated_df,
+                                 pc_df = pc_df,
+                                 species = species,
+                                 remove_self = TRUE)
+    
+    get_colwise_auc(score_mat = score_mat, labels = labels, ncores = ncores)
     
   })
   
-  all_perf_df <- do.call(rbind, df_l)
-  
-  return(all_perf_df)
+  names(tf_auc_l) <- tfs
+  return(tf_auc_l)
 }
-
-
-
-
-
-
-## TODO: remove if unused
-
-
-
-
-# # TODO:
-# # The idea is to get performance for every gene vector in a network at 
-# # recovering a given TF's evidence, and seeing how well the TF vector itself
-# # compares
-# 
-# get_all_performance <- function(agg_l,
-#                                 evidence_df,
-#                                 evidence_col,
-#                                 genes,
-#                                 k = 1000,
-#                                 ncores = 1) {
-# 
-#   # TODO:
-# 
-#   perf_l <- lapply(agg_l, function(agg_mat) {
-# 
-#     # TODO:
-# 
-#     perf <- mclapply(genes, function(x) {
-# 
-#       gene_vec <- agg_mat[, x]
-#       rank_df <- get_rank_df(gene_vec, evidence_df, evidence_col, k)
-#       auprc <- get_auc(rank_df, label_col = "Label", score_col = "Score", measure = "AUPRC")
-#       topk <- sum(rank_df$Label[1:k])
-#       data.frame(AUPRC = auprc, Topk = topk)
-# 
-#     }, mc.cores = ncores)
-# 
-#     perf_df <- data.frame(Symbol = genes, do.call(rbind, perf)) %>%
-#       arrange(desc(AUPRC))
-# 
-#     return(perf_df)
-# 
-#   })
-# 
-#   names(perf_l) <- names(agg_l)
-#   return(perf_l)
-# }
-
-
-
-
-# # This helper takes the output list of get_all_performance(), and returns an
-# # experiment by tf matrix, where each element represents the AUPRC rank of the
-# # given TF's aggregate vector at recovering evidence, relative to all other
-# # gene aggregate vectors in the given dataset.
-# # Eg [MKA, Ascl1] == 6153: Ascl1 had the 6153th best AUPRC rank at recovering
-# # Ascl1 evidence among all genes in the MKA dataset.
-# 
-# which_rank_mat <- function(perf_l) {
-# 
-#   tfs <- names(perf_l)
-# 
-#   which_l <- lapply(tfs, function(tf) {
-#     lapply(perf_l[[tf]], function(x) {
-#       which(x$Symbol == tf)
-#     })
-#   })
-# 
-#   which_mat <- do.call(cbind, which_l)
-#   colnames(which_mat) <- tfs
-# 
-#   return(which_mat)
-# }
-
