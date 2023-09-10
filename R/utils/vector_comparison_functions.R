@@ -50,27 +50,6 @@ topk_sort <- function(vec, k, check_k_arg = TRUE) {
 topk_intersect <- function(vec1, vec2) length(intersect(vec1, vec2))
 
 
-
-# Return the AUPRC of vec1 as scores and vec2 as labels
-# TODO doc and better arg names
-
-vec_auc <- function(vec_scores, vec_labels, measure) {
-  
-  stopifnot(measure %in% c("AUROC", "AUPRC"))
-  
-  rank_df <- data.frame(Score = vec_scores, 
-                        Label = names(vec_scores) %in% vec_labels)
-  
-  if (all(rank_df$Label)) return(1)
-  if (all(!rank_df$Label)) return(0)
-  
-  get_au_perf(rank_df, 
-              label_col = "Label", 
-              score_col = "Score", 
-              measure = measure)
-}
-
-
   
 # Binarize matrix such that top k and bottom k is 1, everything else 0
 # TODO: doc
@@ -345,98 +324,307 @@ get_similarity_pair_df <- function(cor_mat, topk_mat, jacc_mat) {
 
 
 
-###
 
 
 
-# Performance of rankings in a data frame. 
+
+# Functions using ROCR:: for measuring ranked performance
 # ------------------------------------------------------------------------------
 
 
-# This uses the ROCR package to return a df of either precision and recall (PR) 
-# or true and false positive rate (ROC) calculated for each prediction in rank_df.
-# Label_col assumed to be value that can be represented as binary for 0=negative
-# and 1=positive. 
-# Score_col assumed to be numeric value where higher positive values carry more
-# importance.
 
-get_perf_df <- function(rank_df,
-                        label_col,
-                        score_col = NULL,
-                        measure) {
+# This uses the ROCR package to a data.frame of precision and recall (PR), TPR
+# and FPR (ROC), or both, calculated at each step of score/label vec
+# score_vec is a numeric vector of scores where higher values == more important
+# label_vec is a binary vector of equal length to score_vec where 1/TRUE == pos
+# measure is one of "AUROC", "AUPRC", "both"
+# returns a list
+
+get_performance_df <- function(score_vec,
+                               label_vec,
+                               measure) {
   
-  stopifnot(c(label_col, score_col) %in% colnames(rank_df),
-            measure %in% c("ROC", "PR"))
+  stopifnot(identical(length(score_vec), length(label_vec)),
+            is.numeric(score_vec),
+            measure %in% c("ROC", "PR", "both"))
   
   # Negatives as 0, positives as 1
-  labels <- factor(as.numeric(rank_df[[label_col]]),
-                   levels = c(0, 1),
-                   ordered = TRUE)
+  label_vec <- factor(as.integer(label_vec), levels = c(0, 1), ordered = TRUE)
   
-  # If no scores column provided, assume row order as measure of importance
-  scores <- if (is.null(score_col)) {
-    message("No scores provided, using row order of rank_df as relative importance")
-    1 / (1:length(labels))
-  } else {
-    rank_df[[score_col]]
-  }
-  
-  pred <- ROCR::prediction(predictions = scores, labels = labels)
+  pred <- ROCR::prediction(predictions = score_vec, labels = label_vec)
   
   if (measure == "ROC") {
     
-    perf <- ROCR::performance(pred, measure = "tpr", x.measure = "fpr")
-    perf_df <- data.frame(TPR = unlist(perf@y.values),
-                          FPR = unlist(perf@x.values))
+    roc <- ROCR::performance(pred, measure = "tpr", x.measure = "fpr")
+    
+    perf <- data.frame(TPR = unlist(roc@y.values), 
+                       FPR = unlist(roc@x.values))
+    
+  } else if (measure == "PR") {
+    
+    pr <- ROCR::performance(pred, measure = "prec", x.measure = "rec")
+    
+    perf <- data.frame(Precision = unlist(perf@y.values),
+                       Recall = unlist(perf@x.values))
+    
   } else {
     
-    perf <- ROCR::performance(pred, measure = "prec", x.measure = "rec")
-    perf_df <- data.frame(Precision = unlist(perf@y.values),
-                          Recall = unlist(perf@x.values))
-  }
-  
-  return(perf_df)
-}
-
-
-# This uses the ROCR package to return either the area under the PR curve (AUPRC)
-# or area under ROC (AUROC) for every prediction made in rank_df.
-# Label_col assumed to be value that can be represented as binary for 0=negative
-# and 1=positive. 
-# Score_col assumed to be numeric value where higher positive values carry more
-# importance.
-
-get_au_perf <- function(rank_df,
-                        label_col,
-                        score_col = NULL,
-                        measure) {
-  
-  stopifnot(c(label_col, score_col) %in% colnames(rank_df),
-            measure %in% c("AUROC", "AUPRC"))
-  
-  # Negatives as 0, positives as 1
-  labels <- factor(as.numeric(rank_df[[label_col]]),
-                   levels = c(0, 1),
-                   ordered = TRUE)
-  
-  # If no scores column provided, assume row order as measure of importance
-  scores <- if (is.null(score_col)) {
-    message("No scores provided, using row order of rank_df as relative importance")
-    1 / (1:length(labels))
-  } else {
-    rank_df[[score_col]]
-  }
-  
-  pred <- ROCR::prediction(predictions = scores, labels = labels)
-  
-  if (measure == "AUROC") {
-    perf <- ROCR::performance(pred, measure = "auc")@y.values[[1]]
-  } else {
-    perf <- ROCR::performance(pred, measure = "aucpr")@y.values[[1]]
+    roc <- ROCR::performance(pred, measure = "tpr", x.measure = "fpr")
+    pr <- ROCR::performance(pred, measure = "prec", x.measure = "rec")
+    
+    perf <- data.frame(TPR = unlist(roc@y.values),
+                       FPR = unlist(roc@x.values),
+                       Precision = unlist(pr@y.values),
+                       Recall = unlist(pr@x.values))
   }
   
   return(perf)
 }
+
+
+
+# This uses the ROCR package to return the area under the PR curve (AUPRC),
+# the area under ROC (AUROC), or both.
+# score_vec is a numeric vector of scores where higher values == more important
+# label_vec is a binary vector of equal length to score_vec where 1/TRUE == pos
+# measure is one of "AUROC", "AUPRC", "both"
+# returns a list
+
+get_auc <- function(score_vec,
+                    label_vec,
+                    measure) {
+  
+  stopifnot(identical(length(score_vec), length(label_vec)),
+            is.numeric(score_vec),
+            measure %in% c("AUROC", "AUPRC", "both"))
+  
+  # Negatives as 0, positives as 1
+  label_vec <- factor(as.integer(label_vec), levels = c(0, 1), ordered = TRUE)
+  
+  pred <- ROCR::prediction(predictions = score_vec, labels = label_vec)
+  
+  if (measure == "AUROC") {
+    perf <- list(
+      AUROC = ROCR::performance(pred, measure = "auc")@y.values[[1]]
+    )
+  } else if (measure == "AUPRC") {
+    perf <- list(
+      AUPRC = ROCR::performance(pred, measure = "aucpr")@y.values[[1]]
+    )
+  } else {
+    perf <- list(
+      AUROC = ROCR::performance(pred, measure = "auc")@y.values[[1]],
+      AUPRC = ROCR::performance(pred, measure = "aucpr")@y.values[[1]]
+    )
+  }
+  
+  return(perf)
+}
+
+
+
+
+# TODO:
+
+get_null_performance <- function(score_vec,
+                                 label_all,
+                                 measure,
+                                 n_target, 
+                                 n_samps, 
+                                 ncores = 1) {
+  
+  stopifnot(is.numeric(score_vec),
+            length(label_all %in% names(score_vec)) > 0,
+            measure %in% c("AUROC", "AUPRC", "both"))
+  
+  null_perf <- mclapply(1:n_samps, function(x) {
+    
+    null_labels <- sample(label_all, size = n_target, replace = FALSE)
+    null_vec <- names(score_vec) %in% null_labels
+    get_auc(score_vec = score_vec, label_vec = null_vec, measure = measure)
+    
+  }, mc.cores = ncores)
+  
+  return(null_perf)
+}
+
+
+
+
+# TODO:
+
+summarize_obs_and_null_auc <- function(tf,
+                                       score_vec,
+                                       label_vec,
+                                       label_all,
+                                       n_samps = 1000,
+                                       ncores = 1) {
+  
+  n_target <- sum(label_vec)
+  
+  auc <- get_auc(score_vec, label_vec = label_vec, measure = "both")
+  
+  null <- get_null_performance(score_vec = score_vec,
+                               label_all = label_all,
+                               measure = "both",
+                               n_target = n_target, 
+                               n_samps = n_samps, 
+                               ncores = ncores)
+  
+  null_auprc <- unlist(lapply(null, `[[`, "AUPRC"))
+  null_auroc <- unlist(lapply(null, `[[`, "AUROC"))
+  
+  df <- data.frame(
+    Symbol = tf,
+    N_targets = n_target,
+    AUPRC = auc$AUPRC,
+    AUPRC_percentile_observed = ecdf(null_auprc)(auc$AUPRC),
+    AUPRC_ratio_observed = auc$AUPRC / median(null_auprc),
+    AUPRC_diff_observed = auc$AUPRC - median(null_auprc),
+    AUROC = auc$AUROC,
+    AUROC_percentile_observed = ecdf(null_auroc)(auc$AUROC),
+    AUROC_ratio_observed = auc$AUROC / median(null_auroc),
+    AUROC_diff_observed = auc$AUROC - median(null_auroc)
+  )
+  
+  return(list(Perf_df = df, Null = null)) 
+}
+
+
+
+
+# TODO:
+
+curated_obs_and_null_auc <- function(tf,
+                                     rank_df,
+                                     score_col,
+                                     curated_df,
+                                     label_all,
+                                     pc_df,
+                                     species,
+                                     n_samps = 1000,
+                                     ncores = 1) {
+  
+  stopifnot(species %in% c("Mouse", "Human"))
+  
+  # Extract the ranking/scores for the given TF, removing the TF itself
+  
+  rank <- rank_df %>%
+    filter(Symbol != tf) %>%
+    arrange(desc(!!sym(score_col)))
+    
+  score_vec <- setNames(rank[[score_col]], rank$Symbol)
+    
+  # Extract the labels for the given TF, removing the TF itself as a target
+    
+  labels <- curated_df %>%
+    filter(str_to_upper(TF_Symbol) == str_to_upper(tf) &
+             !(str_to_upper(Target_Symbol) == str_to_upper(tf))) %>%
+    distinct(Target_Symbol) %>% 
+    pull(Target_Symbol)
+  
+  labels <- if (species == "Human") {
+    intersect(str_to_upper(labels), pc_df$Symbol)
+  } else {
+    intersect(str_to_title(labels), pc_df$Symbol)
+  }
+  
+  if (length(labels) == 0) stop(paste("No labels retrieved for", tf))
+                   
+  label_vec <- names(score_vec) %in% labels
+
+  auc_df <- summarize_obs_and_null_auc(tf = tf,
+                                       score_vec = score_vec,
+                                       label_vec = label_vec,
+                                       label_all = label_all,
+                                       n_samps = n_samps,
+                                       ncores = ncores)
+  
+  return(auc_df)
+}
+  
+  
+
+
+# TODO:
+
+curated_obs_and_null_auc_list <- function(tfs,
+                                          rank_l,
+                                          score_col,
+                                          curated_df,
+                                          label_all,
+                                          pc_df,
+                                          species,
+                                          n_samps = 1000,
+                                          ncores = 1,
+                                          verbose = TRUE) {
+  
+  stopifnot(all(tfs %in% names(rank_l)))
+  
+  auc_l <- lapply(tfs, function(tf) {
+    
+    if (verbose) message(paste(tf, Sys.time()))
+    
+    try(curated_obs_and_null_auc(
+      tf = tf,
+      rank_df = rank_l[[tf]],
+      score_col = score_col,
+      curated_df = curated_df,
+      label_all = label_all,
+      pc_df = pc_df,
+      species = species,
+      n_samps = n_samps,
+      ncores = ncores))
+    
+  })
+  
+  # auc_df <- do.call(rbind, lapply(auc_l, `[[`, "Perf_df"))
+  names(auc_l) <- tfs
+  return(auc_l)
+}
+  
+
+
+
+# TODO: 
+
+save_curated_auc_list <- function(path,
+                                  tfs,
+                                  rank_l,
+                                  score_col,
+                                  curated_df,
+                                  label_all,
+                                  pc_df,
+                                  species,
+                                  n_samps = 1000,
+                                  ncores = 1,
+                                  verbose = TRUE,
+                                  force_resave = FALSE)  {
+  
+  if (!file.exists(path) || force_resave) {
+    
+    auc_l <- curated_obs_and_null_auc_list(
+      tfs = tfs,
+      rank_l = rank_l,
+      score_col = score_col,
+      curated_df = curated_df,
+      label_all = label_all,
+      pc_df = pc_df,
+      species = species,
+      n_samps = n_samps,
+      ncores = ncores,
+      verbose = verbose)
+    
+    saveRDS(auc_l, path)
+  
+  }
+    
+  return(invisible(NULL))
+}
+
+
+
+###
 
 
 
@@ -508,7 +696,7 @@ get_tf_performance <- function(agg_l,
     
     gene_vec <- gene_mat[, x]
     rank_df <- get_rank_df(gene_vec, tf, evidence_df, evidence_col, k)
-    get_au_perf(rank_df, label_col = "Label", score_col = "Score", measure = measure)
+    get_auc(rank_df, label_col = "Label", score_col = "Score", measure = measure)
     
   })
   
@@ -543,10 +731,10 @@ get_all_perf_df <- function(agg_l,
     gene_vec <- gene_mat[, x]
     rank_df <- get_rank_df(gene_vec, tf, evidence_df, evidence_col, k)
     
-    perf_df <- get_perf_df(rank_df, 
-                           label_col = "Label", 
-                           score_col = "Score",
-                           measure = measure)
+    perf_df <- get_performance_df(rank_df,
+                                  label_col = "Label",
+                                  score_col = "Score",
+                                  measure = measure)
     perf_df$ID <- x
     perf_df
     
@@ -562,69 +750,73 @@ get_all_perf_df <- function(agg_l,
 
 
 
-
-
-# TODO:
-# The idea is to get performance for every gene vector in a network at 
-# recovering a given TF's evidence, and seeing how well the TF vector itself
-# compares
-
-get_all_performance <- function(agg_l,
-                                evidence_df,
-                                evidence_col,
-                                genes,
-                                k = 1000,
-                                ncores = 1) {
-
-  # TODO:
-
-  perf_l <- lapply(agg_l, function(agg_mat) {
-
-    # TODO:
-
-    perf <- mclapply(genes, function(x) {
-
-      gene_vec <- agg_mat[, x]
-      rank_df <- get_rank_df(gene_vec, evidence_df, evidence_col, k)
-      auprc <- get_au_perf(rank_df, label_col = "Label", score_col = "Score", measure = "AUPRC")
-      topk <- sum(rank_df$Label[1:k])
-      data.frame(AUPRC = auprc, Topk = topk)
-
-    }, mc.cores = ncores)
-
-    perf_df <- data.frame(Symbol = genes, do.call(rbind, perf)) %>%
-      arrange(desc(AUPRC))
-
-    return(perf_df)
-
-  })
-
-  names(perf_l) <- names(agg_l)
-  return(perf_l)
-}
+## TODO: remove if unused
 
 
 
-# This helper takes the output list of get_all_performance(), and returns an
-# experiment by tf matrix, where each element represents the AUPRC rank of the
-# given TF's aggregate vector at recovering evidence, relative to all other
-# gene aggregate vectors in the given dataset.
-# Eg [MKA, Ascl1] == 6153: Ascl1 had the 6153th best AUPRC rank at recovering
-# Ascl1 evidence among all genes in the MKA dataset.
 
-which_rank_mat <- function(perf_l) {
+# # TODO:
+# # The idea is to get performance for every gene vector in a network at 
+# # recovering a given TF's evidence, and seeing how well the TF vector itself
+# # compares
+# 
+# get_all_performance <- function(agg_l,
+#                                 evidence_df,
+#                                 evidence_col,
+#                                 genes,
+#                                 k = 1000,
+#                                 ncores = 1) {
+# 
+#   # TODO:
+# 
+#   perf_l <- lapply(agg_l, function(agg_mat) {
+# 
+#     # TODO:
+# 
+#     perf <- mclapply(genes, function(x) {
+# 
+#       gene_vec <- agg_mat[, x]
+#       rank_df <- get_rank_df(gene_vec, evidence_df, evidence_col, k)
+#       auprc <- get_auc(rank_df, label_col = "Label", score_col = "Score", measure = "AUPRC")
+#       topk <- sum(rank_df$Label[1:k])
+#       data.frame(AUPRC = auprc, Topk = topk)
+# 
+#     }, mc.cores = ncores)
+# 
+#     perf_df <- data.frame(Symbol = genes, do.call(rbind, perf)) %>%
+#       arrange(desc(AUPRC))
+# 
+#     return(perf_df)
+# 
+#   })
+# 
+#   names(perf_l) <- names(agg_l)
+#   return(perf_l)
+# }
 
-  tfs <- names(perf_l)
 
-  which_l <- lapply(tfs, function(tf) {
-    lapply(perf_l[[tf]], function(x) {
-      which(x$Symbol == tf)
-    })
-  })
 
-  which_mat <- do.call(cbind, which_l)
-  colnames(which_mat) <- tfs
 
-  return(which_mat)
-}
+# # This helper takes the output list of get_all_performance(), and returns an
+# # experiment by tf matrix, where each element represents the AUPRC rank of the
+# # given TF's aggregate vector at recovering evidence, relative to all other
+# # gene aggregate vectors in the given dataset.
+# # Eg [MKA, Ascl1] == 6153: Ascl1 had the 6153th best AUPRC rank at recovering
+# # Ascl1 evidence among all genes in the MKA dataset.
+# 
+# which_rank_mat <- function(perf_l) {
+# 
+#   tfs <- names(perf_l)
+# 
+#   which_l <- lapply(tfs, function(tf) {
+#     lapply(perf_l[[tf]], function(x) {
+#       which(x$Symbol == tf)
+#     })
+#   })
+# 
+#   which_mat <- do.call(cbind, which_l)
+#   colnames(which_mat) <- tfs
+# 
+#   return(which_mat)
+# }
 
