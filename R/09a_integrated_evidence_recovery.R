@@ -54,31 +54,63 @@ evidence_l <- readRDS(evidence_path)
 # ------------------------------------------------------------------------------
 
 
+tf <- "Ascl1"
+agg_l <- agg_tf_mm
+msr_mat <- msr_mm
 
-
-get_colwise_performance <- 
-
-
-
-
-
-auprc_hg_curated <- get_tf_performance(agg_l = agg_tf_hg,
-                                       msr_mat = msr_hg,
-                                       evidence_df = evidence_l$Human[[tf_hg]],
-                                       evidence_col = "Curated_target",
-                                       tf = tf_hg,
-                                       measure = "AUPRC")
+score_mat <- gene_vec_to_mat(agg_l, tf)
+score_mat <- score_mat[, which(msr_mat[tf, ] == 1), drop = FALSE]
+score_mat <- cbind(score_mat, Aggregate = rowMeans(score_mat))
 
 
 
-pr_df_hg_curated <- get_all_perf_df(agg_l = agg_tf_hg,
-                                    msr_mat = msr_hg,
-                                    evidence_df = evidence_l$Human[[tf_hg]],
-                                    evidence_col = "Curated_target",
-                                    tf = tf_hg,
-                                    measure = "PR")
+tt <- get_colwise_auc(score_mat,
+                      labels,
+                      ncores = 8)
 
 
+auprc <- unlist(lapply(tt, `[[`, "AUPRC"))
+auprc <- sort(auprc[names(auprc) != "Aggregate"])
+hist(auprc)
+abline(v = tt$Aggregate$AUPRC, col = "red")
+
+
+auroc <- unlist(lapply(tt, `[[`, "AUROC"))
+auroc <- sort(auroc[names(auroc) != "Aggregate"])
+hist(auroc)
+abline(v = tt$Aggregate$AUROC, col = "red")
+
+
+tt <- get_colwise_curated_auc_list(tfs = names(evidence_l$Mouse),
+                                   agg_l = agg_tf_mm,
+                                   msr_mat = msr_mm,
+                                   curated_df = curated,
+                                   species = "Mouse",
+                                   ncores = 8,
+                                   verbose = TRUE)
+  
+
+topk_labels <- evidence_l$Mouse[[tf]] %>%
+  filter(Symbol != tf) %>%
+  slice_min(Rank_integrated, n = 500) %>%
+  pull(Symbol)
+
+
+tt <- get_colwise_auc(score_mat,
+                      topk_labels,
+                      ncores = 8)
+
+
+auroc <- unlist(lapply(tt, `[[`, "AUROC"))
+auroc <- sort(auroc[names(auroc) != "Aggregate"])
+hist(auroc)
+abline(v = tt$Aggregate$AUROC, col = "red")
+
+
+auprc <- unlist(lapply(tt, `[[`, "AUPRC"))
+auprc <- sort(auprc[names(auprc) != "Aggregate"])
+hist(auprc)
+abline(v = tt$Aggregate$AUPRC, col = "red")
 
 
 
@@ -480,189 +512,6 @@ check_p1_4 <- lapply(check_p1_3, function(x) {
   topk_genes <- topk_genes[topk_genes != tf]
   # topk_genes %in% evidence_df$Symbol[1:1000]
 })
-
-
-
-# Individual versus aggregate recovery
-# ------------------------------------------------------------------------------
-
-
-# Human
-
-# tf_performance_hg <- lapply(tfs_hg, function(tf) {
-#   
-#   get_tf_performance(agg_l = agg_hg, 
-#                      evidence_df = evidence_l$Human[[tf]], 
-#                      evidence_col = "Rank_integrated", 
-#                      tf = tf, 
-#                      k = 1000)
-# })
-# names(tf_performance_hg) <- tfs_hg
-
-
-
-# Mouse
-
-# tf_performance_mm <- lapply(tfs_mm, function(tf) {
-#   
-#   get_tf_performance(agg_l = agg_mm, 
-#                      evidence_df = evidence_l$Mouse[[tf]], 
-#                      evidence_col = "Rank_integrated", 
-#                      tf = tf, 
-#                      k = 1000)
-# })
-# names(tf_performance_mm) <- tfs_mm
-
-
-
-
-
-# Every gene recovery of evidence (slow!)
-# ------------------------------------------------------------------------------
-
-
-# outfile_hg1 <- "/space/scratch/amorin/R_objects/05-06-2023_coexpr_agg_recovery_integrated_evidence_human.RDS"
-# outfile_hg2 <- "/space/scratch/amorin/R_objects/05-06-2023_coexpr_agg_recovery_curated_evidence_human.RDS"
-# outfile_mm1 <- "/space/scratch/amorin/R_objects/05-06-2023_coexpr_agg_recovery_integrated_evidence_mouse.RDS"
-# outfile_mm2 <- "/space/scratch/amorin/R_objects/05-06-2023_coexpr_agg_recovery_curated_evidence_mouse.RDS"
-# 
-
-# Human
-
-# if (!file.exists(outfile_hg1)) {
-#   
-#   hg1 <- lapply(tfs_hg, function(tf) {
-#     
-#     get_all_performance(agg_l = agg_hg,
-#                         evidence_df = evidence_l$Human[[tf]],
-#                         evidence_col = "Rank_integrated",
-#                         genes = genes_hg,
-#                         k = 1000,
-#                         ncores = ncore)
-#   })
-#   names(hg1) <- tfs_hg
-#   
-#   saveRDS(hg1, outfile_hg1)
-# 
-# } else {
-#   
-#   hg1 <- readRDS(outfile_hg1)
-#   
-# }
-
-
-# 
-# if (!file.exists(outfile_hg2)) {
-#   
-#   hg2 <- lapply(tfs_hg, function(tf) {
-#     
-#     get_all_performance(agg_l = agg_hg,
-#                         evidence_df = evidence_l$Human[[tf]],
-#                         evidence_col = "Curated_target",
-#                         genes = genes_hg,
-#                         k = 1000,
-#                         ncores = ncore)
-#   })
-#   names(hg2) <- tfs_hg
-#   
-#   saveRDS(hg2, outfile_hg2)
-#   
-# } else {
-#   
-#   hg2 <- readRDS(outfile_hg2)
-#   
-# }
-
-
-
-# Mouse
-
-# 
-# if (!file.exists(outfile_mm1)) {
-#   
-#   mm1 <- lapply(tfs_mm, function(tf) {
-#     
-#     get_all_performance(agg_l = agg_mm,
-#                         evidence_df = evidence_l$Mouse[[tf]],
-#                         evidence_col = "Rank_integrated",
-#                         genes = genes_mm,
-#                         k = 1000,
-#                         ncores = ncore)
-#   })
-#   names(mm1) <- tfs_mm
-#   
-#   saveRDS(mm1, outfile_mm1)
-#   
-# } else {
-#   
-#   mm1 <- readRDS(outfile_mm1)
-#   
-# }
-
-
-
-# if (!file.exists(outfile_mm2)) {
-#   
-#   mm2 <- lapply(tfs_mm, function(tf) {
-#     
-#     get_all_performance(agg_l = agg_mm,
-#                         evidence_df = evidence_l$Mouse[[tf]],
-#                         evidence_col = "Curated_target",
-#                         genes = genes_mm,
-#                         k = 1000,
-#                         ncores = ncore)
-#   })
-#   names(mm2) <- tfs_mm
-#   
-#   saveRDS(mm2, outfile_mm2)
-#   
-# } else {
-#   
-#   mm2 <- readRDS(outfile_mm2)
-#   
-# }
-
-
-
-# TODO:
-# ------------------------------------------------------------------------------
-
-
-# which_hg1 <- which_rank_mat(hg1)
-# which_hg2 <- which_rank_mat(hg2)
-# which_mm1 <- which_rank_mat(mm1)
-# which_mm2 <- which_rank_mat(mm2)
-
-
-# tf <- "ASCL1"
-# 
-# hist(hg1[[tf]]$Tabula_Sapiens$Topk, breaks = 100)
-# abline(v = filter(hg1[[tf]]$Tabula_Sapiens, Symbol == tf)$Topk, col = "red")
-# head(hg1[[tf]]$Tabula_Sapiens, 10)
-# 
-# hist(hg2[[tf]]$Tabula_Sapiens$Topk, breaks = 100)
-# abline(v = filter(hg2[[tf]]$Tabula_Sapiens, Symbol == tf)$Topk, col = "red")
-# head(hg2[[tf]]$Tabula_Sapiens, 10)
-# 
-# 
-# plot(hg1$ASCL1$Tabula_Sapiens$Topk, hg1$ASCL1$Tabula_Sapiens$AUPRC)
-# cor(hg1$ASCL1$Tabula_Sapiens$Topk, hg1$ASCL1$Tabula_Sapiens$AUPRC, method = "spearman")
-# 
-# 
-# tf <- "Pax6"
-# 
-# hist(mm2[[tf]]$HypoMap$Topk, breaks = 100)
-# abline(v = filter(mm2[[tf]]$HypoMap, Symbol == tf)$Topk, col = "red")
-# head(mm2[[tf]]$HypoMap, 10)
-# 
-# 
-# # Tally the genes whose aggregate expression vector was among the top k at 
-# # recovering evidence (also top k)
-# 
-# tally_topk <- lapply(hg1$HES1, function(x) x$Symbol[1:k]) %>%
-#   unlist() %>%
-#   table() %>%
-#   sort(decreasing = TRUE)
 
 
 
