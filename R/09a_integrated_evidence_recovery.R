@@ -50,12 +50,44 @@ evidence_l <- readRDS(evidence_path)
 
 
 
+# 
+# ------------------------------------------------------------------------------
+
+
+
+
+get_colwise_performance <- 
+
+
+
+
+
+auprc_hg_curated <- get_tf_performance(agg_l = agg_tf_hg,
+                                       msr_mat = msr_hg,
+                                       evidence_df = evidence_l$Human[[tf_hg]],
+                                       evidence_col = "Curated_target",
+                                       tf = tf_hg,
+                                       measure = "AUPRC")
+
+
+
+pr_df_hg_curated <- get_all_perf_df(agg_l = agg_tf_hg,
+                                    msr_mat = msr_hg,
+                                    evidence_df = evidence_l$Human[[tf_hg]],
+                                    evidence_col = "Curated_target",
+                                    tf = tf_hg,
+                                    measure = "PR")
+
+
+
+
+
 # Demo a single TF
 # ------------------------------------------------------------------------------
 
 
-tf_mm <- "Runx1"
-tf_hg <- "RUNX1"
+tf_mm <- "Mef2c"
+tf_hg <- "MEF2C"
 evidence_col <- "Rank_integrated"
 k <- 500
 
@@ -323,7 +355,7 @@ p_mm_curated <- plot_grid(p_auroc_mm_curated, p_auprc_mm_curated)
 
 species <- "Human"
 measure <- "ROC"
-tf <- "RUNX1"
+tf <- tf_hg
 
 integrated <- get_perf_df(rank_df = arrange(evidence_l[[species]][[tf]], Rank_integrated),
                           "Curated_target",
