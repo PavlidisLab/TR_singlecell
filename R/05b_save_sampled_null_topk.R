@@ -10,7 +10,7 @@ source("R/00_config.R")
 
 k <- 1000 
 n_samps <- 1000
-force_resave <- FALSE
+force_resave <- TRUE
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)

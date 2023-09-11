@@ -113,7 +113,7 @@ save_all_similarity <- function(path,
                                 genes, 
                                 k = 1000, 
                                 check_k_arg = TRUE,
-                                force_resave = FALSE) {
+                                force_resave = TRUE) {
   
   if (!file.exists(path) || force_resave) {
     
