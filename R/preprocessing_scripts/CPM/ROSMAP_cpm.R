@@ -13,7 +13,9 @@ sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_fi
 dat_path <- file.path(sc_dir, "sc_exprmats_rosmap.rds")
 out_dir <- file.path("/space/scratch/amorin/TR_singlecell", id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta_CPM.RDS"))
-allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.RDS"))
+allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank_CPM.tsv"))
+namat_path <- file.path(out_dir, paste0(id, "_NA_mat_CPM.tsv"))
+
 pc <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 
 
