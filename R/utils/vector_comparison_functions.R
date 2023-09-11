@@ -20,8 +20,18 @@ source("R/utils/functions.R")
 check_k <- function(vec_sort, k) {
   
   if (vec_sort[k] == vec_sort[k - 1]) {
-    tie_start <- head(sort(table(vec_sort), decreasing = TRUE))[1]
-    k <- sum(vec_sort > as.numeric(names(tie_start)), na.rm = TRUE)
+    
+    old_k <- k
+    k <- 1
+    
+    for (i in 2:length(vec_sort)) {
+      if (vec_sort[i] == vec_sort[i - 1]) {
+        k <- i - 2  # -2 b/c trailing index and want the position before tie
+        break()
+      }
+    }
+    
+    if (k > old_k) stop("New index position k is larger than input k")
   }
   
   return(k)
