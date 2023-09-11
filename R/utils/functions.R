@@ -49,9 +49,11 @@ load_agg_mat_list  <- function(ids,
                                dir = "/space/scratch/amorin/TR_singlecell/",
                                pattern = "_RSR_allrank.tsv",  # "_NA_mat.tsv" for NA counts
                                genes,
-                               sub_genes = NULL) {
+                               sub_genes = NULL,
+                               verbose = TRUE) {
   
   mat_l <- lapply(ids, function(x) {
+    if (verbose) message(paste(x, Sys.time()))
     path <- file.path(dir, x, paste0(x, pattern))
     fread_to_mat(path, genes, sub_genes)
   })
@@ -66,14 +68,27 @@ load_agg_mat_list  <- function(ids,
 
 # Call load_agg_mat_list to load/save a local copy
 
-load_or_generate_agg <- function(path, ids, genes, sub_genes) {
+load_or_generate_agg <- function(path, 
+                                 ids, 
+                                 dir = "/space/scratch/amorin/TR_singlecell/",
+                                 pattern = "_RSR_allrank.tsv",
+                                 genes, 
+                                 sub_genes = NULL) {
   
   if (!file.exists(path)) {
-    agg_l <- load_agg_mat_list(ids = ids, genes = genes, sub_genes = sub_genes)
+    
+    agg_l <- load_agg_mat_list(ids = ids, 
+                               dir = dir,
+                               genes = genes, 
+                               pattern = pattern,
+                               sub_genes = sub_genes)
+    
     saveRDS(agg_l, path)
   } else {
-    readRDS(path)
+    agg_l <- readRDS(path)
   }
+  
+  return(agg_l)
 }
 
 
