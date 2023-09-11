@@ -15,7 +15,9 @@ meta_path <- file.path(sc_dir, "meta.txt")
 genes_path <- file.path(sc_dir, "genes.tsv")
 out_dir <- file.path("/space/scratch/amorin/TR_singlecell", id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta.RDS"))
-allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.RDS"))
+allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank.tsv"))
+namat_path <- file.path(out_dir, paste0(id, "_NA_mat.tsv"))
+
 pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 
 
