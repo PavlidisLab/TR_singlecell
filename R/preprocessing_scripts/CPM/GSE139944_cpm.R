@@ -1,4 +1,4 @@
-## GSE231924
+## GSE139944
 ## -----------------------------------------------------------------------------
 
 library(WGCNA)
@@ -9,50 +9,57 @@ source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 
-id <- "GSE231924"
-species <- "Mouse"
+
+id <- "GSE139944"
+species <- "Human"
 
 dat_dir <- file.path(sc_dir, id)
-if (!dir.exists(dat_dir)) dir.create(dat_dir)
-
+dat_path <- list.files(dat_dir, pattern = ".RDS", full.names = TRUE)
 out_dir <- file.path(amat_dir, id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta_CPM.RDS"))
 allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank_CPM.tsv"))
 namat_path <- file.path(out_dir, paste0(id, "_NA_mat_CPM.tsv"))
 
 
-pc <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
-
-
-# Files were directly downloaded from GEO, see GSE231924_download.sh in dat_dir
-dat_path <- file.path(dat_dir, paste0(id, "_counts.csv"))
-meta_path <- file.path(dat_dir, paste0(id, "_metadata.csv"))
+pc <- if (str_to_lower(species) %in% c("human", "hg")) {
+  read.delim(ens_hg_path, stringsAsFactors = FALSE)
+} else if (str_to_lower(species) %in% c("mouse", "mm")) {
+  read.delim(ens_mm_path, stringsAsFactors = FALSE)
+} else {
+  stop("Species not recognized")
+}
 
 
 
 if (!file.exists(processed_path)) {
   
-  # Load metadata and the count matrix
+  # Load and check that each dataset has unique cell counts (check duplication)
   
-  meta <- read.csv(meta_path)
-  mat <- t(read_count_mat(dat_path))
-  mat <- mat[, meta$X]
-
-  stopifnot(identical(colnames(mat), meta$X))
+  dat <- lapply(dat_path, readRDS)
+  n_cols <- unlist(lapply(dat, ncol))
+  stopifnot(all(table(n_cols) == 1))
+  
+  # Merge datasets
+  
+  dat <- reduce(dat, merge)
+  gc(verbose = FALSE)
+  
+  # Extract count matrix: default counts slot, but use data slot if counts empty
+  
+  mat <- GetAssayData(dat, slot = "counts")
+  
+  if (length(mat) == 0 || all(rowSums(mat) == 0)) {
+    mat <- GetAssayData(dat, slot = "data")
+  }
   
   
   # Ready metadata
-  # "GSE231924" collapse cell types with integer delim (note that NA is not a
-  # missing value here but a cell type)
   
-  change_colnames <- c(Cell_type = "subtypes", ID = "X")
+  change_colnames <- c(Cell_type = "donor_id", Old_ID = "ID", Old_cell_type = "cell_type")
   
-  meta <- meta %>% 
+  meta <- dat[[]] %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
-    mutate(
-      assay = "10x 3' v3",
-      Cell_type = str_replace(Cell_type, "[:digit:]$", "")
-      ) %>% 
+    rownames_to_column(var = "ID") %>% 
     add_count_info(mat = mat)
   
   
@@ -67,14 +74,14 @@ if (!file.exists(processed_path)) {
   ggsave(p2, device = "png", dpi = 300, height = 8, width = 8,
          filename = file.path(out_dir, paste0(id, "_QC_scatter.png")))
   
-  # Remove cells failing QC, keep only protein coding genes
-  # "GSE231924" already norm
+  # Remove cells failing QC, keep only protein coding genes, and normalize
   
   mat <- rm_low_qc_cells(mat, meta) %>%
-    get_pcoding_only(pcoding_df = pc) 
+    ensembl_to_symbol(ensembl_df = pc) %>% 
+    get_pcoding_only(pcoding_df = pc) %>% 
+    Seurat::NormalizeData(., normalization.method = "RC", scale.factor = 1e6, verbose = FALSE)
   
   meta <- filter(meta, ID %in% colnames(mat))
-  mat <- mat[, meta$ID]
   
   stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
   
@@ -82,6 +89,8 @@ if (!file.exists(processed_path)) {
                 "Count unique cell types: ", n_distinct(meta$Cell_type)))
   
   saveRDS(list(Mat = mat, Meta = meta), file = processed_path)
+  
+  rm(dat)
   gc()
   
 } else {
