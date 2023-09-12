@@ -85,7 +85,7 @@ get_all_similarity <- function(agg_l,
     # in. Remove the gene itself to prevent inflated overlap
     gene_mat <- gene_vec_to_mat(agg_l, x)
     gene_mat <- gene_mat[setdiff(rownames(gene_mat), x), ]
-    gene_mat <- gene_mat[, which(msr_mat[x, ] == 1), drop = FALSE]
+    gene_mat <- subset_to_measured(gene_mat, msr_mat = msr_mat, gene = x)
 
     if (ncol(gene_mat) < 2) {  # need more than one experiment for pairing
       return(NA)

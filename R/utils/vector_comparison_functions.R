@@ -9,6 +9,22 @@ source("R/utils/functions.R")
 
 
 
+# TODO:
+
+subset_to_measured <- function(mat, msr_mat, gene) {
+  
+  stopifnot(gene %in% rownames(msr_mat), 
+            identical(rownames(mat), rownames(msr_mat)),
+            identical(colnames(mat), colnames(msr_mat)))
+  
+  msr_exps <- names(which(msr_mat[gene, ] == 1))
+  mat <- mat[, msr_exps, drop = FALSE]
+  
+  return(mat)
+}
+
+
+
 # Aggregate vectors are ranked with ties which causes clumping of NA==0 values,
 # and so selecting the top k elements may include uninformative NAs. This checks
 # for ties at the kth position, and if found, returns the first non-tied k index
@@ -687,7 +703,7 @@ get_colwise_curated_auc_list <- function(tfs,
     
     # Prepare matrix of aggregate coexpr vectors and their average score
     score_mat <- gene_vec_to_mat(agg_l, tf)
-    score_mat <- score_mat[, which(msr_mat[tf, ] == 1), drop = FALSE]
+    score_mat <- subset_to_measured(score_mat, msr_mat = msr_mat, gene = tf)
     score_mat <- cbind(score_mat, Aggregate = rowMeans(score_mat))
     
     # Prepare curated labels, removing the TF itself if it is a target

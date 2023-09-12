@@ -90,7 +90,7 @@ all_rank_summary <- function(agg_l,
     
     gene_mat <- gene_vec_to_mat(agg_l, x)
     gene_mat[x, ] <- NA
-    gene_mat <- gene_mat[, which(msr_mat[x, ] == 1), drop = FALSE]
+    gene_mat <- subset_to_measured(gene_mat, msr_mat = msr_mat, gene = x)
     
     if (length(gene_mat) == 0) {
       return(NA)
