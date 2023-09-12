@@ -36,10 +36,6 @@ tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
 msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
-# For each dataset, load the subset gene x TF aggregation matrix 
-agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
-agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
-
 # Saved list RDS of the summaries
 rank_tf_hg <- readRDS(rank_tf_hg_path)
 rank_tf_mm <- readRDS(rank_tf_mm_path)
@@ -66,12 +62,12 @@ set.seed(5)
 
 save_curated_auc_list(path = coexpr_recover_curated_hg_path,
                       tfs = tfs_curated_hg,
-                      rank_l = rank_tf_mm,
+                      rank_l = rank_tf_hg,
                       score_col = "Avg_RSR",
                       curated_df = curated,
-                      label_all = targets_curated_mm,
-                      pc_df = pc_mm,
-                      species = "Mouse",
+                      label_all = targets_curated_hg,
+                      pc_df = pc_hg,
+                      species = "Human",
                       n_samps = 1000,
                       ncores = 8,
                       verbose = TRUE,
