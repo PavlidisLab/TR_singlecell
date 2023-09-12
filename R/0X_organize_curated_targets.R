@@ -59,6 +59,7 @@ lt_chu2021 <- lt_chu2021 %>%
   )
 
 
+
 lt_all <- lt_all %>%
   dplyr::rename(
     TF_Symbol = TF_Symbol_Human,
@@ -67,9 +68,12 @@ lt_all <- lt_all %>%
   mutate(Databases = str_replace(Databases, "Current", "Chu2021"))
 
 
+
 lt_all <-
   left_join(lt_all, lt_chu2021, by = "DTRI_ID", suffix = c("", ".y")) %>%
   select(-c(ends_with(".y"), "DTRI_ID")) %>%
+  filter(TF_Symbol %in% tfs_hg$Symbol | TF_Symbol %in% tfs_mm$Symbol) %>%
+  filter(Target_Symbol %in% pc_hg$Symbol | Target_Symbol %in% pc_mm$Symbol) %>%
   mutate(
     TF_Symbol = ifelse(
       TF_Species == "Mouse" & !is.na(TF_Species),
@@ -177,14 +181,11 @@ n_distinct(str_to_upper(lt_final$Target_Symbol))
 n_distinct(str_to_upper(lt_final$TF_Symbol))
 
 
-table(n_target$TF_Symbol %in% c(tfs_hg$Symbol, str_to_upper(tfs_mm$Symbol)))
+# table(n_target$TF_Symbol %in% c(tfs_hg$Symbol, str_to_upper(tfs_mm$Symbol)))
+# non_tfs <- setdiff(n_target$TF_Symbol, c(tfs_hg$Symbol, str_to_upper(tfs_mm$Symbol)))
+# filter(n_target, TF_Symbol %in% non_tfs) %>% view
+# sort(table(filter(lt_final, str_to_upper(TF_Symbol) == "CTNNB1")$Databases))
 
-non_tfs <- setdiff(n_target$TF_Symbol, c(tfs_hg$Symbol, str_to_upper(tfs_mm$Symbol)))
-
-filter(n_target, TF_Symbol %in% non_tfs) %>% view
-
-
-sort(table(filter(lt_final, str_to_upper(TF_Symbol) == "CTNNB1")$Databases))
 sort(table(filter(lt_final, str_to_upper(TF_Symbol) == "SP1")$Databases))
 
 
