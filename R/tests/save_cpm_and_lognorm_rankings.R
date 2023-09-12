@@ -44,6 +44,9 @@ tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
 msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
+msr_hg <- msr_hg[, ids_hg]
+msr_mm <- msr_mm[, ids_mm]
+
 
 agg_tf_cpm_hg_path <- "/space/scratch/amorin/R_objects/TF_agg_mat_list_human_CPM.RDS"
 agg_tf_cpm_mm_path <- "/space/scratch/amorin/R_objects/TF_agg_mat_list_mouse_CPM.RDS"
@@ -56,33 +59,18 @@ rank_tf_cpm_mm_path <- "/space/scratch/amorin/R_objects/ranking_TF_mouse_CPM.RDS
 
 
 # For each dataset, load the subset gene x TF aggregation matrix 
-# agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
-# agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
-# 
-# 
-# agg_tf_hg <- agg_tf_hg[ids_hg]
-# agg_tf_mm <- agg_tf_hg[ids_mm]
+agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
 
+agg_tf_hg <- agg_tf_hg[ids_hg]
+agg_tf_mm <- agg_tf_mm[ids_mm]
 
 agg_tf_cpm_hg <- load_or_generate_agg(path = agg_tf_cpm_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol, pattern = "_RSR_allrank_CPM.tsv")
-
-
-
-
 agg_tf_cpm_mm <- load_or_generate_agg(path = agg_tf_cpm_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol, pattern = "_RSR_allrank_CPM.tsv")
 
 
 
 
-# agg_tf_cpm_hg <- load_or_generate_agg(path = agg_tf_cpm_hg_path,
-#                                       ids = c("GSE212606Human"),
-#                                       genes = pc_hg$Symbol,
-#                                       sub_genes = tfs_hg$Symbol,
-#                                       pattern = "_RSR_allrank_CPM.tsv")
-
-
-
-stop()
 
 
 get_topk_count <- function(gene_mat, k, check_k_arg = TRUE) {
@@ -116,7 +104,7 @@ all_rank_summary <- function(agg_l,
     
     gene_mat <- gene_vec_to_mat(agg_l, x)
     gene_mat[x, ] <- NA
-    gene_mat <- gene_mat[, which(msr_mat[x, ] == 1), drop = FALSE]
+    gene_mat <- subset_to_measured(gene_mat, msr_mat = msr_mat, gene = x)
     
     if (length(gene_mat) == 0) {
       return(NA)
@@ -177,18 +165,6 @@ summ_ln_hg <- summ_ln_hg[!is.na(summ_ln_hg)]
 saveRDS(summ_ln_hg, rank_tf_ln_hg_path)
 
 
-# Mouse log norm
-summ_ln_mm <- all_rank_summary(
-  agg_l = agg_tf_mm,
-  msr_mat = msr_mm,
-  genes = tfs_mm$Symbol,
-  k = k
-)
-
-summ_ln_mm <- summ_ln_mm[!is.na(summ_ln_mm)]
-saveRDS(summ_ln_mm, rank_tf_ln_mm_path)
-
-
 # Human CPM
 summ_cpm_hg <- all_rank_summary(
   agg_l = agg_tf_cpm_hg,
@@ -201,6 +177,18 @@ summ_cpm_hg <- summ_cpm_hg[!is.na(summ_cpm_hg)]
 saveRDS(summ_cpm_hg, rank_tf_cpm_hg_path)
 
 
+# Mouse log norm
+summ_ln_mm <- all_rank_summary(
+  agg_l = agg_tf_mm,
+  msr_mat = msr_mm,
+  genes = tfs_mm$Symbol,
+  k = k
+)
+
+summ_ln_mm <- summ_ln_mm[!is.na(summ_ln_mm)]
+saveRDS(summ_ln_mm, rank_tf_ln_mm_path)
+
+
 # Mouse CPM
 summ_cpm_mm <- all_rank_summary(
   agg_l = agg_tf_cpm_mm,
@@ -211,4 +199,3 @@ summ_cpm_mm <- all_rank_summary(
 
 summ_cpm_mm <- summ_cpm_mm[!is.na(summ_cpm_mm)]
 saveRDS(summ_cpm_mm, rank_tf_cpm_mm_path)
-
