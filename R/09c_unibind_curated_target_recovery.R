@@ -36,10 +36,6 @@ tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
 msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
-# Saved list RDS of the summaries
-rank_tf_hg <- readRDS(rank_tf_hg_path)
-rank_tf_mm <- readRDS(rank_tf_mm_path)
-
 # Curated low throughput targets
 curated <- read.delim(curated_all_path, stringsAsFactors = FALSE)
 
@@ -99,9 +95,9 @@ save_curated_auc_list(path = unibind_recover_curated_hg_path,
                       rank_l = bind_hg,
                       score_col = "Bind_score",
                       curated_df = curated,
-                      label_all = targets_curated_mm,
-                      pc_df = pc_mm,
-                      species = "Mouse",
+                      label_all = targets_curated_hg,
+                      pc_df = pc_hg,
+                      species = "Human",
                       n_samps = 1000,
                       ncores = 8,
                       verbose = TRUE,
@@ -111,7 +107,7 @@ save_curated_auc_list(path = unibind_recover_curated_hg_path,
 # Mouse 
 
 save_curated_auc_list(path = unibind_recover_curated_mm_path,
-                      tfs = tfs_curated_mm[6:7],
+                      tfs = tfs_curated_mm,
                       rank_l = bind_mm,
                       score_col = "Bind_score",
                       curated_df = curated,
