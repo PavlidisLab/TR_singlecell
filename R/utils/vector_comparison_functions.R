@@ -14,8 +14,8 @@ source("R/utils/functions.R")
 subset_to_measured <- function(mat, msr_mat, gene) {
   
   stopifnot(gene %in% rownames(msr_mat), 
-            identical(rownames(mat), rownames(msr_mat)),
-            identical(colnames(mat), colnames(msr_mat)))
+            length(intersect(rownames(mat), rownames(msr_mat))) > 0,
+            length(intersect(colnames(mat), colnames(msr_mat))) > 0)
   
   msr_exps <- names(which(msr_mat[gene, ] == 1))
   mat <- mat[, msr_exps, drop = FALSE]
