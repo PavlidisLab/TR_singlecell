@@ -48,21 +48,19 @@ lribo_hg_path <- "/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv"
 evidence_path <- "/space/scratch/amorin/R_objects/ranked_target_list_Apr2022.RDS"
 
 
-# Gsheets ID for TRsc datasets
+# Gsheets ID for TRsc datasets, local copy of raw meta, and final
 gsheets_id <- "1SQx_rFdBNBwOEdChaHkbQY1vStcbuA3fF0CZk6YECEc"
-
-
-# Local copy of meta
+ghseets_meta_raw_path <- "/space/grp/amorin/Metadata/gsheets_single_cell_dataset_meta_raw.tsv"
 sc_meta_path <- "/space/grp/amorin/Metadata/single_cell_dataset_meta.tsv"
 
 
 # List of cell types per dataset
-celltype_list_path <- "/space/scratch/amorin/TR_singlecell/celltype_list.RDS"
+celltype_list_path <- "/space/scratch/amorin/R_objects/celltype_list.RDS"
 
 
 # Binary matrices tracking if a gene was measured in at least once cell type
-msr_mat_hg_path <- "/space/scratch/amorin/TR_singlecell/binary_measurement_matrix_human.RDS"
-msr_mat_mm_path <- "/space/scratch/amorin/TR_singlecell/binary_measurement_matrix_mouse.RDS"
+msr_mat_hg_path <- "/space/scratch/amorin/R_objects/binary_measurement_matrix_hg.RDS"
+msr_mat_mm_path <- "/space/scratch/amorin/R_objects/binary_measurement_matrix_mm.RDS"
 
 
 # List of the most correlated gene pair per experiment
@@ -71,27 +69,27 @@ avg_coexpr_mm_path <- "/space/scratch/amorin/R_objects/avg_coexpr_mm.RDS"
 
 
 # List of TF and L/S ribo aggregate matrices
-agg_tf_hg_path <- "/space/scratch/amorin/R_objects/TF_agg_mat_list_human.RDS"
-agg_tf_mm_path <- "/space/scratch/amorin/R_objects/TF_agg_mat_list_mouse.RDS"
-agg_ribo_hg_path <- "/space/scratch/amorin/R_objects/ribo_agg_mat_list_human.RDS"
-agg_ribo_mm_path <- "/space/scratch/amorin/R_objects/ribo_agg_mat_list_mouse.RDS"
+agg_tf_hg_path <- "/space/scratch/amorin/R_objects/TF_agg_mat_list_hg.RDS"
+agg_tf_mm_path <- "/space/scratch/amorin/R_objects/TF_agg_mat_list_mm.RDS"
+agg_ribo_hg_path <- "/space/scratch/amorin/R_objects/ribo_agg_mat_list_hg.RDS"
+agg_ribo_mm_path <- "/space/scratch/amorin/R_objects/ribo_agg_mat_list_mm.RDS"
 
 
 # List of TF and ribo vector similarities
-sim_tf_hg_path <- "/space/scratch/amorin/R_objects/similarity_TF_human.RDS"
-sim_tf_mm_path <- "/space/scratch/amorin/R_objects/similarity_TF_mouse.RDS"
-sim_ribo_hg_path <- "/space/scratch/amorin/R_objects/similarity_ribo_human.RDS"
-sim_ribo_mm_path <- "/space/scratch/amorin/R_objects/similarity_ribo_mouse.RDS"
+sim_tf_hg_path <- "/space/scratch/amorin/R_objects/similarity_TF_hg.RDS"
+sim_tf_mm_path <- "/space/scratch/amorin/R_objects/similarity_TF_mm.RDS"
+sim_ribo_hg_path <- "/space/scratch/amorin/R_objects/similarity_ribo_hg.RDS"
+sim_ribo_mm_path <- "/space/scratch/amorin/R_objects/similarity_ribo_mm.RDS"
 
 
 # List of null sampled gene vector topk similarities
-null_topk_hg_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersect_human.RDS"
-null_topk_mm_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersect_mouse.RDS"
+null_topk_hg_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersect_hg.RDS"
+null_topk_mm_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersect_mm.RDS"
 
 
 # List of summarized TF rankings
-rank_tf_hg_path <- "/space/scratch/amorin/R_objects/ranking_TF_human.RDS"
-rank_tf_mm_path <- "/space/scratch/amorin/R_objects/ranking_TF_mouse.RDS"
+rank_tf_hg_path <- "/space/scratch/amorin/R_objects/agg_TF_ranking_hg.RDS"
+rank_tf_mm_path <- "/space/scratch/amorin/R_objects/agg_TF_ranking_mm.RDS"
 
 
 # Curated targets from on going curation and from Eric's 2021 paper
