@@ -7,8 +7,19 @@ library(tidyverse)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
+if (!file.exists(ghseets_meta_raw_path)) {
+  
+  meta <- read_sheet(gsheets_id, sheet = "Main", trim_ws = TRUE)
+  
+  write.table(meta,
+              sep = "\t",
+              row.names = FALSE,
+              quote = FALSE,
+              file = ghseets_meta_raw_path)
+} else {
+  meta <- read.delim(ghseets_meta_raw_path, stringsAsFactors = FALSE)
+}
 
-meta <- read_sheet(gsheets_id, sheet = "Main", trim_ws = TRUE)
 
 
 
@@ -42,7 +53,7 @@ add_meta <- function(id) {
 
 
 loaded <- lapply(meta$ID, function(x) {
-  file.exists(file.path(amat_dir, x, paste0(x, "_RSR_allrank.tsv")))
+  file.exists(file.path(amat_dir, x, paste0(x, "_RSR_allrank_CPM.tsv")))
 })
 
 
