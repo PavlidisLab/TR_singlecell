@@ -48,10 +48,14 @@ get_gene_msr_mat <- function(ids, meta, genes) {
   
   for (id in ids) {
     
-    na_mat <- load_agg_mat_list(id, genes = genes, pattern = "_NA_mat.tsv")[[1]]
+    na_mat <- load_agg_mat_list(
+      id, genes = genes, pattern = "_NA_mat_CPM.tsv")[[1]]
+    
     n_celltype <- filter(meta, ID == id)$N_celltype
+    
     binary_msr <- as.integer(diag(na_mat) != n_celltype)
     msr_mat[, id] <- binary_msr
+    
     rm(na_mat)
     gc(verbose = FALSE)
     
