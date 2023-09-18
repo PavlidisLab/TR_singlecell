@@ -88,8 +88,8 @@ null_topk_mm_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersec
 
 
 # List of summarized TF rankings
-rank_tf_hg_path <- "/space/scratch/amorin/R_objects/agg_TF_ranking_hg.RDS"
-rank_tf_mm_path <- "/space/scratch/amorin/R_objects/agg_TF_ranking_mm.RDS"
+rank_tf_hg_path <- "/space/scratch/amorin/R_objects/TF_agg_ranking_hg.RDS"
+rank_tf_mm_path <- "/space/scratch/amorin/R_objects/TF_agg_ranking_mm.RDS"
 
 
 # Curated targets from on going curation and from Eric's 2021 paper
