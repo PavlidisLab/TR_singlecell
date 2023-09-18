@@ -21,8 +21,6 @@ if (!file.exists(ghseets_meta_raw_path)) {
 }
 
 
-
-
 # Load a dataset's count matrix and meta and return a list of two data.frames: 
 # 1) 1 x 3 of the experiment ID and the count of unique cell types and total number of cells 
 # 2) 1 x 2 of the count of cells for each unique cell type 
