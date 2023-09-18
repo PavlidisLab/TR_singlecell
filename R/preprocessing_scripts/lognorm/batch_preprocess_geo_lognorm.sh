@@ -1,7 +1,7 @@
 #!/bin/bash
 
 input_file=$1
-preprocess_dir="/home/amorin/Projects/TR_singlecell/R/preprocessing_scripts/"
+preprocess_dir="/home/amorin/Projects/TR_singlecell/R/preprocessing_scripts/lognorm"
 
 while IFS=$'\t' read -r id species; do
 
