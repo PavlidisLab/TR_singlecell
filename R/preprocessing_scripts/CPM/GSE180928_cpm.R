@@ -18,9 +18,6 @@ processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta_CPM.RDS"))
 allrank_path <- file.path(out_dir, paste0(id, "_RSR_allrank_CPM.tsv"))
 namat_path <- file.path(out_dir, paste0(id, "_NA_mat_CPM.tsv"))
 
-# Used for generating/comparing column ranked and avg Fisher's z matrices 
-colrank_path <- file.path(out_dir, paste0(id, "_RSR_colrank.tsv"))
-zcor_path <- file.path(out_dir, paste0(id, "_fishersZ.RDS"))
 
 pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
 
@@ -69,8 +66,6 @@ if (!file.exists(processed_path)) {
   stopifnot(identical(colnames(mat), meta$ID), length(meta$ID) > 0)
   
   saveRDS(list(Mat = mat, Meta = meta), file = processed_path)
-  
-  rm(dat)
   gc()
   
 } else {
@@ -114,27 +109,4 @@ if (!file.exists(allrank_path)) {
     showProgress = FALSE,
     file = namat_path
   )
-}
-
-
-
-if (!file.exists(colrank_path)) {
-  
-  rsr_col <- RSR_colrank(mat, meta)
-  
-  fwrite(
-    data.frame(rsr_col, row.names = rownames(rsr_col)),
-    sep = "\t",
-    row.names = TRUE,
-    quote = FALSE,
-    verbose = FALSE,
-    showProgress = FALSE,
-    file = colrank_path
-  )
-}
-
-
-if (!file.exists(zcor_path)) {
-  zcor <- fishersZ_aggregate(mat, meta)
-  saveRDS(zcor, zcor_path)
 }
