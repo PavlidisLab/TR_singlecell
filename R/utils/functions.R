@@ -4,8 +4,6 @@
 library(tidyverse, quietly = TRUE)
 library(data.table, quietly = TRUE)
 library(parallel)
-# library(ROCR)
-# library(DescTools)
 library(WGCNA)
 library(Matrix)
 
@@ -44,10 +42,11 @@ fread_to_mat <- function(path, genes, sub_genes = NULL) {
 
 # Loads aggregate correlation matrices or NA count matrices for the given dataset
 # ids into a list. 
+# Pattern: "_NA_mat.tsv" for NA counts
 
 load_agg_mat_list  <- function(ids,
                                dir = "/space/scratch/amorin/TR_singlecell/",
-                               pattern = "_RSR_allrank.tsv",  # "_NA_mat.tsv" for NA counts
+                               pattern = "_RSR_allrank_CPM.tsv",  
                                genes,
                                sub_genes = NULL,
                                verbose = TRUE) {
@@ -71,7 +70,7 @@ load_agg_mat_list  <- function(ids,
 load_or_generate_agg <- function(path, 
                                  ids, 
                                  dir = "/space/scratch/amorin/TR_singlecell/",
-                                 pattern = "_RSR_allrank.tsv",
+                                 pattern = "_RSR_allrank_CPM.tsv",
                                  genes, 
                                  sub_genes = NULL) {
   
@@ -98,7 +97,7 @@ load_or_generate_agg <- function(path,
 
 load_dat_list <- function(ids,
                           sc_dir = "/space/scratch/amorin/TR_singlecell/",
-                          suffix = "_clean_mat_and_meta.RDS") {
+                          suffix = "_clean_mat_and_meta_CPM.RDS") {
   
   dat_l <- lapply(ids, function(x) {
     path <- file.path(sc_dir, x, paste0(x, suffix))
