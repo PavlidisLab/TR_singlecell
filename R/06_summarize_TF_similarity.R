@@ -104,7 +104,6 @@ topk_gt_mm <- sum(summ_tf_mm$Median > summ_null_mm["Median"]) / nrow(summ_tf_mm)
 
 
 
-
 # Example of TFs with good measurement coverage but low similarity. 
 # ------------------------------------------------------------------------------
 
