@@ -83,14 +83,14 @@ head(avg_coexpr_mm, 30)
 
 
 
-outfile <- "/space/scratch/amorin/R_objects/top_cor_pair_l.RDS"
+outfile <- "/space/scratch/amorin/R_objects/top_cor_pair_list.RDS"
 
 
 if (!file.exists(outfile)) {
   
   cor_l <- list(
-    Human = get_all_cor_l(ids_hg, gene1 = "FOSB", gene2 = "FOS"),
-    Mouse = get_all_cor_l(ids_mm, gene1 = "Egr1", gene2 = "Junb"))
+    Human = get_all_cor_l(ids_hg, gene1 = "FOS", gene2 = "FOSB"),
+    Mouse = get_all_cor_l(ids_mm, gene1 = "Fos", gene2 = "Fosb"))
   
   saveRDS(cor_l, outfile)
   
