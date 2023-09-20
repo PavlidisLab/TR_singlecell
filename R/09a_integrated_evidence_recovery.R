@@ -48,47 +48,60 @@ rank_tf_mm <- readRDS(rank_tf_mm_path)
 # TODO: Unibind and low throughput
 evidence_l <- readRDS(evidence_path)
 
+# Curated low throughput targets
+curated <- read.delim(curated_all_path, stringsAsFactors = FALSE)
+
+# Curated TFs with ChIP-seq and all targets for null
+tfs_curated_hg <- intersect(tfs_hg$Symbol, str_to_upper(curated$TF_Symbol))
+tfs_curated_mm <- intersect(tfs_mm$Symbol, str_to_title(curated$TF_Symbol))
+targets_curated_hg <- intersect(pc_hg$Symbol, str_to_upper(curated$Target_Symbol))
+targets_curated_mm <- intersect(pc_mm$Symbol, str_to_title(curated$Target_Symbol))
+
 
 
 # 
 # ------------------------------------------------------------------------------
-
-
-tf <- "Ascl1"
-agg_l <- agg_tf_mm
-msr_mat <- msr_mm
-
-score_mat <- gene_vec_to_mat(agg_l, tf)
-score_mat <- score_mat[, which(msr_mat[tf, ] == 1), drop = FALSE]
-score_mat <- cbind(score_mat, Aggregate = rowMeans(score_mat))
+# TODO: Better way to assign species-specific argument since already have to 
+# specifiy species?
 
 
 
-tt <- get_colwise_auc(score_mat,
-                      labels,
-                      ncores = 8)
+avg_vs_ind_recover_curated_hg <- get_colwise_curated_auc_list(
+  tfs = tfs_curated_hg,
+  agg_l = agg_tf_hg,
+  msr_mat = msr_hg,
+  curated_df = curated,
+  pc_df = pc_hg,
+  species = "Human",
+  ncores = 8,
+  verbose = TRUE
+)
 
 
-auprc <- unlist(lapply(tt, `[[`, "AUPRC"))
-auprc <- sort(auprc[names(auprc) != "Aggregate"])
-hist(auprc)
-abline(v = tt$Aggregate$AUPRC, col = "red")
+
+avg_vs_ind_recover_curated_mm <- get_colwise_curated_auc_list(
+  tfs = tfs_curated_mm,
+  agg_l = agg_tf_mm,
+  msr_mat = msr_mm,
+  curated_df = curated,
+  pc_df = pc_mm,
+  species = "Mouse",
+  ncores = 8,
+  verbose = TRUE
+)
 
 
-auroc <- unlist(lapply(tt, `[[`, "AUROC"))
-auroc <- sort(auroc[names(auroc) != "Aggregate"])
-hist(auroc)
-abline(v = tt$Aggregate$AUROC, col = "red")
+
+saveRDS(avg_vs_ind_recover_curated_hg, avg_vs_ind_recover_curated_hg_path)
+saveRDS(avg_vs_ind_recover_curated_mm, avg_vs_ind_recover_curated_mm_path)
 
 
-tt <- get_colwise_curated_auc_list(tfs = names(evidence_l$Mouse),
-                                   agg_l = agg_tf_mm,
-                                   msr_mat = msr_mm,
-                                   curated_df = curated,
-                                   species = "Mouse",
-                                   ncores = 8,
-                                   verbose = TRUE)
-  
+
+
+
+
+# Demonstrating retrieval of genomic evidence at topk as labels
+# ------------------------------------------------------------------------------
 
 topk_labels <- evidence_l$Mouse[[tf]] %>%
   filter(Symbol != tf) %>%
@@ -102,15 +115,15 @@ tt <- get_colwise_auc(score_mat,
 
 
 auroc <- unlist(lapply(tt, `[[`, "AUROC"))
-auroc <- sort(auroc[names(auroc) != "Aggregate"])
+auroc <- sort(auroc[names(auroc) != "Average"])
 hist(auroc)
-abline(v = tt$Aggregate$AUROC, col = "red")
+abline(v = tt$Average$AUROC, col = "red")
 
 
 auprc <- unlist(lapply(tt, `[[`, "AUPRC"))
-auprc <- sort(auprc[names(auprc) != "Aggregate"])
+auprc <- sort(auprc[names(auprc) != "Average"])
 hist(auprc)
-abline(v = tt$Aggregate$AUPRC, col = "red")
+abline(v = tt$Average$AUPRC, col = "red")
 
 
 
@@ -277,19 +290,19 @@ auroc_mm_curated <- get_tf_performance(agg_l = agg_tf_mm,
 
 
 roc_df_hg_curated <- get_all_perf_df(agg_l = agg_tf_hg,
-                             msr_mat = msr_hg,
-                             evidence_df = evidence_l$Human[[tf_hg]],
-                             evidence_col = "Curated_target",
-                             tf = tf_hg,
-                             measure = "ROC")
+                                     msr_mat = msr_hg,
+                                     evidence_df = evidence_l$Human[[tf_hg]],
+                                     evidence_col = "Curated_target",
+                                     tf = tf_hg,
+                                     measure = "ROC")
 
 
 roc_df_mm_curated <- get_all_perf_df(agg_l = agg_tf_mm,
-                             msr_mat = msr_mm,
-                             evidence_df = evidence_l$Mouse[[tf_mm]],
-                             evidence_col = "Curated_target",
-                             tf = tf_mm,
-                             measure = "ROC")
+                                     msr_mat = msr_mm,
+                                     evidence_df = evidence_l$Mouse[[tf_mm]],
+                                     evidence_col = "Curated_target",
+                                     tf = tf_mm,
+                                     measure = "ROC")
 
 
 
@@ -440,7 +453,7 @@ median(auroc_mm_curated[names(auroc_mm_curated) != "Aggregate"])
 
 
 all <- rbind(roc_df_mm_curated, 
-            do.call(rbind, list(integrated, perturb, binding)))
+             do.call(rbind, list(integrated, perturb, binding)))
 
 
 
@@ -462,10 +475,10 @@ all$ID <- factor(all$ID, levels = rev(unique(names(cols))))
 
 
 plot_perf2 <- function(df, 
-                      measure = NULL, 
-                      cols,
-                      title,
-                      ncol_legend = 1) {
+                       measure = NULL, 
+                       cols,
+                       title,
+                       ncol_legend = 1) {
   
   stopifnot(measure %in% c("ROC", "PR"), "ID" %in% colnames(df))
   
@@ -522,4 +535,3 @@ check_p1_4 <- lapply(check_p1_3, function(x) {
 
 # filter(evidence, Symbol %in% names(tally_topk)[1:100]
 
-       
