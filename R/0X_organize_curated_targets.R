@@ -116,8 +116,12 @@ lt_final <- rbind(lt_all, pavlab)
 
 # Keep:
 # TRRUST, Pavlab, Chu2021, TFe, InnateDB
-# TFactS may have some non-low throughput
 # HTRIdb_LC is only the literature curated part of HTRIdb
+# Same for ORegAnno_LC
+
+#  Uncertain: 
+# CytReg 2020 update using eY1H
+# TFactS may have some non-low throughput
 sort(table(lt_final$Databases), decreasing = TRUE)
 unique(unlist(str_split(lt_final$Databases, ", ")))
 
