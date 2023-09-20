@@ -681,9 +681,38 @@ get_colwise_auc <- function(score_mat,
     
   }, mc.cores = ncores)
   
-  names(auc_l) <- colnames(score_mat)
-  return(auc_l)
+  
+  auc_df <- data.frame(
+    ID = colnames(score_mat),
+    AUROC = vapply(auc_l, `[[`, "AUROC", FUN.VALUE = numeric(1)),
+    AUPRC = vapply(auc_l, `[[`, "AUPRC", FUN.VALUE = numeric(1)),
+    row.names = NULL)
+  
+  return(auc_df)
 }
+
+
+
+
+# TODO:
+
+summarize_avg_and_individual_auc <- function(auc_df, labels) {
+  
+  auroc_avg <- filter(auc_df, ID == "Average")$AUROC
+  auprc_avg <- filter(auc_df, ID == "Average")$AUPRC
+  auc_df_no_avg <- filter(auc_df, ID != "Average")
+  
+  summary_df <- data.frame(
+    N_targets = length(labels),
+    N_datasets = nrow(auc_df_no_avg),
+    AUROC_percentile = ecdf(auc_df_no_avg$AUROC)(auroc_avg),
+    AUPRC_percentile = ecdf(auc_df_no_avg$AUPRC)(auprc_avg)
+  )
+  
+  return(list(AUC_df = auc_df, Summary_df = summary_df))
+}
+
+
 
 
 
@@ -693,6 +722,7 @@ get_colwise_curated_auc_list <- function(tfs,
                                          agg_l,
                                          msr_mat,
                                          curated_df,
+                                         pc_df,
                                          species,
                                          ncores = 1,
                                          verbose = TRUE) {
@@ -701,11 +731,6 @@ get_colwise_curated_auc_list <- function(tfs,
     
     if (verbose) message(paste(tf, Sys.time()))
     
-    # Prepare matrix of aggregate coexpr vectors and their average score
-    score_mat <- gene_vec_to_mat(agg_l, tf)
-    score_mat <- subset_to_measured(score_mat, msr_mat = msr_mat, gene = tf)
-    score_mat <- cbind(score_mat, Aggregate = rowMeans(score_mat))
-    
     # Prepare curated labels, removing the TF itself if it is a target
     labels <- get_curated_labels(tf = tf,
                                  curated_df = curated_df,
@@ -713,10 +738,26 @@ get_colwise_curated_auc_list <- function(tfs,
                                  species = species,
                                  remove_self = TRUE)
     
-    get_colwise_auc(score_mat = score_mat, labels = labels, ncores = ncores)
+    # No labels may result if the TF itself was the only label
+    if (length(labels) == 0) {
+      return(NA)
+    }
+    
+    # Prepare matrix of aggregate coexpr vectors and their average score
+    score_mat <- gene_vec_to_mat(agg_l, tf)
+    score_mat <- subset_to_measured(score_mat, msr_mat = msr_mat, gene = tf)
+    score_mat <- cbind(score_mat, Average = rowMeans(score_mat))
+    
+    # Calculating the AUC by using each column as a score
+    auc_df <- get_colwise_auc(score_mat, labels = labels, ncores = ncores)
+    
+    # Summarize
+    summarize_avg_and_individual_auc(auc_df, labels)
     
   })
   
   names(tf_auc_l) <- tfs
+  tf_auc_l <- tf_auc_l[!is.na(tf_auc_l)]
+  
   return(tf_auc_l)
 }
