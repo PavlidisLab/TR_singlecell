@@ -163,8 +163,6 @@ top_and_bottom_prop(perf_common_mm, stat_cols)
 
 
 
-
-
 plot_hist <- function(df, stat_col, title = NULL, xlab = NULL) {
   
   if (is.null(xlab)) xlab <- stat_col
@@ -215,7 +213,7 @@ tf_hg <- "ASCL1"
 tf_mm <- "Ascl1"
 
 xmin <- 0.01
-xmax <- 0.05
+xmax <- 0.06
 
 null <- unlist(lapply(unibind_perf_hg[[tf_hg]]$Null, `[[`, stat))
 obs <- unibind_perf_hg[[tf_hg]]$Perf_df[[stat]]
@@ -285,10 +283,91 @@ diff_mm <- perf_common_mm %>%
 
 
 
+# Individual vs average
+# ------------------------------------------------------------------------------
+
+
+df1 <- do.call(rbind, lapply(avg_vs_ind_recover_curated_hg, `[[`, "Summary_df"))
+df2 <- do.call(rbind, lapply(avg_vs_ind_recover_curated_mm, `[[`, "Summary_df"))
+
+df1_sub <- filter(df1, N_targets >= 5)
+df2_sub <- filter(df2, N_targets >= 5)
+
+summary(df1_sub$AUROC_percentile)
+summary(df1_sub$AUPRC_percentile)
+hist(df1_sub$AUROC_percentile, breaks = 50)
+hist(df1_sub$AUPRC_percentile, breaks = 50)
+
+summary(df2_sub$AUROC_percentile)
+summary(df2_sub$AUPRC_percentile)
+hist(df2_sub$AUROC_percentile, breaks = 50)
+hist(df2_sub$AUPRC_percentile, breaks = 50)
+
+
+tf <- "ASCL1"
+tf <- "ASCL1"
+auc_df <- avg_vs_ind_recover_curated_hg[[tf]]$AUC_df
+auprc_all <- auc_df$AUPRC
+
+
+auprc_no_agg <- sort(auprc_all[names(auprc_all) != "Average"])
+auprc_agg <- auprc_all[["Average"]]
+hist(auprc_no_agg, breaks = 100, xlim = c(0, max(auprc_agg, max(auprc_no_agg)) * 1.2))
+abline(v = auprc_agg, col = "red")
+
+
+auroc_all <- unlist(lapply(avg_vs_ind_recover_curated_hg[[tf]], `[[`, "AUROC"))
+auroc_no_agg <- sort(auroc_all[names(auroc_all) != "Average"])
+auroc_agg <- auroc_all[["Average"]]
+hist(auroc_no_agg, xlim = c(0, max(auroc_agg, max(auroc_no_agg)) * 1.2))
+abline(v = auroc_agg, col = "red")
+
+
+# Inspecting retrieved ranks for a given TF
+
+
+score_mat <- gene_vec_to_mat(agg_l, tf)
+score_mat <- subset_to_measured(score_mat, msr_mat = msr_mat, gene = tf)
+score_mat <- cbind(score_mat, Average = rowMeans(score_mat))
+
+
+rank_l <- lapply(1:ncol(score_mat), function(x) {
+  score_rank <- rank(-score_mat[, x], ties.method = "min")
+  # score_rank[labels_curated]
+  # median(score_rank[labels_curated])
+  # mean(score_rank[labels_curated])
+  # sort(score_rank[labels_curated])[1:10]
+  median(sort(score_rank[labels_curated])[1:10])
+})
+names(rank_l) <- colnames(score_mat)
+
+rank_l[c(names(auprc_no_agg), "Average")]
+rank_l[c(names(auroc_no_agg), "Average")]
+
+plot(unlist(rank_l[c(names(auprc_no_agg), "Average")]))
+plot(unlist(rank_l[c(names(auroc_no_agg), "Average")]))
+
+# Inspecting performance of a specific dataset
+
+id <- "GSE222956"
+score_vec <- sort(score_mat[, id], decreasing = TRUE)
+score_rank <- rank(-score_mat[, id], ties.method = "min")
+label_vec <- names(score_vec) %in% labels_curated
+auprc_all[id]
+auroc_all[id]
+get_auc(score_vec, label_vec, "both")
+perf_df <- get_performance_df(score_vec, label_vec, measure = "both")
+
+
+score_vec[labels_curated]
+score_rank[labels_curated]
 
 
 
-##
+
+
+
+## TODO: Candidate to move to test?
 
 
 # tf <- "Pax6"
