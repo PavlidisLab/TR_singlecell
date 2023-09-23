@@ -60,7 +60,7 @@ set.seed(5)
 
 # Human 
 
-save_curated_auc_list(path = coexpr_recover_curated_hg_path,
+save_curated_auc_list(path = coexpr_auc_hg_path,
                       tfs = tfs_curated_hg,
                       rank_l = rank_tf_hg,
                       score_col = "Avg_RSR",
@@ -68,7 +68,7 @@ save_curated_auc_list(path = coexpr_recover_curated_hg_path,
                       label_all = targets_curated_hg,
                       pc_df = pc_hg,
                       species = "Human",
-                      n_samps = 1000,
+                      n_samps = n_samps,
                       ncores = 8,
                       verbose = TRUE,
                       force_resave = TRUE)
@@ -76,7 +76,7 @@ save_curated_auc_list(path = coexpr_recover_curated_hg_path,
 
 # Mouse 
 
-save_curated_auc_list(path = coexpr_recover_curated_mm_path,
+save_curated_auc_list(path = coexpr_auc_mm_path,
                       tfs = tfs_curated_mm,
                       rank_l = rank_tf_mm,
                       score_col = "Avg_RSR",

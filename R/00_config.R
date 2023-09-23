@@ -103,10 +103,12 @@ curated_all_path <- "/home/amorin/Data/Metadata/Curated_targets_all_Sept2023.tsv
 
 
 # List of ROCR performances
-coexpr_recover_curated_hg_path <- "/space/scratch/amorin/R_objects/coexpr_recover_curated_hg.RDS"
-coexpr_recover_curated_mm_path <- "/space/scratch/amorin/R_objects/coexpr_recover_curated_mm.RDS"
-unibind_recover_curated_hg_path <- "/space/scratch/amorin/R_objects/unibind_recover_curated_hg.RDS"
-unibind_recover_curated_mm_path <- "/space/scratch/amorin/R_objects/unibind_recover_curated_mm.RDS"
+coexpr_auc_hg_path <- "/space/scratch/amorin/R_objects/coexpr_recover_curated_hg.RDS"
+coexpr_auc_mm_path <- "/space/scratch/amorin/R_objects/coexpr_recover_curated_mm.RDS"
+unibind_auc_hg_path <- "/space/scratch/amorin/R_objects/unibind_recover_curated_hg.RDS"
+unibind_auc_mm_path <- "/space/scratch/amorin/R_objects/unibind_recover_curated_mm.RDS"
+avg_vs_ind_auc_hg_path <- "/space/scratch/amorin/R_objects/individual_vs_average_recover_curated_hg.RDS"
+avg_vs_ind_auc_mm_path <- "/space/scratch/amorin/R_objects/individual_vs_average_recover_curated_mm.RDS"
 
 
 

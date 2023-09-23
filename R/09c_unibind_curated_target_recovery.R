@@ -90,7 +90,7 @@ set.seed(5)
 
 # Human 
 
-save_curated_auc_list(path = unibind_recover_curated_hg_path,
+save_curated_auc_list(path = unibind_auc_hg_path,
                       tfs = tfs_curated_hg,
                       rank_l = bind_hg,
                       score_col = "Bind_score",
@@ -106,7 +106,7 @@ save_curated_auc_list(path = unibind_recover_curated_hg_path,
 
 # Mouse 
 
-save_curated_auc_list(path = unibind_recover_curated_mm_path,
+save_curated_auc_list(path = unibind_auc_mm_path,
                       tfs = tfs_curated_mm,
                       rank_l = bind_mm,
                       score_col = "Bind_score",
