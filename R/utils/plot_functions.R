@@ -7,27 +7,25 @@ library(cowplot)
 
 # TODO
 
-plot_perf <- function(df, 
-                      auc_l, 
-                      measure = NULL, 
-                      cols, 
+plot_perf <- function(df,
+                      measure = NULL,
+                      cols,
                       title,
                       ncol_legend = 1) {
   
-  stopifnot(measure %in% c("ROC", "PR"), "Group" %in% colnames(df))
+  
+  stopifnot(measure %in% c("ROC", "PR"), "ID" %in% colnames(df))
   
   if (measure == "ROC") {
-    p <- ggplot(df, aes(x = FPR, y = TPR, col = Group))
+    p <- ggplot(df, aes(x = FPR, y = TPR, col = ID))
   } else {
-    p <- ggplot(df, aes(x = Recall, y = Precision, col = Group))
+    p <- ggplot(df, aes(x = Recall, y = Precision, col = ID))
   }
-  
-  labels <- paste0(names(auc_l), " AUC=", round(unlist(auc_l), 3))
   
   p <- p +
     geom_path() +
     ggtitle(title) +
-    scale_color_manual(labels = labels, values = cols) +
+    scale_color_manual(values = cols) +
     guides(colour = guide_legend(ncol = ncol_legend)) +
     theme_classic() +
     theme(axis.text = element_text(size = 25),
@@ -39,6 +37,7 @@ plot_perf <- function(df,
   
   return(p)
 }
+
 
 
 
