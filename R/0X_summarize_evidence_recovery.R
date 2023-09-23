@@ -54,6 +54,9 @@ bind_model_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_modelfit.R
 bind_summary <- readRDS(bind_summary_path)
 bind_model <- readRDS(bind_model_path)
 
+
+evidence_l <- readRDS(evidence_path)
+
 # Curated TFs with ChIP-seq and all targets for null
 # tfs_curated_hg <- intersect(colnames(bind_summary$Human_TF), str_to_upper(curated$TF_Symbol))
 # tfs_curated_mm <- intersect(colnames(bind_summary$Mouse_TF), str_to_upper(curated$TF_Symbol))
@@ -65,12 +68,13 @@ bind_model <- readRDS(bind_model_path)
 # agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
 
 # List of AUROC/AUPRC for TF lists ability to recover curated targets
-unibind_perf_hg <- readRDS(unibind_recover_curated_hg_path)
-unibind_perf_mm <- readRDS(unibind_recover_curated_mm_path)
-coexpr_perf_hg <- readRDS(coexpr_recover_curated_hg_path)
-coexpr_perf_mm <- readRDS(coexpr_recover_curated_mm_path)
+unibind_auc_hg <- readRDS(unibind_auc_hg_path)
+unibind_auc_mm <- readRDS(unibind_auc_mm_path)
+coexpr_auc_hg <- readRDS(coexpr_auc_hg_path)
+coexpr_auc_mm <- readRDS(coexpr_auc_mm_path)
 
-
+avg_vs_ind_auc_hg <- readRDS(avg_vs_ind_auc_hg_path)
+avg_vs_ind_auc_mm <- readRDS(avg_vs_ind_auc_mm_path)
 
 
 #
@@ -80,13 +84,13 @@ coexpr_perf_mm <- readRDS(coexpr_recover_curated_mm_path)
 
 # TODO: can keep be done upstream?
 
-join_perf_df <- function(coexpr_l, unibind_l) {
+join_auc_df <- function(coexpr_l, unibind_l) {
   
-  keep_coexpr <- names(which(unlist(lapply(coexpr_l, function(x) "Perf_df" %in% names(x)))))
-  coexpr_df <- do.call(rbind, lapply(coexpr_l[keep_coexpr], `[[`, "Perf_df"))
+  keep_coexpr <- names(which(unlist(lapply(coexpr_l, function(x) "auc_df" %in% names(x)))))
+  coexpr_df <- do.call(rbind, lapply(coexpr_l[keep_coexpr], `[[`, "auc_df"))
   
-  keep_unibind <- names(which(unlist(lapply(unibind_l, function(x) "Perf_df" %in% names(x)))))
-  unibind_df <- do.call(rbind, lapply(unibind_l[keep_unibind], `[[`, "Perf_df"))
+  keep_unibind <- names(which(unlist(lapply(unibind_l, function(x) "auc_df" %in% names(x)))))
+  unibind_df <- do.call(rbind, lapply(unibind_l[keep_unibind], `[[`, "auc_df"))
   
   left_join(coexpr_df, unibind_df,
             by = c("Symbol", "N_targets"),
@@ -96,32 +100,32 @@ join_perf_df <- function(coexpr_l, unibind_l) {
 
 
 
-perf_hg <- join_perf_df(coexpr_l = coexpr_perf_hg, unibind_l = unibind_perf_hg)
-perf_mm <- join_perf_df(coexpr_l = coexpr_perf_mm, unibind_l = unibind_perf_mm)
+auc_hg <- join_auc_df(coexpr_l = coexpr_auc_hg, unibind_l = unibind_auc_hg)
+auc_mm <- join_auc_df(coexpr_l = coexpr_auc_mm, unibind_l = unibind_auc_mm)
 
 
 # Keep only TFs with a minimum count of curated targets
 
 min_targets <- 5
-perf_sub_hg <- filter(perf_hg, N_targets >= min_targets)
-perf_sub_mm <- filter(perf_mm, N_targets >= min_targets)
+auc_sub_hg <- filter(auc_hg, N_targets >= min_targets)
+auc_sub_mm <- filter(auc_mm, N_targets >= min_targets)
 
 
-summary(Filter(is.numeric, perf_sub_hg))
-summary(Filter(is.numeric, perf_sub_mm))
+summary(Filter(is.numeric, auc_sub_hg))
+summary(Filter(is.numeric, auc_sub_mm))
 
 
 # Minimum count of curated targets common to unibind and coexpr
 
-perf_common_hg <- filter(perf_sub_hg, !is.na(AUPRC_coexpr) & !is.na(AUPRC_unibind))
-perf_common_mm <- filter(perf_sub_mm, !is.na(AUPRC_coexpr) & !is.na(AUPRC_unibind))
+auc_common_hg <- filter(auc_sub_hg, !is.na(AUPRC_coexpr) & !is.na(AUPRC_unibind))
+auc_common_mm <- filter(auc_sub_mm, !is.na(AUPRC_coexpr) & !is.na(AUPRC_unibind))
 
 
-summary(Filter(is.numeric, perf_common_hg))
-summary(Filter(is.numeric, perf_common_mm))
+summary(Filter(is.numeric, auc_common_hg))
+summary(Filter(is.numeric, auc_common_mm))
 
 
-# Proportion with notably good or bad performance
+# Proportion with notably good or bad aucormance
 
 stat_cols <- c(
   "AUPRC_percentile_observed_coexpr",
@@ -152,11 +156,11 @@ top_and_bottom_prop <- function(df, stat_cols) {
 }
 
 
-top_and_bottom_prop(perf_sub_hg, stat_cols)
-top_and_bottom_prop(perf_sub_mm, stat_cols)
+top_and_bottom_prop(auc_sub_hg, stat_cols)
+top_and_bottom_prop(auc_sub_mm, stat_cols)
 
-top_and_bottom_prop(perf_common_hg, stat_cols)
-top_and_bottom_prop(perf_common_mm, stat_cols)
+top_and_bottom_prop(auc_common_hg, stat_cols)
+top_and_bottom_prop(auc_common_mm, stat_cols)
 
 
 
@@ -183,8 +187,8 @@ plot_hist <- function(df, stat_col, title = NULL, xlab = NULL) {
 # This uses all TFs for coexpr and unibind
 
 stat <- "AUPRC"
-plot_df_hg <- perf_sub_hg  # perf_common_hg 
-plot_df_mm <- perf_sub_mm  # perf_common_mm
+plot_df_hg <- auc_sub_hg  # auc_common_hg 
+plot_df_mm <- auc_sub_mm  # auc_common_mm
 
 p_auprc_hist_hg <- list(
   plot_hist(plot_df_hg, stat_col = paste0(stat, "_percentile_observed_coexpr")),
@@ -202,11 +206,17 @@ plot_grid(
   nrow = 2)
 
 
+plot_grid(
+  plot_hist(plot_df_hg, stat_col = paste0("AUPRC", "_percentile_observed_coexpr")),
+  plot_hist(plot_df_hg, stat_col = paste0("AUROC", "_percentile_observed_coexpr")),
+  plot_hist(plot_df_mm, stat_col = paste0("AUPRC", "_percentile_observed_coexpr")),
+  plot_hist(plot_df_mm, stat_col = paste0("AUROC", "_percentile_observed_coexpr")),
+  nrow = 2)
 
 
 
 
-# Demo a single TF's performance relative to null distn
+# Demo a single TF's aucormance relative to null distn
 
 
 tf_hg <- "ASCL1"
@@ -215,14 +225,14 @@ tf_mm <- "Ascl1"
 xmin <- 0.01
 xmax <- 0.06
 
-null <- unlist(lapply(unibind_perf_hg[[tf_hg]]$Null, `[[`, stat))
-obs <- unibind_perf_hg[[tf_hg]]$Perf_df[[stat]]
+null <- unlist(lapply(unibind_auc_hg[[tf_hg]]$Null, `[[`, stat))
+obs <- unibind_auc_hg[[tf_hg]]$auc_df[[stat]]
 hist(null, xlim = c(xmin, xmax), main = tf_hg, breaks = 100)
 abline(v = obs, col = "red")
 
 
-null <- unlist(lapply(unibind_perf_mm[[tf_mm]]$Null, `[[`, stat))
-obs <- unibind_perf_mm[[tf_mm]]$Perf_df[[stat]]
+null <- unlist(lapply(unibind_auc_mm[[tf_mm]]$Null, `[[`, stat))
+obs <- unibind_auc_mm[[tf_mm]]$auc_df[[stat]]
 hist(null, xlim = c(xmin, xmax), main = tf_mm, breaks = 100)
 abline(v = obs, col = "red")
 
@@ -230,7 +240,7 @@ abline(v = obs, col = "red")
 
 # 
 
-ggplot(perf_common_hg, aes(x = AUPRC_percentile_observed_coexpr, y = AUPRC_percentile_observed_unibind)) +
+ggplot(auc_common_hg, aes(x = AUPRC_percentile_observed_coexpr, y = AUPRC_percentile_observed_unibind)) +
   geom_point(shape = 21, size = 2.4) +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
@@ -239,26 +249,26 @@ ggplot(perf_common_hg, aes(x = AUPRC_percentile_observed_coexpr, y = AUPRC_perce
 
 
 
-# plot(perf_common_hg$AUPRC_percentile_observed_coexpr, perf_common_hg$AUPRC_percentile_observed_unibind)
-# cor(perf_common_hg$AUPRC_percentile_observed_coexpr, perf_common_hg$AUPRC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
+# plot(auc_common_hg$AUPRC_percentile_observed_coexpr, auc_common_hg$AUPRC_percentile_observed_unibind)
+# cor(auc_common_hg$AUPRC_percentile_observed_coexpr, auc_common_hg$AUPRC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
 # 
-# plot(perf_common_hg$AUROC_percentile_observed_coexpr, perf_common_hg$AUROC_percentile_observed_unibind)
-# cor(perf_common_hg$AUROC_percentile_observed_coexpr, perf_common_hg$AUROC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
+# plot(auc_common_hg$AUROC_percentile_observed_coexpr, auc_common_hg$AUROC_percentile_observed_unibind)
+# cor(auc_common_hg$AUROC_percentile_observed_coexpr, auc_common_hg$AUROC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
 # 
-# plot(perf_common_mm$AUPRC_percentile_observed_coexpr, perf_common_mm$AUPRC_percentile_observed_unibind)
-# cor(perf_common_mm$AUPRC_percentile_observed_coexpr, perf_common_mm$AUPRC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
+# plot(auc_common_mm$AUPRC_percentile_observed_coexpr, auc_common_mm$AUPRC_percentile_observed_unibind)
+# cor(auc_common_mm$AUPRC_percentile_observed_coexpr, auc_common_mm$AUPRC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
 # 
-# plot(perf_common_mm$AUPRC_percentile_observed_coexpr, perf_common_mm$AUPRC_percentile_observed_unibind)
-# cor(perf_common_mm$AUPRC_percentile_observed_coexpr, perf_common_mm$AUPRC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
+# plot(auc_common_mm$AUPRC_percentile_observed_coexpr, auc_common_mm$AUPRC_percentile_observed_unibind)
+# cor(auc_common_mm$AUPRC_percentile_observed_coexpr, auc_common_mm$AUPRC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
 
 
 
-top_both_hg <- perf_common_hg %>% 
+top_both_hg <- auc_common_hg %>% 
   filter(AUPRC_percentile_observed_coexpr > 0.9 &
            AUPRC_percentile_observed_unibind > 0.9)
 
 
-top_both_mm <- perf_common_mm %>% 
+top_both_mm <- auc_common_mm %>% 
   filter(AUPRC_percentile_observed_coexpr > 0.9 &
            AUPRC_percentile_observed_unibind > 0.9)
 
@@ -268,14 +278,14 @@ top_ortho <- intersect(top_both_hg$Symbol, str_to_upper(top_both_mm$Symbol))
 
 
 
-diff_hg <- perf_common_hg %>%
+diff_hg <- auc_common_hg %>%
   mutate(Diff_AUPRC = abs(
     AUPRC_percentile_observed_coexpr - AUPRC_percentile_observed_unibind
   )) 
 # %>% filter(Diff_AUPRC > 0.8)
 
 
-diff_mm <- perf_common_mm %>%
+diff_mm <- auc_common_mm %>%
   mutate(Diff_AUPRC = abs(
     AUPRC_percentile_observed_coexpr - AUPRC_percentile_observed_unibind
   )) 
@@ -287,8 +297,8 @@ diff_mm <- perf_common_mm %>%
 # ------------------------------------------------------------------------------
 
 
-df1 <- do.call(rbind, lapply(avg_vs_ind_recover_curated_hg, `[[`, "Summary_df"))
-df2 <- do.call(rbind, lapply(avg_vs_ind_recover_curated_mm, `[[`, "Summary_df"))
+df1 <- do.call(rbind, lapply(avg_vs_ind_auc_hg, `[[`, "Summary_df"))
+df2 <- do.call(rbind, lapply(avg_vs_ind_auc_mm, `[[`, "Summary_df"))
 
 df1_sub <- filter(df1, N_targets >= 5)
 df2_sub <- filter(df2, N_targets >= 5)
@@ -304,31 +314,38 @@ hist(df2_sub$AUROC_percentile, breaks = 50)
 hist(df2_sub$AUPRC_percentile, breaks = 50)
 
 
+plot_grid(
+  plot_hist(df1_sub, stat_col = paste0("AUPRC", "_percentile")),
+  plot_hist(df1_sub, stat_col = paste0("AUROC", "_percentile")),
+  plot_hist(df2_sub, stat_col = paste0("AUPRC", "_percentile")),
+  plot_hist(df2_sub, stat_col = paste0("AUROC", "_percentile")),
+  nrow = 2)
+
+
+
 tf <- "ASCL1"
-tf <- "ASCL1"
-auc_df <- avg_vs_ind_recover_curated_hg[[tf]]$AUC_df
-auprc_all <- auc_df$AUPRC
+auc_df <- arrange(avg_vs_ind_auc_hg[[tf]]$AUC_df, AUROC)
+auc_df_no_avg <- filter(auc_df, ID != "Average")
+auc_avg <- filter(auc_df, ID == "Average")
 
 
-auprc_no_agg <- sort(auprc_all[names(auprc_all) != "Average"])
-auprc_agg <- auprc_all[["Average"]]
-hist(auprc_no_agg, breaks = 100, xlim = c(0, max(auprc_agg, max(auprc_no_agg)) * 1.2))
-abline(v = auprc_agg, col = "red")
+# hist(auc_df_no_avg$AUPRC, breaks = 100, xlim = c(0, max(auprc_agg, max(auprc_no_agg)) * 1.2))
+hist(auc_df_no_avg$AUPRC, breaks = 100, xlim = c(0, 0.07))
+abline(v = auc_avg$AUPRC, col = "red")
 
-
-auroc_all <- unlist(lapply(avg_vs_ind_recover_curated_hg[[tf]], `[[`, "AUROC"))
-auroc_no_agg <- sort(auroc_all[names(auroc_all) != "Average"])
-auroc_agg <- auroc_all[["Average"]]
-hist(auroc_no_agg, xlim = c(0, max(auroc_agg, max(auroc_no_agg)) * 1.2))
-abline(v = auroc_agg, col = "red")
+hist(auc_df_no_avg$AUROC, breaks = 100, xlim = c(0.3, 0.8))
+abline(v = auc_avg$AUROC, col = "red")
 
 
 # Inspecting retrieved ranks for a given TF
 
 
+agg_l <- agg_tf_hg
+msr_mat <- msr_hg
 score_mat <- gene_vec_to_mat(agg_l, tf)
 score_mat <- subset_to_measured(score_mat, msr_mat = msr_mat, gene = tf)
 score_mat <- cbind(score_mat, Average = rowMeans(score_mat))
+labels_curated <- get_curated_labels(tf = tf, curated_df = curated, pc_df = pc_hg, species = "Human", remove_self = TRUE)
 
 
 rank_l <- lapply(1:ncol(score_mat), function(x) {
@@ -341,13 +358,11 @@ rank_l <- lapply(1:ncol(score_mat), function(x) {
 })
 names(rank_l) <- colnames(score_mat)
 
-rank_l[c(names(auprc_no_agg), "Average")]
-rank_l[c(names(auroc_no_agg), "Average")]
+rank_l[auc_df$ID]
 
-plot(unlist(rank_l[c(names(auprc_no_agg), "Average")]))
-plot(unlist(rank_l[c(names(auroc_no_agg), "Average")]))
 
-# Inspecting performance of a specific dataset
+
+# Inspecting aucormance of a specific dataset
 
 id <- "GSE222956"
 score_vec <- sort(score_mat[, id], decreasing = TRUE)
@@ -356,11 +371,172 @@ label_vec <- names(score_vec) %in% labels_curated
 auprc_all[id]
 auroc_all[id]
 get_auc(score_vec, label_vec, "both")
-perf_df <- get_performance_df(score_vec, label_vec, measure = "both")
+auc_df <- get_aucormance_df(score_vec, label_vec, measure = "both")
 
 
 score_vec[labels_curated]
 score_rank[labels_curated]
+
+
+# Demonstrating retrieval of genomic evidence at topk as labels
+# ------------------------------------------------------------------------------
+
+
+topk_labels <- evidence_l$Human[[tf]] %>%
+  filter(Symbol != tf) %>%
+  slice_min(Rank_binding, n = 500) %>%
+  pull(Symbol)
+
+
+genomic_auc <- get_colwise_auc(score_mat,
+                               topk_labels,
+                               ncores = 8)
+
+
+auc_df <- arrange(genomic_auc, AUROC)
+auc_df_no_avg <- filter(auc_df, ID != "Average")
+auc_avg <- filter(auc_df, ID == "Average")
+
+hist(auc_df_no_avg$AUPRC, breaks = 100, xlim = c(0, 0.07))
+abline(v = auc_avg$AUPRC, col = "red")
+
+hist(auc_df_no_avg$AUROC, breaks = 100, xlim = c(0.3, 0.8))
+abline(v = auc_avg$AUROC, col = "red")
+
+
+# Demo a single TF
+# ------------------------------------------------------------------------------
+
+
+tf <- "Runx1"
+agg_l <- agg_tf_mm
+msr_mat <- msr_mm
+labels_curated <- get_curated_labels(tf = tf, curated_df = curated, pc_df = pc_mm, species = "Mouse", remove_self = TRUE)
+
+score_mat <- gene_vec_to_mat(agg_l, tf)
+score_mat <- subset_to_measured(score_mat, msr_mat = msr_mat, gene = tf)
+score_mat <- cbind(score_mat, Average = rowMeans(score_mat))
+
+# Scoring where ties have been broken
+score_mat_noties <- colrank_mat(-score_mat, ties_arg = "random")
+
+# Single dataset
+id <- "Average"
+score_vec <- sort(score_mat[, id], decreasing = TRUE)
+score_vec_noties <- sort(score_mat_noties[, id], decreasing = TRUE)
+stopifnot(identical(names(score_vec)[1:100], names(score_vec_noties)[1:100]))
+
+label_vec <- names(score_vec) %in% labels_curated
+label_vec_noties <- names(score_vec_noties) %in% labels_curated
+
+auc <- get_auc(score_vec, label_vec, measure = "both")
+auc_noties <- get_auc(score_vec_noties, label_vec_noties, measure = "both")
+
+auc_df <- get_aucormance_df(score_vec, label_vec, measure = "both")
+auc_df_noties <- get_aucormance_df(score_vec_noties, label_vec_noties, measure = "both")
+
+
+# Directly accessing ROCR prediction/plots
+pred <- ROCR::prediction(predictions = score_vec, labels = label_vec)
+pred_noties <- ROCR::prediction(predictions = score_vec_noties, labels = label_vec_noties)
+roc <- ROCR::aucormance(pred, measure = "tpr", x.measure = "fpr")
+roc_noties <- ROCR::aucormance(pred_noties, measure = "tpr", x.measure = "fpr")
+plot(roc)
+plot(roc_noties)
+
+
+# All datasets
+auc_all <- get_colwise_auc(score_mat, labels = labels_curated, ncores = 8)
+auc_all_noties <- get_colwise_auc(score_mat_noties, labels = labels_curated, ncores = 8)
+
+auc_df_all <- get_colwise_aucormance_df(score_mat, labels = labels_curated, ncores = 8)
+auc_df_all_noties <- get_colwise_aucormance_df(score_mat_noties, labels = labels_curated, ncores = 8)
+
+auc_l <- split(auc_df_all, auc_df_all$ID)
+auc_noties_l <- split(auc_df_all_noties, auc_df_all_noties$ID)
+
+
+
+pdf("auc_l.pdf")
+
+
+for (i in names(auc_l)) {
+  id <- i
+  score_vec <- sort(score_mat[, id], decreasing = TRUE)
+  label_vec <- names(score_vec) %in% labels_curated
+  pred <- ROCR::prediction(predictions = score_vec, labels = label_vec)
+  roc <- ROCR::aucormance(pred, measure = "tpr", x.measure = "fpr")
+  plot(roc, main = i)
+  # plot(y = tt[[i]]$TPR, x = tt[[i]]$FPR, main = i)
+}
+graphics.off()
+
+
+pdf("auc_noties_l.pdf")
+
+for (i in names(auc_noties_l)) {
+  id <- i
+  score_vec_noties <- sort(score_mat_noties[, id], decreasing = TRUE)
+  label_vec_noties <- names(score_vec_noties) %in% labels_curated
+  pred_noties <- ROCR::prediction(predictions = score_vec_noties, labels = label_vec_noties)
+  roc_noties <- ROCR::aucormance(pred_noties, measure = "tpr", x.measure = "fpr")
+  plot(roc_noties, main = i)
+  # plot(y = tt2[[i]]$TPR, x = tt2[[i]]$FPR, main = i)
+}
+graphics.off()
+
+
+
+
+cols <- c("Average" = "black",
+          # "Binding" = "darkblue",
+          # "Perturbation" = "firebrick",
+          # "Integrated" = "darkgreen",
+          "Single_coexpression" = "lightgrey")
+
+
+# cols <- names()
+
+plot_df <- auc_df_all
+plot_df$ID <- ifelse(plot_df$ID == "Average", plot_df$ID, "Single_coexpression")
+
+
+plot_df_noties <- auc_df_all_noties
+plot_df_noties$ID <- ifelse(plot_df_noties$ID == "Average", plot_df_noties$ID, "Single_coexpression")
+
+
+plot_df$ID <- factor(plot_df$ID, levels = rev(unique(names(cols))))
+plot_df_noties$ID <- factor(plot_df_noties$ID, levels = rev(unique(names(cols))))
+
+
+
+
+p_all <- plot_auc(df = plot_df, measure = "ROC", cols = cols, title = tf)
+p_all_noties <- plot_auc(df = plot_df_noties, measure = "ROC", cols = cols, title = tf)
+
+
+pdf("myplot.pdf")
+
+p_l <- lapply(names(auc_l), function(x) {
+  
+  p <- plot_auc(df = filter(auc_df_all, ID == x), measure = "ROC", cols = cols, title = x)
+  print(p)
+  
+})
+
+graphics.off()
+
+
+pdf("myplot_noties.pdf")
+
+p_l <- lapply(names(auc_noties_l), function(x) {
+  
+  p <- plot_auc(df = filter(auc_df_all_noties, ID == x), measure = "ROC", cols = cols, title = x)
+  print(p)
+  
+})
+
+graphics.off()
 
 
 
@@ -395,7 +571,7 @@ score_rank[labels_curated]
 # auc <- get_auc(score_vec = score_vec, label_vec = label_vec, measure = measure)
 # 
 # 
-# null <- get_null_performance(score_vec = score_vec,
+# null <- get_null_aucormance(score_vec = score_vec,
 #                              label_all = targets_curated_mm,
 #                              measure = measure,
 #                              n_target = length(labels),
