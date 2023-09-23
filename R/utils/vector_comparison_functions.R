@@ -508,6 +508,9 @@ summarize_obs_and_null_auc <- function(tf,
                                        n_samps = 1000,
                                        ncores = 1) {
   
+  # TODO: remove
+  message(paste(tf, Sys.time()))
+  
   n_target <- sum(label_vec)
   
   auc <- get_auc(score_vec, label_vec = label_vec, measure = "both")
@@ -553,6 +556,10 @@ curated_obs_and_null_auc <- function(tf,
                                      n_samps = 1000,
                                      ncores = 1) {
   
+  # TODO: remove
+  message(paste(tf, Sys.time()))
+  
+  
   stopifnot(species %in% c("Mouse", "Human"))
   
   # Extract the ranking/scores for the given TF, removing the TF itself
@@ -571,8 +578,14 @@ curated_obs_and_null_auc <- function(tf,
                                species = species,
                                remove_self = TRUE)
   
-  if (length(labels) == 0) stop(paste("No labels retrieved for", tf))
-                   
+  label_all <- label_all[label_all != tf]
+  
+  # No labels may result if the TF itself was the only label
+  if (length(labels) == 0) {
+    paste("No labels retrieved for", tf)
+    return(NA)
+  }
+  
   label_vec <- names(score_vec) %in% labels
 
   auc_df <- summarize_obs_and_null_auc(tf = tf,
@@ -607,7 +620,7 @@ curated_obs_and_null_auc_list <- function(tfs,
     
     if (verbose) message(paste(tf, Sys.time()))
     
-    try(curated_obs_and_null_auc(
+    curated_obs_and_null_auc(
       tf = tf,
       rank_df = rank_l[[tf]],
       score_col = score_col,
@@ -616,12 +629,14 @@ curated_obs_and_null_auc_list <- function(tfs,
       pc_df = pc_df,
       species = species,
       n_samps = n_samps,
-      ncores = ncores))
+      ncores = ncores
+    )
     
   })
   
-  # auc_df <- do.call(rbind, lapply(auc_l, `[[`, "Perf_df"))
   names(auc_l) <- tfs
+  auc_l <- auc_l[!is.na(auc_l)]
+  
   return(auc_l)
 }
   
@@ -681,7 +696,6 @@ get_colwise_auc <- function(score_mat,
     
   }, mc.cores = ncores)
   
-  
   auc_df <- data.frame(
     ID = colnames(score_mat),
     AUROC = vapply(auc_l, `[[`, "AUROC", FUN.VALUE = numeric(1)),
@@ -694,6 +708,7 @@ get_colwise_auc <- function(score_mat,
 
 
 
+# TODO: The names of this and the actual implementation seem to swap intent
 # TODO:
 
 summarize_avg_and_individual_auc <- function(auc_df, labels) {
@@ -760,4 +775,25 @@ get_colwise_curated_auc_list <- function(tfs,
   tf_auc_l <- tf_auc_l[!is.na(tf_auc_l)]
   
   return(tf_auc_l)
+}
+
+
+
+# TODO:
+
+get_colwise_performance_df <- function(score_mat, labels, ncores = 1) {
+  
+  perf_df_l <- mclapply(colnames(score_mat), function(x) {
+    
+    score_vec <- sort(score_mat[, x], decreasing = TRUE)
+    label_vec <- names(score_vec) %in% labels
+    perf_df <- get_performance_df(score_vec, label_vec, measure = "both")
+    perf_df$ID <- x
+    return(perf_df)
+    
+  }, mc.cores = ncores)
+  
+  perf_df_all <- do.call(rbind, perf_df_l)
+  
+  return(perf_df_all)
 }
