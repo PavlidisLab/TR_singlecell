@@ -508,9 +508,6 @@ summarize_obs_and_null_auc <- function(tf,
                                        n_samps = 1000,
                                        ncores = 1) {
   
-  # TODO: remove
-  message(paste(tf, Sys.time()))
-  
   n_target <- sum(label_vec)
   
   auc <- get_auc(score_vec, label_vec = label_vec, measure = "both")
@@ -555,10 +552,6 @@ curated_obs_and_null_auc <- function(tf,
                                      species,
                                      n_samps = 1000,
                                      ncores = 1) {
-  
-  # TODO: remove
-  message(paste(tf, Sys.time()))
-  
   
   stopifnot(species %in% c("Mouse", "Human"))
   
