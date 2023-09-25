@@ -83,6 +83,11 @@ summ_tf_hg <- get_summary_df(sim_tf_hg, msr_hg)
 summ_tf_mm <- get_summary_df(sim_tf_mm, msr_mm)
 
 
+# Require a minimum count of measured experiments for global trends
+summ_sub_tf_hg <- filter(summ_tf_hg, N_exp >= 5)
+summ_sub_tf_mm <- filter(summ_tf_mm, N_exp >= 5)
+
+
 # Summarize ribo similarity and organize into a df
 summ_ribo_hg <- get_summary_df(sim_ribo_hg, msr_hg)
 summ_ribo_mm <- get_summary_df(sim_ribo_mm, msr_mm)
@@ -93,14 +98,55 @@ summ_null_hg <- summary(unlist(lapply(null_topk_hg, function(x) median(x$Topk)))
 summ_null_mm <- summary(unlist(lapply(null_topk_mm, function(x) median(x$Topk))))
 
 
-# Relationship between median topk intersect and the number of non-NA experiments
+# Relationship between median topk intersect and count of measured experiments
 topk_na_cor_hg <- suppressWarnings(cor.test(summ_tf_hg$Median, summ_tf_hg$N_exp, method = "spearman"))
 topk_na_cor_mm <- suppressWarnings(cor.test(summ_tf_mm$Median, summ_tf_mm$N_exp, method = "spearman"))
 
 
 # Count of TFs whose median topk is greater than the null
-topk_gt_hg <- sum(summ_tf_hg$Median > summ_null_hg["Median"]) / nrow(summ_tf_hg)
-topk_gt_mm <- sum(summ_tf_mm$Median > summ_null_mm["Median"]) / nrow(summ_tf_mm)
+topk_gt_null_hg <- sum(summ_sub_tf_hg$Median > summ_null_hg["Median"]) / nrow(summ_sub_tf_hg)
+topk_gt_null_mm <- sum(summ_sub_tf_mm$Median > summ_null_mm["Median"]) / nrow(summ_sub_tf_mm)
+
+
+# TFs whose median topk is greater than the median topk for ribosomal
+topk_gt_ribo_hg <- filter(summ_sub_tf_hg, Median > median(summ_ribo_hg[["Median"]]))
+topk_gt_ribo_mm <- filter(summ_sub_tf_mm, Median > median(summ_ribo_mm[["Median"]]))
+
+
+
+# Examples of best/worst pairs for a given TF
+# ------------------------------------------------------------------------------
+
+
+
+# ASCL1 "GSE156793" "GSE137537" 0 count overlap Scor = 0.3130 is this because low 
+# non-tied k? Looks it - "GSE156793" k=148, although still none of these overlap
+# "Elmentaite2021"  "Han2022" Scor 0.58 and Topk 2
+
+# FOXF1 "Stewart2019" "Young2018" suspicious k=998
+
+
+tf <- "FOXF1"
+mat <- gene_vec_to_mat(agg_tf_hg, tf)
+mat <- subset_to_measured(mat, msr_hg, tf)
+id1 <- "Stewart2019"  # "Elmentaite2021"
+id2 <- "Young2018"   # "Han2022"
+
+vec1 <- mat[rownames(mat) != tf, id1]
+vec2 <- mat[rownames(mat) != tf, id2]
+
+vec1_sort <- sort(vec1, decreasing = TRUE)
+vec2_sort <- sort(vec2, decreasing = TRUE)
+
+check_k(vec1_sort, 1000)
+check_k(vec2_sort, 1000)
+
+topk_intersect(topk_sort(vec1, k = 1000), topk_sort(vec2, k = 1000))
+
+plot(mat[, id1], mat[, id2])
+cor(mat[, id1], mat[, id2], method = "spearman")
+view(data.frame(Symbol = names(vec1), Vec1 = vec1, Vec2 = vec2))
+
 
 
 
@@ -140,41 +186,6 @@ boxplot(summ_tf_hg$Med ~ summ_tf_hg$Family)
 
 
 
-# For inspecting all rank query/subject topk
-# ------------------------------------------------------------------------------
-
-
-# gene_hg <- "ASCL1"
-# 
-# 
-# # Keep only measured genes and set diag to NA to remove self-ranking
-# 
-# keep_exp <- which(msr_hg[gene_hg, ] == 1)
-# allrank_mat <- allrank_l[[gene_hg]][keep_exp, keep_exp, drop = FALSE]
-# diag(allrank_mat) <- NA
-# 
-# 
-# # Inspecting top pairs: by topk magnitude, and by rank. The highest value/most
-# # similar pair across all experiment pairs by magnitude may not actually be the
-# # top ranked gene within the subject dataset
-# 
-# sim_df <- sim_tf_hg[[gene_hg]]$Sim_df
-# best_value_id <- slice_max(sim_df, Topk, n = 1)
-# best_rank_ix <- which(allrank_mat == min(allrank_mat, na.rm = TRUE), arr.ind = TRUE)
-# 
-# query_vec <- load_agg_mat_list(ids = best_value_id$Row,
-#                                genes = pc_hg$Symbol,
-#                                sub_genes = gene_hg)[[1]][, gene_hg]
-# 
-# subject_mat <- load_agg_mat_list(ids = best_value_id$Col, genes = pc_hg$Symbol)[[1]]
-# 
-# 
-# topk_rank <- query_gene_rank_topk(
-#   query_vec = query_vec,
-#   subject_mat = subject_mat,
-#   gene = gene_hg,
-#   ncores = ncore)
-
 
 
 # Plotting
@@ -186,7 +197,7 @@ gene_hg <- "ASCL1"
 # Relationship between similarity stats
 
 p1 <- ggplot(sim_tf_hg[[gene_hg]], aes(x = Scor, y = Topk)) +
-  geom_point(shape = 19, size = 3) +
+  geom_point(shape = 21, size = 2.1) +
   ggtitle(gene_hg) +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
@@ -297,8 +308,8 @@ density_topk <- function(plot_df) {
 # Isolating the max TF by topk similarity, a representative TF, a ribosomal gene,
 # and a null
 
-example_tf_hg <- "ASCL1"
-example_tf_mm <- "Ascl1"
+example_tf_hg <- "RUNX1"
+example_tf_mm <- "Runx1"
 
 max_tf_hg <- as.character(slice_max(summ_tf_hg, Median)$Symbol)
 max_tf_mm <- as.character(slice_max(summ_tf_mm, Median)$Symbol)
@@ -425,3 +436,41 @@ p8 <- data.frame(Topk = topk_rank$Topk) %>%
   theme(axis.text = element_text(size = 20),
         axis.title = element_text(size = 20),
         plot.title = element_text(size = 20))
+
+
+
+
+# For inspecting all rank query/subject topk
+# ------------------------------------------------------------------------------
+
+
+# gene_hg <- "ASCL1"
+# 
+# 
+# # Keep only measured genes and set diag to NA to remove self-ranking
+# 
+# keep_exp <- which(msr_hg[gene_hg, ] == 1)
+# allrank_mat <- allrank_l[[gene_hg]][keep_exp, keep_exp, drop = FALSE]
+# diag(allrank_mat) <- NA
+# 
+# 
+# # Inspecting top pairs: by topk magnitude, and by rank. The highest value/most
+# # similar pair across all experiment pairs by magnitude may not actually be the
+# # top ranked gene within the subject dataset
+# 
+# sim_df <- sim_tf_hg[[gene_hg]]$Sim_df
+# best_value_id <- slice_max(sim_df, Topk, n = 1)
+# best_rank_ix <- which(allrank_mat == min(allrank_mat, na.rm = TRUE), arr.ind = TRUE)
+# 
+# query_vec <- load_agg_mat_list(ids = best_value_id$Row,
+#                                genes = pc_hg$Symbol,
+#                                sub_genes = gene_hg)[[1]][, gene_hg]
+# 
+# subject_mat <- load_agg_mat_list(ids = best_value_id$Col, genes = pc_hg$Symbol)[[1]]
+# 
+# 
+# topk_rank <- query_gene_rank_topk(
+#   query_vec = query_vec,
+#   subject_mat = subject_mat,
+#   gene = gene_hg,
+#   ncores = ncore)
