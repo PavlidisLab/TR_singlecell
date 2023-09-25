@@ -102,6 +102,12 @@ chu2021_all_path <- "/home/amorin/Data/Metadata/Chu2021_all_DTRI.tsv"
 curated_all_path <- "/home/amorin/Data/Metadata/Curated_targets_all_Sept2023.tsv"
 
 
+# Unibind summarized ChIP-seq data
+bind_dat_path <- "/space/scratch/amorin/R_objects/processed_unibind_data.RDS"
+bind_summary_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_summary.RDS"
+bind_model_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_modelfit.RDS"
+
+
 # List of ROCR performances
 coexpr_auc_hg_path <- "/space/scratch/amorin/R_objects/coexpr_recover_curated_hg.RDS"
 coexpr_auc_mm_path <- "/space/scratch/amorin/R_objects/coexpr_recover_curated_mm.RDS"
@@ -109,7 +115,6 @@ unibind_auc_hg_path <- "/space/scratch/amorin/R_objects/unibind_recover_curated_
 unibind_auc_mm_path <- "/space/scratch/amorin/R_objects/unibind_recover_curated_mm.RDS"
 avg_vs_ind_auc_hg_path <- "/space/scratch/amorin/R_objects/individual_vs_average_recover_curated_hg.RDS"
 avg_vs_ind_auc_mm_path <- "/space/scratch/amorin/R_objects/individual_vs_average_recover_curated_mm.RDS"
-
 
 
 
