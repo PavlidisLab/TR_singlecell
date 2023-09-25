@@ -5,6 +5,48 @@ library(tidyverse)
 library(cowplot)
 
 
+
+# Generic plots
+# ------------------------------------------------------------------------------
+
+
+
+# TODO:
+
+qplot <- function(df, xvar, yvar) {
+  
+  ggplot(df, aes(x = !!sym(xvar), y = !!sym(yvar))) +
+    geom_point(shape = 21) +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20),
+          plot.title = element_text(size = 20),
+          plot.margin = margin(c(10, 20, 10, 10)))
+}
+
+
+
+# TODO:
+
+plot_hist <- function(df, stat_col, title = NULL, xlab = NULL) {
+  
+  if (is.null(xlab)) xlab <- stat_col
+  
+  ggplot(df, aes(x = !!sym(stat_col))) +
+    geom_histogram(bins = 100) +
+    ggtitle(title) +
+    xlab(xlab) +
+    ylab("Frequency") +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20),
+          plot.title = element_text(size = 20))
+  
+}
+
+
+
+
 # TODO
 
 plot_perf <- function(df,
