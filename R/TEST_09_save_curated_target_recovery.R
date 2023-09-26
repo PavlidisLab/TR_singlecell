@@ -1,23 +1,18 @@
 ## Save out lists of AUPRCs and AUROCs for the ability of aggregate coxpression 
-# and Unibind averaged binding scores to recover literature curated targets
+## and Unibind averaged binding scores to recover literature curated targets
 ## -----------------------------------------------------------------------------
-# TODO: Better way to assign species-specific argument since already have to 
-# specifiy species?
-
 
 library(tidyverse)
 library(data.table)
 library(WGCNA)
 library(parallel)
-library(pheatmap)
-library(RColorBrewer)
-library(cowplot)
 source("R/utils/functions.R")
 source("R/utils/vector_comparison_functions.R")
 source("R/00_config.R")
 
-n_samps <- 1000
-
+# How many draws of random curated labels for null
+n_samps <- 1000  
+set.seed(5)
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -48,14 +43,9 @@ agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = p
 rank_tf_hg <- readRDS(rank_tf_hg_path)
 rank_tf_mm <- readRDS(rank_tf_mm_path)
 
-# TODO: formalize unibind loading
-# Processed list of meta and matrices
-bind_dat_path <- "/space/scratch/amorin/R_objects/processed_unibind_data.RDS"
-bind_dat <- readRDS(bind_dat_path)
+# Unibind ChIP-seq averaged binding scores
 
-# Average bind scores and output of binding specificity model
-bind_summary_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_summary.RDS"
-bind_model_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_modelfit.RDS"
+bind_dat <- readRDS(bind_dat_path)
 bind_summary <- readRDS(bind_summary_path)
 bind_model <- readRDS(bind_model_path)
 
@@ -73,10 +63,10 @@ targets_curated_mm <- intersect(pc_mm$Symbol, str_to_title(curated$Target_Symbol
 # ------------------------------------------------------------------------------
 
 
-# Split matrix of summarized bind scores col/TF-wise into a list
+# Split matrix of summarized bind scores col/TF-wise into a list of dataframes
 
 
-split_to_list <- function(mat) {
+split_bindmat_to_list <- function(mat) {
   
   bind_l <- asplit(mat, 2)
   
@@ -86,17 +76,6 @@ split_to_list <- function(mat) {
       arrange(desc(Bind_score))
   })
 }
-
-
-bind_hg <- split_to_list(bind_summary$Human_TF)
-bind_mm <- split_to_list(bind_summary$Mouse_TF)
-
-
-# TODO: review if necessary/can be avoided
-names(bind_mm) <- str_to_title(names(bind_mm))
-tfs_curated_mm <- str_to_title(tfs_curated_mm)
-
-
 
 
 
@@ -131,8 +110,6 @@ avg_vs_ind_recover_curated_mm <- get_colwise_curated_auc_list(
 
 
 
-saveRDS(avg_vs_ind_recover_curated_hg, avg_vs_ind_recover_curated_hg_path)
-saveRDS(avg_vs_ind_recover_curated_mm, avg_vs_ind_recover_curated_mm_path)
 
 
 
@@ -140,40 +117,65 @@ saveRDS(avg_vs_ind_recover_curated_mm, avg_vs_ind_recover_curated_mm_path)
 # ------------------------------------------------------------------------------
 
 
-set.seed(5)
-
-
 # Human 
 
-save_curated_auc_list(path = coexpr_auc_hg_path,
-                      tfs = tfs_curated_hg,
-                      rank_l = rank_tf_hg,
-                      score_col = "Avg_RSR",
-                      curated_df = curated,
-                      label_all = targets_curated_hg,
-                      pc_df = pc_hg,
-                      species = "Human",
-                      n_samps = n_samps,
-                      ncores = 8,
-                      verbose = TRUE,
-                      force_resave = TRUE)
+# save_curated_auc_list(path = coexpr_auc_hg_path,
+#                       tfs = tfs_curated_hg,
+#                       rank_l = rank_tf_hg,
+#                       score_col = "Avg_RSR",
+#                       curated_df = curated,
+#                       label_all = targets_curated_hg,
+#                       pc_df = pc_hg,
+#                       species = "Human",
+#                       n_samps = n_samps,
+#                       ncores = 8,
+#                       verbose = TRUE,
+#                       force_resave = TRUE)
+
+
+
+coexpr_null_hg <- curated_obs_and_null_auc_list(
+  tfs = tfs_curated_hg,
+  rank_l = rank_tf_hg,
+  score_col = "Avg_RSR",
+  curated_df = curated,
+  label_all = targets_curated_hg,
+  pc_df = pc_hg,
+  species = "Human",
+  n_samps = n_samps,
+  ncores = 8,
+  verbose = TRUE)
+
 
 
 # Mouse 
 
-save_curated_auc_list(path = coexpr_auc_mm_path,
-                      tfs = tfs_curated_mm,
-                      rank_l = rank_tf_mm,
-                      score_col = "Avg_RSR",
-                      curated_df = curated,
-                      label_all = targets_curated_mm,
-                      pc_df = pc_mm,
-                      species = "Mouse",
-                      n_samps = 1000,
-                      ncores = 8,
-                      verbose = TRUE,
-                      force_resave = TRUE)
+# save_curated_auc_list(path = coexpr_auc_mm_path,
+#                       tfs = tfs_curated_mm,
+#                       rank_l = rank_tf_mm,
+#                       score_col = "Avg_RSR",
+#                       curated_df = curated,
+#                       label_all = targets_curated_mm,
+#                       pc_df = pc_mm,
+#                       species = "Mouse",
+#                       n_samps = 1000,
+#                       ncores = 8,
+#                       verbose = TRUE,
+#                       force_resave = TRUE)
 
+
+
+coexpr_null_mm <- curated_obs_and_null_auc_list(
+  tfs = tfs_curated_mm,
+  rank_l = rank_tf_mm,
+  score_col = "Avg_RSR",
+  curated_df = curated,
+  label_all = targets_curated_mm,
+  pc_df = pc_mm,
+  species = "Human",
+  n_samps = n_samps,
+  ncores = 8,
+  verbose = TRUE)
 
 
 
@@ -181,7 +183,14 @@ save_curated_auc_list(path = coexpr_auc_mm_path,
 # ------------------------------------------------------------------------------
 
 
-set.seed(5)
+# List of TF binding scores
+bind_hg <- split_bindmat_to_list(bind_summary$Human_TF)
+bind_mm <- split_bindmat_to_list(bind_summary$Mouse_TF)
+
+
+# Mouse TFs were saved upper case, need to match casing for curated and coexpr
+names(bind_mm) <- str_to_title(names(bind_mm))
+tfs_curated_mm <- str_to_title(tfs_curated_mm)
 
 
 # Human 
@@ -214,4 +223,12 @@ save_curated_auc_list(path = unibind_auc_mm_path,
                       ncores = 8,
                       verbose = TRUE,
                       force_resave = TRUE)
+
+
+
+# Save
+# ------------------------------------------------------------------------------
+
+saveRDS(avg_vs_ind_recover_curated_hg, avg_vs_ind_recover_curated_hg_path)
+saveRDS(avg_vs_ind_recover_curated_mm, avg_vs_ind_recover_curated_mm_path)
 
