@@ -97,10 +97,10 @@ load_or_generate_agg <- function(path,
 
 load_dat_list <- function(ids,
                           sc_dir = "/space/scratch/amorin/TR_singlecell/",
-                          suffix = "_clean_mat_and_meta_CPM.RDS") {
+                          pattern = "_clean_mat_and_meta_CPM.RDS") {
   
   dat_l <- lapply(ids, function(x) {
-    path <- file.path(sc_dir, x, paste0(x, suffix))
+    path <- file.path(sc_dir, x, paste0(x, pattern))
     dat <- readRDS(path)
   })
   names(dat_l) <- ids
@@ -524,7 +524,7 @@ all_celltype_cor <- function(mat,
   })
   names(cor_l) <- cts
   
-  cor_vec <- sort(unlist(cor_l), decreasing = TRUE)
+  cor_vec <- round(sort(unlist(cor_l), decreasing = TRUE), 5)
   
   return(cor_vec)
 }
