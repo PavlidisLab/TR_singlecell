@@ -47,6 +47,10 @@ plot_hist <- function(df, stat_col, title = NULL, xlab = NULL) {
 
 
 
+# For AUC
+# ------------------------------------------------------------------------------
+
+
 # TODO
 
 plot_perf <- function(df,
@@ -143,6 +147,52 @@ qc_scatter <- function(meta) {
 
 # Correlation plots
 # ------------------------------------------------------------------------------
+
+
+
+
+plot_scatter <- function(df, cell_type) {
+  
+  ggplot(df, aes(x = df[, 1], y = df[, 2])) + 
+    geom_point(size = 2.5, shape = 21, fill = "#756bb1", alpha = 0.8) +
+    geom_smooth(method = "lm", formula = y ~ x, colour = "black") +
+    xlab(colnames(df)[1]) +
+    ylab(colnames(df)[2]) +
+    ggtitle(cell_type) +
+    theme_classic() +
+    theme(plot.title = element_text(size = 15),
+          axis.title = element_text(size = 20),
+          axis.text = element_text(size = 15))
+}
+
+
+
+# TODO: Filter min cell to NA?
+
+all_celltype_scatter <- function(mat,
+                                 meta,
+                                 gene1,
+                                 gene2,
+                                 min_cell = 20) {
+  
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta),
+            c(gene1, gene2) %in% rownames(mat))
+  
+  cts <- unique(meta$Cell_type)
+  
+  plot_l <- lapply(cts, function(ct) {
+    ids <- filter(meta, Cell_type == ct)$ID
+    ct_mat <- as.matrix(t(mat[c(gene1, gene2), ids]))
+    plot_scatter(data.frame(ct_mat), cell_type = ct)
+  })
+  
+  names(plot_l) <- cts
+  plot_l <- plot_l[!is.na(plot_l)]
+  return(plot_l)
+}
+
+
+
 
 # TODO:
 
