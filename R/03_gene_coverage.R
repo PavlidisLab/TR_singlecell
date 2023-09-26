@@ -14,6 +14,8 @@ source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
+force_resave <- TRUE
+
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 ids_hg <- filter(sc_meta, Species == "Human")$ID
@@ -66,6 +68,7 @@ get_gene_msr_mat <- function(ids, meta, genes) {
 
 
 
+# if (!file.exists(msr_mat_hg_path) || force_resave) {
 if (!file.exists(msr_mat_hg_path)) {
   msr_mat_hg <- get_gene_msr_mat(ids_hg, sc_meta, pc_hg$Symbol)
   saveRDS(msr_mat_hg, msr_mat_hg_path)
@@ -74,7 +77,7 @@ if (!file.exists(msr_mat_hg_path)) {
 }
 
 
-if (!file.exists(msr_mat_mm_path)) {
+if (!file.exists(msr_mat_mm_path) || force_resave) {
   msr_mat_mm <- get_gene_msr_mat(ids_mm, sc_meta, pc_mm$Symbol)
   saveRDS(msr_mat_mm, msr_mat_mm_path)
 } else {

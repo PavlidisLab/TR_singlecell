@@ -13,6 +13,8 @@ source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
+force_resave <- TRUE
+
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 ids_hg <- filter(sc_meta, Species == "Human")$ID
@@ -54,7 +56,7 @@ get_avg_coexpr <- function(ids, genes) {
 
 
 
-if (!file.exists(avg_coexpr_hg_path)) {
+if (!file.exists(avg_coexpr_hg_path) || force_resave) {
   avg_coexpr_hg <- get_avg_coexpr(ids_hg, genes = pc_hg$Symbol)
   saveRDS(avg_coexpr_hg, avg_coexpr_hg_path)
 } else {
@@ -63,7 +65,7 @@ if (!file.exists(avg_coexpr_hg_path)) {
 
 
 
-if (!file.exists(avg_coexpr_mm_path)) {
+if (!file.exists(avg_coexpr_mm_path) || force_resave) {
   avg_coexpr_mm <- get_avg_coexpr(ids_mm, genes = pc_mm$Symbol)
   saveRDS(avg_coexpr_mm, avg_coexpr_mm_path)
 } else {
@@ -86,7 +88,7 @@ head(avg_coexpr_mm, 30)
 outfile <- "/space/scratch/amorin/R_objects/top_cor_pair_list.RDS"
 
 
-if (!file.exists(outfile)) {
+if (!file.exists(outfile) || force_resave) {
   
   cor_l <- list(
     Human = get_all_cor_l(ids_hg, gene1 = "FOS", gene2 = "FOSB"),
@@ -101,7 +103,7 @@ if (!file.exists(outfile)) {
 }
 
 
-
+stop()
 
 # Plotting
 # ------------------------------------------------------------------------------
@@ -195,47 +197,6 @@ meta <- dat$Meta
 
 
 ct_cors <- all_celltype_cor(mat, meta, gene1, gene2)
-
-
-
-
-plot_scatter <- function(df, cell_type) {
-  
-  ggplot(df, aes(x = df[, 1], y = df[, 2])) + 
-    geom_point(size = 2.5, shape = 21, fill = "#756bb1", alpha = 0.8) +
-    geom_smooth(method = "lm", formula = y ~ x, colour = "black") +
-    xlab(colnames(df)[1]) +
-    ylab(colnames(df)[2]) +
-    ggtitle(cell_type) +
-    theme_classic() +
-    theme(plot.title = element_text(size = 15),
-          axis.title = element_text(size = 20),
-          axis.text = element_text(size = 15))
-}
-
-
-
-all_celltype_scatter <- function(mat,
-                                 meta,
-                                 gene1,
-                                 gene2,
-                                 min_cell = 20) {
-  
-  stopifnot(c("Cell_type", "ID") %in% colnames(meta),
-            c(gene1, gene2) %in% rownames(mat))
-  
-  cts <- unique(meta$Cell_type)
-  
-  plot_l <- lapply(cts, function(ct) {
-    ct_mat <- t(mat[c(gene1, gene2), filter(meta, Cell_type == ct)$ID])
-    plot_scatter(data.frame(ct_mat), cell_type = ct)
-  })
-  
-  names(plot_l) <- cts
-  plot_l <- plot_l[!is.na(plot_l)]
-  return(plot_l)
-}
-
 
 
 ct_scatter_l <- all_celltype_scatter(mat, meta, gene1, gene2)
