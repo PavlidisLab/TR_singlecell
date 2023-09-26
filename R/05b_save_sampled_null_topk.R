@@ -8,7 +8,7 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/functions.R")
 source("R/00_config.R")
 
-k <- 1000 
+k <- 200 
 n_samps <- 1000
 force_resave <- TRUE
 
@@ -53,7 +53,7 @@ agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = p
 sample_topk_intersect <- function(agg_l, 
                                   genes, 
                                   msr_mat,
-                                  k = 1000,
+                                  k,
                                   check_k_arg = TRUE) {
   
   ids <- names(agg_l)

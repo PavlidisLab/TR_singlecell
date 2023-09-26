@@ -13,7 +13,7 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/functions.R")
 source("R/00_config.R")
 
-k <- 1000
+k <- 200
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -72,7 +72,7 @@ agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes
 get_all_similarity <- function(agg_l, 
                                msr_mat, 
                                genes, 
-                               k = 1000, 
+                               k, 
                                check_k_arg = TRUE) {
   
   stopifnot(genes %in% colnames(agg_l[[1]]))
@@ -111,9 +111,9 @@ save_all_similarity <- function(path,
                                 agg_l, 
                                 msr_mat, 
                                 genes, 
-                                k = 1000, 
+                                k, 
                                 check_k_arg = TRUE,
-                                force_resave = TRUE) {
+                                force_resave = FALSE) {
   
   if (!file.exists(path) || force_resave) {
     
