@@ -72,7 +72,7 @@ sample_topk_intersect <- function(agg_l,
   colnames(sample_mat) <- paste0(ids, "_", sample_genes)
   
   # Get topk overlap between sampled genes
-  sample_topk <- colwise_topk_intersect(sample_mat, k = k, check_k_arg = check_k_arg)
+  sample_topk <- colwise_topk_intersect(sample_mat, k = k)
   sample_df <- mat_to_df(sample_topk, symmetric = TRUE, value_name = "Topk")
   
   return(sample_df)
