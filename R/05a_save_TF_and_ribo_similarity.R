@@ -64,7 +64,8 @@ agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes
 # pairs in which the given gene was measured, and three measures of similarity:
 # 1) The spearman correlation between the gene vectors of the experiment pair;
 # 2) The size of the top k intersect between the experiments;
-# 3) The Jaccard of the top and bottom k elements between the experiments
+# 3) The size of the bottom k intersect between the experiments;
+# 4) The Jaccard of the top and bottom k elements between the experiments
 # ------------------------------------------------------------------------------
 
 
@@ -76,31 +77,32 @@ get_all_similarity <- function(agg_l,
                                check_k_arg = TRUE) {
   
   stopifnot(genes %in% colnames(agg_l[[1]]))
-
+  
   sim_l <- lapply(genes, function(x) {
-
+    
     message(paste(x, Sys.time()))
-
+    
     # For the given gene, create a matrix from the experiments that it is measured
     # in. Remove the gene itself to prevent inflated overlap
     gene_mat <- gene_vec_to_mat(agg_l, x)
     gene_mat <- gene_mat[setdiff(rownames(gene_mat), x), ]
     gene_mat <- subset_to_measured(gene_mat, msr_mat = msr_mat, gene = x)
-
+    
     if (ncol(gene_mat) < 2) {  # need more than one experiment for pairing
       return(NA)
     }
-
+    
     # Experiment x experiment similarity matrices
-    gene_cor <- colwise_cor(gene_mat, cor_method = "spearman")
-    gene_topk <- colwise_topk_intersect(gene_mat, k = k, check_k_arg = check_k_arg)
-    gene_jacc <- colwise_jaccard(binarize_topk_btmk(gene_mat, k = k))
-
+    cor_mat <- colwise_cor(gene_mat, cor_method = "spearman")
+    topk_mat <- colwise_topk_intersect(gene_mat, k = k)
+    bottomk_mat <- colwise_topk_intersect(gene_mat, k = k, decreasing = FALSE)
+    jacc_mat <- colwise_jaccard(gene_mat, k = k)
+    
     # Data frame of unique dataset pairs and their similarities
-    get_similarity_pair_df(gene_cor, gene_topk, gene_jacc)
+    get_similarity_pair_df(cor_mat, topk_mat, bottomk_mat, jacc_mat)
     
   })
-
+  
   names(sim_l) <- genes
   return(sim_l)
 }
@@ -113,7 +115,7 @@ save_all_similarity <- function(path,
                                 genes, 
                                 k, 
                                 check_k_arg = TRUE,
-                                force_resave = FALSE) {
+                                force_resave = TRUE) {
   
   if (!file.exists(path) || force_resave) {
     
