@@ -63,7 +63,7 @@ gene_mat <- subset_to_measured(gene_mat, msr_mat = msr_mat, gene = x)
 cor_mat <- colwise_cor(gene_mat, cor_method = "spearman")
 topk_mat <- colwise_topk_intersect(gene_mat, k = k)
 btmk_mat <- colwise_topk_intersect(gene_mat, k = k, decreasing = FALSE)
-jacc_mat <- colwise_jaccard(binarize_topk_btmk(gene_mat, k = k))
+jacc_mat <- colwise_jaccard(gene_mat, k = k)
 
 
 # Data frame of unique dataset pairs and their similarities
