@@ -33,25 +33,55 @@ subset_to_measured <- function(mat, msr_mat, gene) {
 # k: an integer
 # returns: an integer
 
-check_k <- function(vec_sort, k) {
+
+# check_k <- function(vec_sort, k) {
+#   
+#   if (vec_sort[k] == vec_sort[k - 1]) {
+#     
+#     old_k <- k
+#     k <- 1
+#     
+#     for (i in 2:length(vec_sort)) {
+#       if (vec_sort[i] == vec_sort[i - 1]) {
+#         k <- i - 2  # -2 b/c trailing index and want the position before tie
+#         break()
+#       }
+#     }
+#     
+#     if (k > old_k) stop("New index position k is larger than input k")
+#   }
+#   
+#   return(k)
+# }
+
+
+
+# check_k <- function(vec_sort, k, reverse_sort = FALSE) {
+#   
+#   if (reverse_sort) vec_sort <- -vec_sort
+#   
+#   vec_rank <- rank(-vec_sort, ties.method = "min")
+#   tally_ranks <- sort(table(vec_rank), decreasing = TRUE)
+#   tie_start <- as.integer(names(head(tally_ranks)[1]))
+#   k <- min(k, tie_start - 1)
+#   
+#   return(k)
+# }
+
+
+
+check_k <- function(vec_sort, k, decreasing = TRUE) {
   
-  if (vec_sort[k] == vec_sort[k - 1]) {
-    
-    old_k <- k
-    k <- 1
-    
-    for (i in 2:length(vec_sort)) {
-      if (vec_sort[i] == vec_sort[i - 1]) {
-        k <- i - 2  # -2 b/c trailing index and want the position before tie
-        break()
-      }
-    }
-    
-    if (k > old_k) stop("New index position k is larger than input k")
-  }
+  if (!decreasing) vec_sort <- -vec_sort
+  
+  vec_rank <- rank(-vec_sort, ties.method = "min")
+  tally_ranks <- sort(table(vec_rank), decreasing = TRUE)
+  tie_start <- as.integer(names(head(tally_ranks)[1]))
+  k <- min(k, tie_start - 1)
   
   return(k)
 }
+
 
 
 
@@ -62,11 +92,31 @@ check_k <- function(vec_sort, k) {
 # check_k_arg: logical controls whether check_k() will be used
 # return: a character vector of the names of the top k elements of vec
 
-topk_sort <- function(vec, k, check_k_arg = TRUE) {
-  vec_sort <- sort(vec, decreasing = TRUE)
-  if (check_k_arg) k <- check_k(vec_sort, k)
-  names(vec_sort[1:k])
+# topk_sort <- function(vec, k, check_k_arg = TRUE) {
+#   vec_sort <- sort(vec, decreasing = TRUE)
+#   if (check_k_arg) k <- check_k(vec_sort, k)
+#   names(vec_sort[1:k])
+# }
+
+# topk_sort <- function(vec, k, check_k_arg = TRUE, reverse_sort = FALSE) {
+#   
+#   vec_sort <- sort(vec, decreasing = TRUE)
+#   if (check_k_arg) k <- check_k(vec_sort, k = k, reverse_sort = reverse_sort)
+#   topk <- names(vec_sort[1:k])
+#   
+#   return(topk)
+# }
+
+
+topk_sort <- function(vec, k, check_k_arg = TRUE, decreasing = TRUE) {
+  
+  vec_sort <- sort(vec, decreasing = decreasing)
+  if (check_k_arg) k <- check_k(vec_sort, k = k, decreasing = decreasing)
+  topk <- names(vec_sort[1:k])
+  
+  return(topk)
 }
+
 
 
 
@@ -80,7 +130,7 @@ topk_intersect <- function(vec1, vec2) length(intersect(vec1, vec2))
 # Binarize matrix such that top k and bottom k is 1, everything else 0
 # TODO: doc
 
-binarize_topk_btmk <- function(mat, k = 1000) {
+binarize_topk_btmk <- function(mat, k) {
   
   bin_mat <- apply(mat, 2, function(x) {
     sort_values <- sort(x, decreasing = TRUE)
@@ -101,14 +151,49 @@ binarize_topk_btmk <- function(mat, k = 1000) {
 # check_k_arg: logical controls whether check_k() will be used
 # returns: an ncol(mat) * ncol(mat) integer matrix of top k overlap of mat's columns 
 
-colwise_topk_intersect <- function(mat, k = 1000, check_k_arg = TRUE) {
+# colwise_topk_intersect <- function(mat, k = 1000, check_k_arg = TRUE) {
+#   
+#   col_list <- asplit(mat, 2)
+#   topk_list <- lapply(col_list, topk_sort, k = k, check_k_arg = check_k_arg)
+#   topk_mat <- outer(topk_list, topk_list, Vectorize(topk_intersect))
+#   
+#   return(topk_mat)
+# }
+
+
+# colwise_topk_intersect <- function(mat, 
+#                                    k, 
+#                                    check_k_arg = TRUE,
+#                                    reverse_sort = FALSE) {
+#   
+#   col_list <- asplit(mat, 2)
+#   
+#   topk_list <- lapply(col_list, function(x) {
+#     topk_sort(x, k = k, check_k_arg = check_k_arg, reverse_sort = reverse_sort)
+#   })
+#   
+#   topk_mat <- outer(topk_list, topk_list, Vectorize(topk_intersect))
+#   
+#   return(topk_mat)
+# }
+
+
+colwise_topk_intersect <- function(mat, 
+                                   k, 
+                                   check_k_arg = TRUE,
+                                   decreasing = TRUE) {
   
   col_list <- asplit(mat, 2)
-  topk_list <- lapply(col_list, topk_sort, k = k, check_k_arg = check_k_arg)
+  
+  topk_list <- lapply(col_list, function(x) {
+    topk_sort(x, k = k, check_k_arg = check_k_arg, decreasing = decreasing)
+  })
+  
   topk_mat <- outer(topk_list, topk_list, Vectorize(topk_intersect))
   
   return(topk_mat)
 }
+
 
 
 # TODO: doc
@@ -335,12 +420,13 @@ query_gene_rank_cor_all <- function(agg_l,
 
 # Convert similarity matrices into a dataframe of unique pairs and values
 
-get_similarity_pair_df <- function(cor_mat, topk_mat, jacc_mat) {
+get_similarity_pair_df <- function(cor_mat, topk_mat, bottomk_mat, jacc_mat) {
   
   df <-
     mat_to_df(cor_mat, symmetric = TRUE, value_name = "Scor") %>%
     cbind(
       Topk = mat_to_df(topk_mat, symmetric = TRUE)$Value,
+      Bottomk = mat_to_df(bottomk_mat, symmetric = TRUE)$Value,
       Jaccard = mat_to_df(jacc_mat, symmetric = TRUE)$Value
     )
   
