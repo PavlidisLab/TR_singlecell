@@ -12,7 +12,7 @@ source("R/00_config.R")
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 
-# Measurement matrices used for filtering when a gene was never expressed
+# Measurement matrices used for finding when a gene was measured in an experiment
 msr_cpm_hg <- readRDS(msr_mat_hg_path)
 msr_cpm_mm <- readRDS(msr_mat_mm_path)
 msr_ln_hg <- readRDS("/space/scratch/amorin/R_objects/binary_measurement_matrix_hg_lognorm.RDS")
@@ -23,6 +23,12 @@ stopifnot(identical(rownames(msr_cpm_hg), rownames(msr_ln_hg)),
 
 stopifnot(identical(rownames(msr_cpm_mm), rownames(msr_ln_mm)),
           identical(colnames(msr_cpm_mm), colnames(msr_ln_mm)))
+
+# TF Similarity objects
+sim_cpm_hg <- readRDS(sim_tf_hg_path)
+sim_cpm_mm <- readRDS(sim_tf_mm_path)
+sim_ln_hg <- readRDS("/space/scratch/amorin/R_objects/similarity_TF_hg_lognorm.RDS")
+sim_ln_mm <- readRDS("/space/scratch/amorin/R_objects/similarity_TF_mm_lognorm.RDS")
 
 
 # 1. Differences in binary measurement
@@ -48,34 +54,39 @@ msr_diff_hg <- get_msr_diff(msr_cpm_hg, msr_ln_hg)
 msr_diff_mm <- get_msr_diff(msr_cpm_mm, msr_ln_mm)
 
 
-# Human: SIGLEC5 most diff at 12 datasets, and a handful of experiments have 2
-# genes that differ. In all cases the genes are measured in log norm not CPM.
 
-sort(table(msr_diff_hg$Experiment))
-sort(table(msr_diff_hg$Gene))
-
-# Mouse: Arhgap26 and Fam220a most diff at 4 datasets, and GSE207848 has 12 
-# genes that differ. In all cases the genes are measured in log norm not CPM.
-
-sort(table(msr_diff_mm$Experiment))
-sort(table(msr_diff_mm$Gene))
+# 2. 
+# ------------------------------------------------------------------------------
 
 
-# Load and inpsect data
+# Returns a list of dataframes of summary stats for each TF's similarity
 
-id <- "GSE135922"
-gene <- "ACTB"
+get_summary_df <- function(sim_l, msr_mat) {
+  
+  stats <- c("Scor", "Topk", "Bottomk", "Jaccard")
+  
+  df_l <- lapply(stats, function(stat) {
+    
+    lapply(sim_l, function(x) summary(x[[stat]])) %>% 
+      do.call(rbind, .) %>%
+      as.data.frame() %>% 
+      rownames_to_column(var = "Symbol") %>% 
+      mutate(N_exp = rowSums(msr_mat[names(sim_l), ])) %>%
+      arrange(desc(Median)) %>% 
+      mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
+  })
+  
+  names(df_l) <- stats
+  return(df_l)
+}
 
-dat_cpm <- load_dat_list(id)[[1]]
-dat_ln <- load_dat_list(id, suffix = "_clean_mat_and_meta.RDS")[[1]]
-stopifnot(identical(dim(dat_cpm$Mat), dim(dat_ln$Mat)))
 
-diff_df <- data.frame(
-  Symbol = rownames(dat_cpm$Mat),
-  Diff = rowSums(dat_cpm$Mat) - rowSums(dat_ln$Mat)
-)
 
-plot(dat_cpm$Mat[gene, ], dat_ln$Mat[gene, ])
-plot(rowSums(dat_cpm$Mat), rowSums(dat_ln$Mat))
-cor(rowSums(dat_cpm$Mat), rowSums(dat_ln$Mat), method = "spearman")
-view(data.frame(CPM = dat_cpm$Mat[gene, ], LN = dat_ln$Mat[gene, ]))
+
+summ_cpm_hg <- get_summary_df(sim_cpm_hg, msr_cpm_hg)
+summ_cpm_mm <- get_summary_df(sim_cpm_mm, msr_cpm_mm)
+summ_ln_hg <- get_summary_df(sim_ln_hg, msr_ln_hg)
+summ_ln_mm <- get_summary_df(sim_ln_mm, msr_ln_mm)
+
+
+sim_df_hg <- left_join(summ_cpm_hg$Topk, summ_ln_hg$Topk, by = "Symbol", suffix = c("_CPM", "_LN"))
