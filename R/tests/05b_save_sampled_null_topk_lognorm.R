@@ -87,8 +87,8 @@ sample_topk_intersect <- function(agg_l,
 set.seed(5)
 
 
-null_topk_hg_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersect_hg_lognorm.RDS"
-null_topk_mm_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersect_mm_lognorm.RDS"
+null_topk_hg_path <- paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_hg_k=", k, "_lognorm.RDS")
+null_topk_mm_path <- paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_mm_k=", k, "_lognorm.RDS")
 
 
 if (!file.exists(null_topk_hg_path) || force_resave) {

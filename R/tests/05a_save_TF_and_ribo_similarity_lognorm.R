@@ -143,10 +143,11 @@ save_all_similarity <- function(path,
 # ------------------------------------------------------------------------------
 
 
-sim_tf_hg_path <- "/space/scratch/amorin/R_objects/similarity_TF_hg_lognorm.RDS"
-sim_tf_mm_path <- "/space/scratch/amorin/R_objects/similarity_TF_mm_lognorm.RDS"
-sim_ribo_hg_path <- "/space/scratch/amorin/R_objects/similarity_ribo_hg_lognorm.RDS"
-sim_ribo_mm_path <- "/space/scratch/amorin/R_objects/similarity_ribo_mm_lognorm.RDS"
+sim_tf_hg_path <- paste0("/space/scratch/amorin/R_objects/similarity_TF_hg_k=", k, "_lognorm.RDS")
+sim_tf_mm_path <- paste0("/space/scratch/amorin/R_objects/similarity_TF_mm_k=", k, "_lognorm.RDS")
+sim_ribo_hg_path <- paste0("/space/scratch/amorin/R_objects/similarity_ribo_hg_k=", k, "_lognorm.RDS")
+sim_ribo_mm_path <- paste0("/space/scratch/amorin/R_objects/similarity_ribo_mm_k=", k, "_lognorm.RDS")
+
 
 
 # Human TFs
