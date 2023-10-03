@@ -14,7 +14,7 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-k <- 200
+k <- 1000
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -38,16 +38,22 @@ msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
 # List of paired experiment similarities for TFs
-sim_tf_hg <- readRDS(sim_tf_hg_path)
-sim_tf_mm <- readRDS(sim_tf_mm_path)
+# sim_tf_hg <- readRDS(sim_tf_hg_path)
+sim_tf_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_TF_hg_k=", k, ".RDS"))
+# sim_tf_mm <- readRDS(sim_tf_mm_path)
+sim_tf_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_TF_mm_k=", k, ".RDS"))
 
 # L/S ribo topk overlap
-sim_ribo_hg <- readRDS(sim_ribo_hg_path)
-sim_ribo_mm <- readRDS(sim_ribo_mm_path)
+# sim_ribo_hg <- readRDS(sim_ribo_hg_path)
+sim_ribo_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_ribo_hg_k=", k, ".RDS"))
+# sim_ribo_mm <- readRDS(sim_ribo_mm_path)
+sim_ribo_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_ribo_mm_k=", k, ".RDS"))
 
 # Null topk overlap
-null_topk_hg <- readRDS(null_topk_hg_path)
-null_topk_mm <- readRDS(null_topk_mm_path)
+# null_topk_hg <- readRDS(null_topk_hg_path)
+null_topk_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_hg_k=", k, ".RDS"))
+# null_topk_mm <- readRDS(null_topk_mm_path)
+null_topk_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_mm_k=", k, ".RDS"))
 
 
 
@@ -106,9 +112,11 @@ topk_na_cor_hg <- suppressWarnings(cor.test(summ_tf_hg$Topk$Median, summ_tf_hg$T
 topk_na_cor_mm <- suppressWarnings(cor.test(summ_tf_mm$Topk$Median, summ_tf_mm$Topk$N_exp, method = "spearman"))
 
 
-# Count of TFs whose median topk is greater than the null
-topk_gt_null_hg <- sum(summ_sub_tf_hg$Topk$Median > summ_null_hg["Median"]) / nrow(summ_sub_tf_hg)
-topk_gt_null_mm <- sum(summ_sub_tf_mm$Median > summ_null_mm["Median"]) / nrow(summ_sub_tf_mm)
+# Count of TFs whose expected topk is greater than the null
+topk_gt_null_hg <- sum(summ_sub_tf_hg$Topk$Mean > mean(summ_null_hg[, "Mean"])) / nrow(summ_sub_tf_hg$Topk)
+# topk_gt_null_hg <- sum(summ_sub_tf_hg$Topk$Median > mean(summ_null_hg[, "Median"])) / nrow(summ_sub_tf_hg$Topk)
+topk_gt_null_mm <- sum(summ_sub_tf_mm$Topk$Mean > mean(summ_null_mm[, "Mean"])) / nrow(summ_sub_tf_mm$Topk)
+# topk_gt_null_mm <- sum(summ_sub_tf_mm$Topk$Median > mean(summ_null_mm[, "Median"])) / nrow(summ_sub_tf_mm$Topk)
 
 
 # TFs whose median topk is greater than the median topk for ribosomal
@@ -116,49 +124,64 @@ topk_gt_ribo_hg <- filter(summ_sub_tf_hg$Topk, Median > median(summ_ribo_hg$Topk
 topk_gt_ribo_mm <- filter(summ_sub_tf_mm$Topk, Median > median(summ_ribo_mm$Topk[["Median"]]))
 
 
+# Distribution of similarity values for each TF/ribo/null
 
-# Examples of best/worst pairs for a given TF
+
+summary(summ_ribo_hg$Topk[, "Mean"])
+summary(summ_null_hg[, "Mean"])
+summary(summ_sub_tf_hg$Topk[, "Mean"])
+
+summary(summ_ribo_mm$Topk[, "Mean"])
+summary(summ_null_mm[, "Mean"])
+summary(summ_sub_tf_mm$Topk[, "Mean"])
+
+
+
+# Examples of most similar individual experiments pairs across TFs
 # ------------------------------------------------------------------------------
 
 
-
-# ASCL1 "GSE156793" "GSE137537" 0 count overlap Scor = 0.3130 is this because low 
-# non-tied k? Looks it - "GSE156793" k=148, although still none of these overlap
-# "Elmentaite2021"  "Han2022" Scor 0.58 and Topk 2
-
-# FOXF1 "Stewart2019" "Young2018" suspicious k=998
-
-
-tf <- "FOXF1"
-mat <- gene_vec_to_mat(agg_tf_hg, tf)
-mat <- subset_to_measured(mat, msr_hg, tf)
-id1 <- "Stewart2019"  # "Elmentaite2021"
-id2 <- "Young2018"   # "Han2022"
-
-vec1 <- mat[rownames(mat) != tf, id1]
-vec2 <- mat[rownames(mat) != tf, id2]
-
-vec1_sort <- sort(vec1, decreasing = TRUE)
-vec2_sort <- sort(vec2, decreasing = TRUE)
-
-check_k(vec1_sort, 1000)
-check_k(vec2_sort, 1000)
-
-topk_intersect(topk_sort(vec1, k = 1000), topk_sort(vec2, k = 1000))
-
-plot(mat[, id1], mat[, id2])
-cor(mat[, id1], mat[, id2], method = "spearman")
-view(data.frame(Symbol = names(vec1), Vec1 = vec1, Vec2 = vec2))
+get_best <- function(summ_df, sim_l, n_tfs = 3, n_pairs = 3) {
+  
+  stats <- c("Scor", "Topk", "Bottomk", "Jaccard")
+  
+  stat_l <- lapply(stats, function(stat) {
+    tfs <- as.character(slice_max(summ_df[[stat]], Max., n = n_tfs)$Symbol)
+    lapply(sim_l[tfs], slice_max, !!sym(stat), n = n_pairs)
+  })
+  
+  names(stat_l) <- stats
+  return(stat_l)
+}
 
 
 
 
+get_best(summ_df = summ_sub_tf_hg, sim_l = sim_tf_hg)
+get_best(summ_df = summ_sub_tf_mm, sim_l = sim_tf_mm)
+
+
+get_best(summ_df = summ_ribo_hg, sim_l = sim_ribo_hg)
+get_best(summ_df = summ_ribo_mm, sim_l = sim_ribo_mm)
+
+
+
+
+# Are TFs that are below null in Topk above null in bottom k?
 # Example of TFs with good measurement coverage but low similarity. 
 # ------------------------------------------------------------------------------
 
 
-arrange(summ_tf_hg, Median, desc(N_exp)) %>% head
-arrange(summ_tf_mm, Median, desc(N_exp)) %>% head
+
+# tt1 <- left_join(summ_sub_tf_hg$Topk, summ_sub_tf_hg$Bottomk, by = "Symbol", suffix = c("_Topk", "_Bottomk"))
+# plot(tt1$Mean_Topk, tt1$Mean_Bottomk)
+# cor(tt1$Mean_Topk, tt1$Mean_Bottomk)
+# 
+# tt2 <- filter(summ_sub_tf_hg$Topk, Mean < mean(summ_null_hg[, "Mean"]))
+# tt3 <- filter(summ_sub_tf_hg$Bottomk, Symbol %in% tt2$Symbol) %>% arrange(desc(Mean))
+# 
+# arrange(summ_tf_hg, Median, desc(N_exp)) %>% head
+# arrange(summ_tf_mm, Median, desc(N_exp)) %>% head
 
 
 
@@ -169,24 +192,24 @@ arrange(summ_tf_mm, Median, desc(N_exp)) %>% head
 # ------------------------------------------------------------------------------
 
 
-summ_tf_hg <- summ_tf_hg %>% 
-  left_join(., tfs_hg[, c("Symbol", "Family")], by = "Symbol") %>% 
-  arrange(Median) %>% 
-  mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
-
-
-family_hg <- summ_tf_hg %>% 
-  group_by(Family) %>% 
-  summarise(
-    Med_topk = median(Median), 
-    N_TFs = n(),
-    Med_exp_msrd = median(N_exp)
-    ) %>% 
-  arrange(desc(Med_topk))
-
-
-boxplot(summ_tf_hg$Med ~ summ_tf_hg$Family)
-
+# summ_tf_hg <- summ_tf_hg %>% 
+#   left_join(., tfs_hg[, c("Symbol", "Family")], by = "Symbol") %>% 
+#   arrange(Median) %>% 
+#   mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
+# 
+# 
+# family_hg <- summ_tf_hg %>% 
+#   group_by(Family) %>% 
+#   summarise(
+#     Med_topk = median(Median), 
+#     N_TFs = n(),
+#     Med_exp_msrd = median(N_exp)
+#     ) %>% 
+#   arrange(desc(Med_topk))
+# 
+# 
+# boxplot(summ_tf_hg$Med ~ summ_tf_hg$Family)
+# 
 
 
 
@@ -213,35 +236,39 @@ p1 <- ggplot(sim_tf_hg[[gene_hg]], aes(x = Scor, y = Topk)) +
 # Scatterplot of TF median topk intersect with text overlay for top n TFs
 
 
-scatter_topk_median <- function(summary_df, 
-                                summ_nullary, 
-                                topn_label = 30,
-                                title) {
+# Labels to the left
+point_plot_similarity1 <- function(summary_df,
+                                   null_df,
+                                   topn_label = 30,
+                                   plot_title,
+                                   ylabel) {
   
-  summary_df <- summary_df %>%  
-    # mutate(Group = Symbol %in% slice_max(summary_df, Median, n = topn_label)$Symbol)
-    mutate(Group = Symbol %in% slice_max(summary_df, Mean, n = topn_label)$Symbol)
+  null_expected <- mean(null_df[, "Mean"])
   
-  # ggplot(summary_df, aes(y = Median, x = Symbol)) +
+  topn_genes <- slice_max(summary_df, Mean, n = topn_label)$Symbol
+  
+  summary_df <- summary_df %>%
+    arrange(Mean) %>% 
+    mutate(
+      Group = Symbol %in% topn_genes,
+      Symbol = factor(Symbol, levels = unique(Symbol)))
+    
   ggplot(summary_df, aes(y = Mean, x = Symbol)) +
     geom_point() +
     geom_text_repel(data = filter(summary_df, Group),
-                    # aes(x = Symbol, y = Median, label = Symbol, fontface = "italic"),
                     aes(x = Symbol, y = Mean, label = Symbol, fontface = "italic"),
-                    max.overlaps = 30, 
+                    max.overlaps = topn_label,
                     force = 0.5,
-                    nudge_x = -0.25,
-                    hjust = 0,
+                    nudge_x = -500,
+                    nudge_y = 150,
+                    hjust = 1,
+                    direction = "y",
                     size = 5,
                     segment.size = 0.2) +
-    # geom_hline(yintercept = summ_nullary["Median"], colour = "firebrick") +
-    geom_hline(yintercept = summ_nullary["Mean"], colour = "firebrick") +
-    geom_hline(yintercept = summ_nullary["1st Qu."], colour = "grey85") +
-    geom_hline(yintercept = summ_nullary["3rd Qu."], colour = "grey85") +
-    ggtitle(title) +
-    # ylab(paste0("Median Top k (k=", k, ")")) +
-    ylab(paste0("Mean Top k (k=", k, ")")) +
-    expand_limits(x = nrow(summ_tf_hg) + 50) +  # prevent point cut off
+    geom_hline(yintercept = null_expected, colour = "firebrick") +
+    ggtitle(plot_title) +
+    ylab(ylabel) +
+    expand_limits(x = nrow(summary_df) + 50) +  # prevent point cut off
     theme_classic() +
     theme(axis.text = element_text(size = 20),
           axis.text.x = element_blank(),
@@ -253,12 +280,139 @@ scatter_topk_median <- function(summary_df,
 
 
 
-p2a <- scatter_topk_median(summ_tf_hg, summ_null_hg, title = "Human")
-p2b <- scatter_topk_median(summ_tf_mm, summ_null_mm, title = "Mouse")
-p2 <- plot_grid(p2a, p2b)
+# Labels to the right
+point_plot_similarity2 <- function(summary_df,
+                                   null_df,
+                                   topn_label = 30,
+                                   plot_title,
+                                   ylabel) {
+  
+  null_expected <- mean(null_df[, "Mean"])
+  
+  topn_genes <- slice_max(summary_df, Mean, n = topn_label)$Symbol
+  
+  summary_df <- summary_df %>%
+    arrange(Mean) %>% 
+    mutate(
+      Group = Symbol %in% topn_genes,
+      Symbol = factor(Symbol, levels = unique(Symbol)))
+  
+  ggplot(summary_df, aes(y = Mean, x = Symbol)) +
+    geom_point() +
+    geom_text_repel(data = filter(summary_df, Group),
+                    aes(x = Symbol, y = Mean, label = Symbol, fontface = "italic"),
+                    max.overlaps = topn_label, 
+                    force = 0.5,
+                    nudge_x = 250,
+                    hjust = 0,
+                    direction = "y",
+                    size = 5,
+                    segment.size = 0.1,
+                    segment.color = "grey50") +
+    geom_hline(yintercept = null_expected, colour = "firebrick") +
+    ggtitle(plot_title) +
+    ylab(ylabel) +
+    expand_limits(x = nrow(summary_df) + 250) +  # prevent point cut off
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title = element_text(size = 20),
+          plot.title = element_text(size = 20),
+          plot.margin = margin(c(10, 10, 10, 10)))
+}
 
-ggsave(p2, height = 9, width = 18, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "scatter_topk_median.png"))
+
+
+px_hg1 <- point_plot_similarity1(summ_tf_hg$Topk,
+                                 plot_title = "Human",
+                                 null_df = summ_null_hg,
+                                 ylabel = paste0("Mean Top k (k=", k, ")"))
+
+
+px_mm1 <- point_plot_similarity1(summ_tf_mm$Topk,
+                                 plot_title = "Mouse",
+                                 null_df = summ_null_mm,
+                                 ylabel = paste0("Mean Top k (k=", k, ")"))
+
+
+
+px_hg2 <- point_plot_similarity2(summ_tf_hg$Topk,
+                                 plot_title = "Human",
+                                 null_df = summ_null_hg,
+                                 ylabel = paste0("Mean Top k (k=", k, ")"))
+
+
+px_mm2 <- point_plot_similarity2(summ_tf_mm$Topk,
+                                 plot_title = "Mouse",
+                                 null_df = summ_null_mm,
+                                 ylabel = paste0("Mean Top k (k=", k, ")"))
+
+
+# ggsave(p2, height = 9, width = 18, device = "png", dpi = 300,
+       # filename = file.path(plot_dir, "scatter_topk_median.png"))
+
+
+
+
+# Histogram of expected values for TF, null, and ribosomal
+
+
+hist_expected <- function(tf_df, null_df, ribo_df, xlabel) {
+  
+  
+  expected_df <- data.frame(
+    Stat = c(tf_df[, "Mean"],
+             null_df[, "Mean"],
+             ribo_df[, "Mean"]),
+    Group = c(rep("TF", nrow(tf_df)),
+              rep("Null", nrow(null_df)),
+              rep("Ribosomal", nrow(ribo_df)))
+  )
+  
+  
+  ggplot(expected_df, aes(x = Stat)) + 
+    facet_wrap(~Group, nrow = 3, scales = "free") + 
+    geom_histogram(bins = 30) +
+    xlab(xlabel) +
+    ylab("Count") +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20),
+          plot.title = element_text(size = 20),
+          strip.text = element_text(size = 20),
+          strip.background = element_rect(color = "black", fill = c("lightgrey")),
+          plot.margin = margin(c(10, 20, 10, 10)))
+  
+  
+}
+
+
+
+
+py_hg <- hist_expected(tf_df = summ_tf_hg$Topk,
+                       null_df = summ_null_hg,
+                       ribo_df = summ_ribo_hg$Topk,
+                       xlabel = paste0("Mean Top k (k=", k, ")"))
+
+
+py_mm <- hist_expected(tf_df = summ_tf_mm$Topk,
+                       null_df = summ_null_mm,
+                       ribo_df = summ_ribo_mm$Topk,
+                       xlabel = paste0("Mean Top k (k=", k, ")"))
+
+
+
+
+pxy_hg1 <- plot_grid(py_hg, px_hg1, rel_widths = c(0.5, 1))
+pxy_hg2 <- plot_grid(py_hg, px_hg2, rel_widths = c(0.5, 1))
+
+pxy_mm1 <- plot_grid(py_mm, px_mm1, rel_widths = c(0.5, 1))
+pxy_mm2 <- plot_grid(py_mm, px_mm2, rel_widths = c(0.5, 1))
+
+
+ggsave(pxy2, height = 9, width = 15, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "tt.png"))
 
 
 
@@ -375,9 +529,6 @@ boxplot(log10(plot_df_mm$Topk+1) ~ plot_df_mm$Group)
 
 
 
-# Look at distribution of expected values for TF versus null
-plot(density(summ_sub_tf_hg$Topk[, "Mean"]), ylim = c(0, 4))
-lines(density(summ_null_hg[, "Mean"]), col = "red")
 
 
 
