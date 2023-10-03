@@ -75,9 +75,14 @@ sample_topk_intersect <- function(agg_l,
   sample_mat <- do.call(cbind, sample_mat)
   colnames(sample_mat) <- paste0(ids, "_", sample_genes)
   
-  # Get topk overlap between sampled genes
-  sample_topk <- colwise_topk_intersect(sample_mat, k = k)
-  sample_df <- mat_to_df(sample_topk, symmetric = TRUE, value_name = "Topk")
+  # Experiment x experiment similarity matrices
+  cor_mat <- colwise_cor(sample_mat, cor_method = "spearman")
+  topk_mat <- colwise_topk_intersect(sample_mat, k = k)
+  bottomk_mat <- colwise_topk_intersect(sample_mat, k = k, decreasing = FALSE)
+  jacc_mat <- colwise_jaccard(sample_mat, k = k)
+  
+  # Data frame of unique dataset pairs and their similarities
+  sample_df <- get_similarity_pair_df(cor_mat, topk_mat, bottomk_mat, jacc_mat)
   
   return(sample_df)
 }
