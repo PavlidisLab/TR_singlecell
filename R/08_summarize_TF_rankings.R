@@ -49,7 +49,39 @@ arrange(rank_tf_hg$E2F8, desc(Avg_RSR)) %>% head(30)
 arrange(rank_tf_mm$E2f8, desc(Avg_RSR)) %>% head(30)
 
 
+# Inspect ortho
+# ------------------------------------------------------------------------------
 
+
+tfs_ortho <- filter(pc_ortho, Symbol_hg %in% names(rank_tf_hg) & Symbol_mm %in% names(rank_tf_mm))
+  
+
+df_hg <- left_join(rank_tf_hg$ASCL1, pc_ortho, by = c("Symbol" = "Symbol_hg")) %>% filter(!is.na(ID))
+df_mm <- left_join(rank_tf_mm$Ascl1, pc_ortho, by = c("Symbol" = "Symbol_mm")) %>% filter(!is.na(ID))
+ortho_df <- left_join(df_hg, df_mm, by = "ID", suffix = c("_Human", "_Mouse")) %>% filter(!is.na(Avg_RSR_Human) & !is.na(Avg_RSR_Mouse))
+plot(ortho_df$Avg_RSR_Human, ortho_df$Avg_RSR_Mouse)
+cor(ortho_df$Avg_RSR_Human, ortho_df$Avg_RSR_Mouse, method = "spearman")
+
+
+ortho_cor <- mclapply(1:nrow(tfs_ortho), function(x) {
+  
+  df_hg <- left_join(rank_tf_hg[[tfs_ortho$Symbol_hg[x]]], pc_ortho, by = c("Symbol" = "Symbol_hg")) %>% filter(!is.na(ID))
+  df_mm <- left_join(rank_tf_mm[[tfs_ortho$Symbol_mm[x]]], pc_ortho, by = c("Symbol" = "Symbol_mm")) %>% filter(!is.na(ID))
+  ortho_df <- left_join(df_hg, df_mm, by = "ID", suffix = c("_Human", "_Mouse")) %>% filter(!is.na(Avg_RSR_Human) & !is.na(Avg_RSR_Mouse))
+  cor(ortho_df$Avg_RSR_Human, ortho_df$Avg_RSR_Mouse, method = "spearman")
+  
+}, mc.cores = ncore)
+
+
+ortho_cor <- data.frame(Cor = unlist(ortho_cor), Symbol = tfs_ortho$Symbol_hg)
+
+
+px <- plot_hist(ortho_cor, stat_col = "Cor", xlab = "Similarity of TF coexpression partners", title = "n=1241 orthologous TFs") + 
+  xlim(c(-0.4, 1))
+
+
+ggsave(px, height = 5, width = 7, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "ortho_rank_similarity.png"))
 
 
 
@@ -221,5 +253,6 @@ ggplot(rank_tf_hg$ASCL1, aes(x = Topk_count)) +
         axis.title = element_text(size = 20),
         plot.title = element_text(size = 20),
         plot.margin = margin(c(10, 10, 10, 10)))
+
 
 
