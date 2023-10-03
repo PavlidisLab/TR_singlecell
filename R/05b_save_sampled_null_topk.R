@@ -8,7 +8,7 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/functions.R")
 source("R/00_config.R")
 
-k <- 200 
+k <- 200
 n_samps <- 1000
 force_resave <- TRUE
 
@@ -81,6 +81,12 @@ sample_topk_intersect <- function(agg_l,
 
 
 set.seed(5)
+
+
+
+null_topk_hg_path <- paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_hg_k=", k, ".RDS")
+null_topk_mm_path <- paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_mm_k=", k, ".RDS")
+
 
 
 
