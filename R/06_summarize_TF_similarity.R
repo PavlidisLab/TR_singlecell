@@ -212,6 +212,27 @@ get_best(summ_df = summ_ribo_mm, sim_l = sim_ribo_mm)
 # 
 
 
+# Rank order of similarity between species
+# ------------------------------------------------------------------------------
+
+
+tt_hg <- summ_sub_tf_hg$Topk %>% 
+  filter(Symbol %in% pc_ortho$Symbol_hg) %>% 
+  left_join(., pc_ortho, by = c("Symbol" = "Symbol_hg"))
+
+
+tt_mm <- summ_sub_tf_mm$Topk %>% 
+  filter(Symbol %in% pc_ortho$Symbol_mm) %>% 
+  left_join(., pc_ortho, by = c("Symbol" = "Symbol_mm"))
+
+
+ortho_top <- left_join(tt_hg, tt_mm,
+                       by = "ID",
+                       suffix = c("_Human", "_Mouse"))
+
+plot(ortho_top$Mean_Human, ortho_top$Mean_Mouse)
+cor(ortho_top$Mean_Human, ortho_top$Mean_Mouse, use = "pairwise.complete.obs", method = "spearman")
+
 
 
 # Plotting
@@ -303,7 +324,7 @@ point_plot_similarity2 <- function(summary_df,
                     aes(x = Symbol, y = Mean, label = Symbol, fontface = "italic"),
                     max.overlaps = topn_label, 
                     force = 0.5,
-                    nudge_x = 250,
+                    nudge_x = 300,
                     hjust = 0,
                     direction = "y",
                     size = 5,
@@ -312,7 +333,7 @@ point_plot_similarity2 <- function(summary_df,
     geom_hline(yintercept = null_expected, colour = "firebrick") +
     ggtitle(plot_title) +
     ylab(ylabel) +
-    expand_limits(x = nrow(summary_df) + 250) +  # prevent point cut off
+    expand_limits(x = nrow(summary_df) + 300) +  # prevent point cut off
     theme_classic() +
     theme(axis.text = element_text(size = 20),
           axis.text.x = element_blank(),
@@ -409,9 +430,16 @@ pxy_hg2 <- plot_grid(py_hg, px_hg2, rel_widths = c(0.5, 1))
 
 pxy_mm1 <- plot_grid(py_mm, px_mm1, rel_widths = c(0.5, 1))
 pxy_mm2 <- plot_grid(py_mm, px_mm2, rel_widths = c(0.5, 1))
+pxy_mm3 <- plot_grid(px_mm1, py_mm, rel_widths = c(1, 0.5))
 
 
-ggsave(pxy2, height = 9, width = 15, device = "png", dpi = 300,
+
+# ggsave(pxy_hg2, height = 9, width = 15, device = "png", dpi = 300,
+#        filename = file.path(plot_dir, "tt.png"))
+
+
+ggsave(plot_grid(pxy_hg1, pxy_mm3, nrow = 1), 
+       height = 8, width = 20, device = "png", dpi = 300,
        filename = file.path(plot_dir, "tt.png"))
 
 
