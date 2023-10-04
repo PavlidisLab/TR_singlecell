@@ -75,11 +75,11 @@ agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes
 
 
 
-get_all_similarity <- function(agg_l, 
-                               msr_mat, 
-                               genes, 
-                               k, 
-                               check_k_arg = TRUE) {
+calc_all_similarity <- function(agg_l,
+                                msr_mat,
+                                genes,
+                                k,
+                                check_k_arg = TRUE) {
   
   stopifnot(genes %in% colnames(agg_l[[1]]))
   
@@ -124,11 +124,11 @@ save_all_similarity <- function(path,
   
   if (!file.exists(path) || force_resave) {
     
-    sim <- get_all_similarity(agg_l = agg_l, 
-                              msr_mat = msr_mat, 
-                              genes = genes, 
-                              k = k,
-                              check_k_arg = check_k_arg)
+    sim <- calc_all_similarity(agg_l = agg_l,
+                               msr_mat = msr_mat,
+                               genes = genes,
+                               k = k,
+                               check_k_arg = check_k_arg)
     
     sim <- sim[!is.na(sim)]
     saveRDS(sim, path)
