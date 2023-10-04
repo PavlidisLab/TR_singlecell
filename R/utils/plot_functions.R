@@ -40,8 +40,8 @@ plot_hist <- function(df, stat_col, title = NULL, xlab = NULL) {
     theme_classic() +
     theme(axis.text = element_text(size = 20),
           axis.title = element_text(size = 20),
-          plot.title = element_text(size = 20))
-  
+          plot.title = element_text(size = 20),
+          plot.margin = margin(c(10, 20, 10, 10)))
 }
 
 
