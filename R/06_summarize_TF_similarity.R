@@ -186,6 +186,11 @@ divergent_mm <- calc_prop_divergent(topk_df = summ_sub_tf_mm$Topk,
 
 
 
+# Examples of TFs with good measurement coverage but low similarity. 
+# summ_sub_tf_hg$Topk %>% filter(N_exp > 80) %>% slice_min(Mean, n = 10)
+# summ_sub_tf_mm$Topk %>% filter(N_exp > 80) %>% slice_min(Mean, n = 10)
+# filter(summ_sub_tf_hg$Bottomk, Symbol == "ZSCAN22")
+# filter(summ_sub_tf_mm$Bottomk, Symbol == "Zfp661")
 
 
 
@@ -193,12 +198,12 @@ divergent_mm <- calc_prop_divergent(topk_df = summ_sub_tf_mm$Topk,
 # ------------------------------------------------------------------------------
 
 
-get_best <- function(summ_df, sim_l, n_tfs = 3, n_pairs = 3) {
+get_best_pairs <- function(summ_df_l, sim_l, n_tfs = 3, n_pairs = 3) {
   
-  stats <- c("Scor", "Topk", "Bottomk", "Jaccard")
+  stats <- names(summ_df_l)
   
   stat_l <- lapply(stats, function(stat) {
-    tfs <- as.character(slice_max(summ_df[[stat]], Max., n = n_tfs)$Symbol)
+    tfs <- as.character(slice_max(summ_df_l[[stat]], Max., n = n_tfs)$Symbol)
     lapply(sim_l[tfs], slice_max, !!sym(stat), n = n_pairs)
   })
   
@@ -207,30 +212,11 @@ get_best <- function(summ_df, sim_l, n_tfs = 3, n_pairs = 3) {
 }
 
 
+best_pairs_tf_hg <- get_best_pairs(summ_df_l = summ_sub_tf_hg, sim_l = sim_tf_hg)
+best_pairs_tf_mm <- get_best_pairs(summ_df_l = summ_sub_tf_mm, sim_l = sim_tf_mm)
 
-
-get_best(summ_df = summ_sub_tf_hg, sim_l = sim_tf_hg)
-get_best(summ_df = summ_sub_tf_mm, sim_l = sim_tf_mm)
-
-
-get_best(summ_df = summ_ribo_hg, sim_l = sim_ribo_hg)
-get_best(summ_df = summ_ribo_mm, sim_l = sim_ribo_mm)
-
-
-
-
-
-# Example of TFs with good measurement coverage but low similarity. 
-# ------------------------------------------------------------------------------
-
-
-
-
-# 
-# arrange(summ_tf_hg, Median, desc(N_exp)) %>% head
-# arrange(summ_tf_mm, Median, desc(N_exp)) %>% head
-
-
+best_pairs_ribo_hg <- get_best_pairs(summ_df_l = summ_ribo_hg, sim_l = sim_ribo_hg)
+best_pairs_ribo_mm <- get_best_pairs(summ_df_l = summ_ribo_mm, sim_l = sim_ribo_mm)
 
 
 
