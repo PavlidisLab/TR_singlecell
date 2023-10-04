@@ -14,7 +14,7 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-k <- 1000
+k <- 200
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -50,10 +50,10 @@ sim_ribo_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_ribo_h
 sim_ribo_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_ribo_mm_k=", k, ".RDS"))
 
 # Null topk overlap
-# null_topk_hg <- readRDS(null_topk_hg_path)
-null_topk_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_hg_k=", k, ".RDS"))
-# null_topk_mm <- readRDS(null_topk_mm_path)
-null_topk_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_mm_k=", k, ".RDS"))
+# sim_null_hg <- readRDS(sim_null_hg_path)
+sim_null_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_hg_k=", k, ".RDS"))
+# sim_null_mm <- readRDS(sim_null_mm_path)
+sim_null_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_mm_k=", k, ".RDS"))
 
 
 
@@ -63,19 +63,23 @@ null_topk_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/sampled_null_top
 
 # Returns a list of dataframes of summary stats for each TF's similarity
 
-get_summary_df <- function(sim_l, msr_mat) {
+get_summary_df <- function(sim_l, msr_mat = NULL, add_nexp = TRUE) {
   
   stats <- c("Scor", "Topk", "Bottomk", "Jaccard")
   
   df_l <- lapply(stats, function(stat) {
     
-    lapply(sim_l, function(x) summary(x[[stat]])) %>% 
+    df <- 
+      lapply(sim_l, function(x) summary(x[[stat]])) %>% 
       do.call(rbind, .) %>%
       as.data.frame() %>% 
       rownames_to_column(var = "Symbol") %>% 
-      mutate(N_exp = rowSums(msr_mat[names(sim_l), ])) %>%
       arrange(desc(Median)) %>% 
       mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
+    
+    if (add_nexp) df[["N_exp"]] <-  rowSums(msr_mat[as.character(df$Symbol), ])
+    
+    return(df)
   })
   
   names(df_l) <- stats
@@ -83,7 +87,7 @@ get_summary_df <- function(sim_l, msr_mat) {
 }
 
 
-# Organizing summary of topk intersects
+# Organizing summary dataframes of TF similarity across experiment pairs
 # ------------------------------------------------------------------------------
 
 
@@ -103,37 +107,85 @@ summ_ribo_mm <- get_summary_df(sim_ribo_mm, msr_mm)
 
 
 # Summary of null topk overlap
-summ_null_hg <- do.call(rbind, lapply(null_topk_hg, function(x) summary(x$Topk)))
-summ_null_mm <- do.call(rbind, lapply(null_topk_mm, function(x) summary(x$Topk)))
+summ_null_hg <- get_summary_df(sim_null_hg, add_nexp = FALSE)
+summ_null_mm <- get_summary_df(sim_null_mm, add_nexp = FALSE)
 
 
-# Relationship between median topk intersect and count of measured experiments
-topk_na_cor_hg <- suppressWarnings(cor.test(summ_tf_hg$Topk$Median, summ_tf_hg$Topk$N_exp, method = "spearman"))
-topk_na_cor_mm <- suppressWarnings(cor.test(summ_tf_mm$Topk$Median, summ_tf_mm$Topk$N_exp, method = "spearman"))
+# summary(summ_ribo_hg$Topk[, "Mean"])
+# summary(summ_null_hg[, "Mean"])
+# summary(summ_sub_tf_hg$Topk[, "Mean"])
+# summary(summ_ribo_mm$Topk[, "Mean"])
+# summary(summ_null_mm[, "Mean"])
+# summary(summ_sub_tf_mm$Topk[, "Mean"])
 
 
-# Count of TFs whose expected topk is greater than the null
-topk_gt_null_hg <- sum(summ_sub_tf_hg$Topk$Mean > mean(summ_null_hg[, "Mean"])) / nrow(summ_sub_tf_hg$Topk)
-# topk_gt_null_hg <- sum(summ_sub_tf_hg$Topk$Median > mean(summ_null_hg[, "Median"])) / nrow(summ_sub_tf_hg$Topk)
-topk_gt_null_mm <- sum(summ_sub_tf_mm$Topk$Mean > mean(summ_null_mm[, "Mean"])) / nrow(summ_sub_tf_mm$Topk)
-# topk_gt_null_mm <- sum(summ_sub_tf_mm$Topk$Median > mean(summ_null_mm[, "Median"])) / nrow(summ_sub_tf_mm$Topk)
+
+# Count of TFs whose expected similarity is greater than the expected null
+# ------------------------------------------------------------------------------
 
 
-# TFs whose median topk is greater than the median topk for ribosomal
-topk_gt_ribo_hg <- filter(summ_sub_tf_hg$Topk, Median > median(summ_ribo_hg$Topk[["Median"]]))
-topk_gt_ribo_mm <- filter(summ_sub_tf_mm$Topk, Median > median(summ_ribo_mm$Topk[["Median"]]))
+calc_prop_gt_null <- function(sim_l, null_l) {
+  
+  stats <- intersect(names(sim_l), names(null_l))
+  n <- nrow(sim_l[[1]])
+  
+  prop_l <- lapply(stats, function(x) {
+    null_mean <- mean(null_l[[x]]$Mean)
+    sum(sim_l[[x]]$Mean > null_mean) / n
+  })
+  
+  names(prop_l) <- stats
+  return(prop_l)
+}
 
 
-# Distribution of similarity values for each TF/ribo/null
+prop_gt_null_hg <- calc_prop_gt_null(sim_l = summ_sub_tf_hg, null_l = summ_null_hg)
+prop_gt_null_mm <- calc_prop_gt_null(sim_l = summ_sub_tf_mm, null_l = summ_null_mm)
 
 
-summary(summ_ribo_hg$Topk[, "Mean"])
-summary(summ_null_hg[, "Mean"])
-summary(summ_sub_tf_hg$Topk[, "Mean"])
 
-summary(summ_ribo_mm$Topk[, "Mean"])
-summary(summ_null_mm[, "Mean"])
-summary(summ_sub_tf_mm$Topk[, "Mean"])
+# Are TFs that are below null in Topk above null in bottom k?
+# ------------------------------------------------------------------------------
+
+
+calc_prop_divergent <- function(topk_df, bottomk_df, null_topk, null_bottomk) {
+  
+  join_df <- left_join(topk_df, bottomk_df,
+                       by = "Symbol",
+                       suffix = c("_Topk", "_Bottomk"))
+  
+  null_topk_mean <- mean(null_topk[, "Mean"])
+  null_bottomk_mean <- mean(null_bottomk[, "Mean"])
+  
+  topk_lt_null <- filter(topk_df, Mean < null_topk_mean)$Symbol
+  bottomk_gt_null <- filter(bottomk_df, Mean > null_bottomk_mean)$Symbol
+  
+  div_df <- filter(join_df, Symbol %in% intersect(topk_lt_null, bottomk_gt_null))
+  
+  summary_df <- data.frame(N_topk_lt_null = length(topk_lt_null),
+                           N_bottomk_gt_null = length(bottomk_gt_null),
+                           Prop_divergent = nrow(div_df) / length(topk_lt_null))
+  
+  
+  return(list(Summary = summary_df, Divergent = div_df))
+}
+
+
+
+
+divergent_hg <- calc_prop_divergent(topk_df = summ_sub_tf_hg$Topk,
+                                    bottomk_df = summ_sub_tf_hg$Bottomk,
+                                    null_topk = summ_null_hg$Topk,
+                                    null_bottomk = summ_null_hg$Bottomk)
+
+
+divergent_mm <- calc_prop_divergent(topk_df = summ_sub_tf_mm$Topk,
+                                    bottomk_df = summ_sub_tf_mm$Bottomk,
+                                    null_topk = summ_null_mm$Topk,
+                                    null_bottomk = summ_null_mm$Bottomk)
+
+
+
 
 
 
@@ -167,18 +219,13 @@ get_best(summ_df = summ_ribo_mm, sim_l = sim_ribo_mm)
 
 
 
-# Are TFs that are below null in Topk above null in bottom k?
+
 # Example of TFs with good measurement coverage but low similarity. 
 # ------------------------------------------------------------------------------
 
 
 
-# tt1 <- left_join(summ_sub_tf_hg$Topk, summ_sub_tf_hg$Bottomk, by = "Symbol", suffix = c("_Topk", "_Bottomk"))
-# plot(tt1$Mean_Topk, tt1$Mean_Bottomk)
-# cor(tt1$Mean_Topk, tt1$Mean_Bottomk)
-# 
-# tt2 <- filter(summ_sub_tf_hg$Topk, Mean < mean(summ_null_hg[, "Mean"]))
-# tt3 <- filter(summ_sub_tf_hg$Bottomk, Symbol %in% tt2$Symbol) %>% arrange(desc(Mean))
+
 # 
 # arrange(summ_tf_hg, Median, desc(N_exp)) %>% head
 # arrange(summ_tf_mm, Median, desc(N_exp)) %>% head
@@ -237,6 +284,11 @@ cor(ortho_top$Mean_Human, ortho_top$Mean_Mouse, use = "pairwise.complete.obs", m
 
 # Plotting
 # ------------------------------------------------------------------------------
+
+
+plot(tt1$Mean_Topk, tt1$Mean_Bottomk)
+cor(tt1$Mean_Topk, tt1$Mean_Bottomk, method = "spearman")
+
 
 
 gene_hg <- "ASCL1"
@@ -518,8 +570,8 @@ ribo_df_mm <- sim_ribo_mm[[example_ribo_mm]]
 
 
 set.seed(154)
-rep_null_hg <- null_topk_hg[[sample(1:length(null_topk_hg), 1)]]
-rep_null_mm <- null_topk_mm[[sample(1:length(null_topk_mm), 1)]]
+rep_null_hg <- sim_null_hg[[sample(1:length(sim_null_hg), 1)]]
+rep_null_mm <- sim_null_mm[[sample(1:length(sim_null_mm), 1)]]
 
 
 
@@ -556,12 +608,10 @@ boxplot(log10(plot_df_hg$Topk+1) ~ plot_df_hg$Group)
 boxplot(log10(plot_df_mm$Topk+1) ~ plot_df_mm$Group)
 
 
-
-
-
-
-
 # Relationship between topk median and count of experiments
+
+topk_na_cor_hg <- suppressWarnings(cor.test(summ_tf_hg$Topk$Median, summ_tf_hg$Topk$N_exp, method = "spearman"))
+topk_na_cor_mm <- suppressWarnings(cor.test(summ_tf_mm$Topk$Median, summ_tf_mm$Topk$N_exp, method = "spearman"))
 
 # plot(summ_tf_hg$N_exp, y = summ_tf_hg$Median)
 # plot(summ_tf_mm$N_exp, y = summ_tf_mm$Median)
