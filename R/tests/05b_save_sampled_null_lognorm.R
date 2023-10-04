@@ -1,4 +1,4 @@
-## Sample TFs across experiments and calculate their topk intersect to generate
+## Sample TFs across experiments and calculate their similarity to generate
 ## a null. Save out the results as a list.
 ## -----------------------------------------------------------------------------
 
@@ -44,7 +44,7 @@ agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = p
 
 # For a given set of input genes and list of aggregate coexpression matrices, 
 # sample one gene that is measured in each experiment from the list of input
-# genes, and calculate the top k intersect between these sampled genes
+# genes, and calculate the similarity between these sampled genes
 # agg_l: A list of aggregate coexpression matrices (gene x gene numeric matrix)
 # msr_mat: binary gene x experiment matrix tracking if a gene was measured
 # k: an integer of the top elements to select
@@ -54,11 +54,11 @@ agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = p
 # ------------------------------------------------------------------------------
 
 
-sample_topk_intersect <- function(agg_l, 
-                                  genes, 
-                                  msr_mat,
-                                  k,
-                                  check_k_arg = TRUE) {
+calc_sample_similarity <- function(agg_l,
+                                   genes,
+                                   msr_mat,
+                                   k,
+                                   check_k_arg = TRUE) {
   
   ids <- names(agg_l)
   
@@ -92,40 +92,40 @@ sample_topk_intersect <- function(agg_l,
 set.seed(5)
 
 
-null_topk_hg_path <- paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_hg_k=", k, "_lognorm.RDS")
-null_topk_mm_path <- paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_mm_k=", k, "_lognorm.RDS")
+sim_null_hg_path <- paste0("/space/scratch/amorin/R_objects/similarity_null_hg_k=", k, "_lognorm.RDS")
+sim_null_mm_path <- paste0("/space/scratch/amorin/R_objects/similarity_null_mm_k=", k, "_lognorm.RDS")
 
 
-if (!file.exists(null_topk_hg_path) || force_resave) {
+if (!file.exists(sim_null_hg_path) || force_resave) {
   
-  topk_hg <- lapply(1:n_samps, function(x) {
+  sim_hg <- lapply(1:n_samps, function(x) {
     
     message(paste("Human sample #", x, Sys.time()))
     
-    sample_topk_intersect(agg_l = agg_tf_hg,
-                          genes = tfs_hg$Symbol,
-                          msr_mat = msr_hg,
-                          k = k)
+    calc_sample_similarity(agg_l = agg_tf_hg,
+                           genes = tfs_hg$Symbol,
+                           msr_mat = msr_hg,
+                           k = k)
   })
   
-  saveRDS(topk_hg, null_topk_hg_path)
+  saveRDS(sim_hg, sim_null_hg_path)
   
 } 
 
 
 
-if (!file.exists(null_topk_mm_path) || force_resave) {
+if (!file.exists(sim_null_mm_path) || force_resave) {
   
-  topk_mm <- lapply(1:n_samps, function(x) {
+  sim_mm <- lapply(1:n_samps, function(x) {
     
     message(paste("Mouse sample #", x, Sys.time()))
     
-    sample_topk_intersect(agg_l = agg_tf_mm,
-                          genes = tfs_mm$Symbol,
-                          msr_mat = msr_mm,
-                          k = k)
+    calc_sample_similarity(agg_l = agg_tf_mm,
+                           genes = tfs_mm$Symbol,
+                           msr_mat = msr_mm,
+                           k = k)
   })
   
-  saveRDS(topk_mm, null_topk_mm_path)
+  saveRDS(sim_mm, sim_null_mm_path)
   
 } 
