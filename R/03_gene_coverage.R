@@ -69,7 +69,6 @@ get_gene_msr_mat <- function(ids, meta, genes) {
 
 
 if (!file.exists(msr_mat_hg_path) || force_resave) {
-# if (!file.exists(msr_mat_hg_path)) {
   msr_mat_hg <- get_gene_msr_mat(ids_hg, sc_meta, pc_hg$Symbol)
   saveRDS(msr_mat_hg, msr_mat_hg_path)
 } else {
