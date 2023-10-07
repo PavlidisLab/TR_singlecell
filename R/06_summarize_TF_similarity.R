@@ -14,7 +14,7 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-k <- 200
+k <- 1000
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -51,9 +51,9 @@ sim_ribo_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_ribo_m
 
 # Null topk overlap
 # sim_null_hg <- readRDS(sim_null_hg_path)
-sim_null_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_hg_k=", k, ".RDS"))
+sim_null_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_null_hg_k=", k, ".RDS"))
 # sim_null_mm <- readRDS(sim_null_mm_path)
-sim_null_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/sampled_null_topk_intersect_mm_k=", k, ".RDS"))
+sim_null_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_null_mm_k=", k, ".RDS"))
 
 
 
@@ -95,6 +95,10 @@ get_summary_df <- function(sim_l, msr_mat = NULL, add_nexp = TRUE) {
 summ_tf_hg <- get_summary_df(sim_tf_hg, msr_hg)
 summ_tf_mm <- get_summary_df(sim_tf_mm, msr_mm)
 
+# Join TF summary with TF family information
+summ_tf_hg <- lapply(summ_tf_hg, left_join, tfs_hg[, c("Symbol", "Family")], by = "Symbol")
+summ_tf_mm <- lapply(summ_tf_mm, left_join, tfs_mm[, c("Symbol", "Family")], by = "Symbol")
+
 
 # Require a minimum count of measured experiments for global trends
 summ_sub_tf_hg <- lapply(summ_tf_hg, filter, N_exp >= 5)
@@ -112,10 +116,12 @@ summ_null_mm <- get_summary_df(sim_null_mm, add_nexp = FALSE)
 
 
 # summary(summ_ribo_hg$Topk[, "Mean"])
-# summary(summ_null_hg[, "Mean"])
-# summary(summ_sub_tf_hg$Topk[, "Mean"])
 # summary(summ_ribo_mm$Topk[, "Mean"])
-# summary(summ_null_mm[, "Mean"])
+
+# summary(summ_null_hg$Topk[, "Mean"])
+# summary(summ_null_mm$Topk[, "Mean"])
+
+# summary(summ_sub_tf_hg$Topk[, "Mean"])
 # summary(summ_sub_tf_mm$Topk[, "Mean"])
 
 
@@ -157,17 +163,19 @@ calc_prop_divergent <- function(topk_df, bottomk_df, null_topk, null_bottomk) {
   null_topk_mean <- mean(null_topk[, "Mean"])
   null_bottomk_mean <- mean(null_bottomk[, "Mean"])
   
-  topk_lt_null <- filter(topk_df, Mean < null_topk_mean)$Symbol
-  bottomk_gt_null <- filter(bottomk_df, Mean > null_bottomk_mean)$Symbol
+  topk_lt_null <- filter(join_df, Mean_Topk < null_topk_mean)
+  bottomk_gt_null <- filter(join_df, Mean_Bottomk > null_bottomk_mean)
   
-  div_df <- filter(join_df, Symbol %in% intersect(topk_lt_null, bottomk_gt_null))
+  div <- intersect(topk_lt_null$Symbol, bottomk_gt_null$Symbol)
+  div_df <- filter(join_df, Symbol %in% div)
   
-  summary_df <- data.frame(N_topk_lt_null = length(topk_lt_null),
-                           N_bottomk_gt_null = length(bottomk_gt_null),
-                           Prop_divergent = nrow(div_df) / length(topk_lt_null))
+  summary_df <- data.frame(N_topk_lt_null = nrow(topk_lt_null),
+                           N_bottomk_gt_null = nrow(bottomk_gt_null),
+                           Prop_divergent = nrow(div_df) / nrow(topk_lt_null))
   
-  
-  return(list(Summary = summary_df, Divergent = div_df))
+  return(list(Summary = summary_df, 
+              Below_null = topk_lt_null,
+              Divergent = div_df))
 }
 
 
@@ -220,51 +228,70 @@ best_pairs_ribo_mm <- get_best_pairs(summ_df_l = summ_ribo_mm, sim_l = sim_ribo_
 
 
 
-# Look at similarity by TF family
-# TODO: repetition of factor ordering after join
-# ------------------------------------------------------------------------------
-
-
-# summ_tf_hg <- summ_tf_hg %>% 
-#   left_join(., tfs_hg[, c("Symbol", "Family")], by = "Symbol") %>% 
-#   arrange(Median) %>% 
-#   mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
-# 
-# 
-# family_hg <- summ_tf_hg %>% 
-#   group_by(Family) %>% 
-#   summarise(
-#     Med_topk = median(Median), 
-#     N_TFs = n(),
-#     Med_exp_msrd = median(N_exp)
-#     ) %>% 
-#   arrange(desc(Med_topk))
-# 
-# 
-# boxplot(summ_tf_hg$Med ~ summ_tf_hg$Family)
-# 
-
-
 # Rank order of similarity between species
 # ------------------------------------------------------------------------------
 
 
-tt_hg <- summ_sub_tf_hg$Topk %>% 
-  filter(Symbol %in% pc_ortho$Symbol_hg) %>% 
-  left_join(., pc_ortho, by = c("Symbol" = "Symbol_hg"))
+ortho_rank_sim <- lapply(names(summ_sub_tf_hg), function(x) {
+  
+  df_hg <- summ_sub_tf_hg[[x]] %>% 
+    filter(Symbol %in% pc_ortho$Symbol_hg) %>% 
+    left_join(., pc_ortho, by = c("Symbol" = "Symbol_hg"))
+  
+  df_mm <- summ_sub_tf_mm[[x]] %>% 
+    filter(Symbol %in% pc_ortho$Symbol_mm) %>% 
+    left_join(., pc_ortho, by = c("Symbol" = "Symbol_mm"))
+  
+  left_join(df_hg, df_mm, by = "ID", suffix = c("_human", "_mouse"))
+})
+names(ortho_rank_sim) <- names(summ_sub_tf_hg)
 
 
-tt_mm <- summ_sub_tf_mm$Topk %>% 
-  filter(Symbol %in% pc_ortho$Symbol_mm) %>% 
-  left_join(., pc_ortho, by = c("Symbol" = "Symbol_mm"))
+
+top_ortho_sim <- lapply(names(ortho_rank_sim), function(x) {
+  
+  ortho_rank_sim[[x]] %>% 
+  mutate(Avg_sim = rowMeans(.[, c("Mean_human", "Mean_mouse")])) %>% 
+  slice_max(Avg_sim, n = 10)
+
+})
+names(top_ortho_sim) <- names(ortho_rank_sim)
 
 
-ortho_top <- left_join(tt_hg, tt_mm,
-                       by = "ID",
-                       suffix = c("_Human", "_Mouse"))
 
-plot(ortho_top$Mean_Human, ortho_top$Mean_Mouse)
-cor(ortho_top$Mean_Human, ortho_top$Mean_Mouse, use = "pairwise.complete.obs", method = "spearman")
+ortho_cor <- vapply(ortho_rank_sim, function(x) {
+  cor(x$Mean_human, x$Mean_mouse, use = "pairwise.complete.obs", method = "spearman")
+}, numeric(1))
+
+
+
+# Look at similarity by TF family
+# ------------------------------------------------------------------------------
+
+
+summarize_family_similarity <- function(sim_l, tf_df) {
+  
+  stat_l <- lapply(sim_l, function(x) {
+    
+    x %>%
+      group_by(Family) %>%
+      summarise(
+        Mean_stat = mean(Mean),
+        N_TFs = n(),
+        Mean_exp_msrd = mean(N_exp)
+      ) %>%
+      arrange(desc(Mean_stat)) %>% 
+      mutate(Family = factor(Family, levels = unique(Family)))
+  })
+  
+  names(stat_l) <- names(sim_l)
+  return(stat_l)
+}
+
+
+family_sim_hg <- summarize_family_similarity(summ_sub_tf_hg, tfs_hg)
+family_sim_mm <- summarize_family_similarity(summ_sub_tf_mm, tfs_mm)
+
 
 
 
@@ -272,27 +299,40 @@ cor(ortho_top$Mean_Human, ortho_top$Mean_Mouse, use = "pairwise.complete.obs", m
 # ------------------------------------------------------------------------------
 
 
-plot(tt1$Mean_Topk, tt1$Mean_Bottomk)
-cor(tt1$Mean_Topk, tt1$Mean_Bottomk, method = "spearman")
+# Relationship between mean top and bottom k across all TFs
 
+left_join(summ_sub_tf_hg$Topk, 
+          summ_sub_tf_hg$Bottomk, 
+          by = "Symbol",
+          suffix = c("_Topk", "_Bottomk")
+          ) %>% 
+  qplot(., xvar = "Mean_Topk", yvar = "Mean_Bottomk")
+  
+
+
+left_join(summ_sub_tf_mm$Topk, 
+          summ_sub_tf_mm$Bottomk, 
+          by = "Symbol",
+          suffix = c("_Topk", "_Bottomk")
+          ) %>% 
+  qplot(., xvar = "Mean_Topk", yvar = "Mean_Bottomk")
+
+
+# Relationship between similarity for a given TF
 
 
 gene_hg <- "ASCL1"
+gene_mm <- "Ascl1"
 
-# Relationship between similarity stats
+qplot(sim_tf_hg[[gene_hg]], xvar = "Topk", yvar = "Bottomk")
+qplot(sim_tf_mm[[gene_mm]], xvar = "Topk", yvar = "Bottomk")
 
-p1 <- ggplot(sim_tf_hg[[gene_hg]], aes(x = Scor, y = Topk)) +
-  geom_point(shape = 21, size = 2.1) +
-  ggtitle(gene_hg) +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        plot.title = element_text(size = 20),
-        plot.margin = margin(c(10, 20, 10, 10)))
+qplot(sim_tf_hg[[gene_hg]], xvar = "Scor", yvar = "Jaccard")
+qplot(sim_tf_mm[[gene_mm]], xvar = "Scor", yvar = "Jaccard")
 
 
 
-# Scatterplot of TF median topk intersect with text overlay for top n TFs
+# Point plot of TF similarity with text overlay for top n TFs
 
 
 # Labels to the left
@@ -325,6 +365,7 @@ point_plot_similarity1 <- function(summary_df,
                     size = 5,
                     segment.size = 0.2) +
     geom_hline(yintercept = null_expected, colour = "firebrick") +
+    annotate("text", x = 60, y = null_expected + 1, label = "Null", colour = "firebrick", size = 5) +
     ggtitle(plot_title) +
     ylab(ylabel) +
     expand_limits(x = nrow(summary_df) + 50) +  # prevent point cut off
@@ -369,6 +410,7 @@ point_plot_similarity2 <- function(summary_df,
                     segment.size = 0.1,
                     segment.color = "grey50") +
     geom_hline(yintercept = null_expected, colour = "firebrick") +
+    annotate("text", x = 60, y = null_expected + 1, label = "Null", colour = "firebrick", size = 5) +
     ggtitle(plot_title) +
     ylab(ylabel) +
     expand_limits(x = nrow(summary_df) + 300) +  # prevent point cut off
@@ -383,52 +425,45 @@ point_plot_similarity2 <- function(summary_df,
 
 
 
+# Using text labels to the left
 px_hg1 <- point_plot_similarity1(summ_tf_hg$Topk,
+                                 null_df = summ_null_hg$Topk,
                                  plot_title = "Human",
-                                 null_df = summ_null_hg,
                                  ylabel = paste0("Mean Top k (k=", k, ")"))
 
 
 px_mm1 <- point_plot_similarity1(summ_tf_mm$Topk,
+                                 null_df = summ_null_mm$Topk,
                                  plot_title = "Mouse",
-                                 null_df = summ_null_mm,
                                  ylabel = paste0("Mean Top k (k=", k, ")"))
 
 
-
+# Using text labels to the right
 px_hg2 <- point_plot_similarity2(summ_tf_hg$Topk,
+                                 null_df = summ_null_hg$Topk,
                                  plot_title = "Human",
-                                 null_df = summ_null_hg,
                                  ylabel = paste0("Mean Top k (k=", k, ")"))
 
 
 px_mm2 <- point_plot_similarity2(summ_tf_mm$Topk,
+                                 null_df = summ_null_mm$Topk,
                                  plot_title = "Mouse",
-                                 null_df = summ_null_mm,
                                  ylabel = paste0("Mean Top k (k=", k, ")"))
-
-
-# ggsave(p2, height = 9, width = 18, device = "png", dpi = 300,
-       # filename = file.path(plot_dir, "scatter_topk_median.png"))
-
 
 
 
 # Histogram of expected values for TF, null, and ribosomal
 
 
-hist_expected <- function(tf_df, null_df, ribo_df, xlabel) {
+hist_expected <- function(summary_df, null_df, ribo_df, xlabel) {
   
-  
-  expected_df <- data.frame(
-    Stat = c(tf_df[, "Mean"],
-             null_df[, "Mean"],
-             ribo_df[, "Mean"]),
-    Group = c(rep("TF", nrow(tf_df)),
-              rep("Null", nrow(null_df)),
-              rep("Ribosomal", nrow(ribo_df)))
-  )
-  
+  expected_df <- 
+    data.frame(Stat = c(summary_df[, "Mean"],
+                        null_df[, "Mean"],
+                        ribo_df[, "Mean"]),
+               Group = c(rep("TF", nrow(summary_df)),
+                         rep("Null", nrow(null_df)),
+                         rep("Ribosomal", nrow(ribo_df))))
   
   ggplot(expected_df, aes(x = Stat)) + 
     facet_wrap(~Group, nrow = 3, scales = "free") + 
@@ -442,61 +477,60 @@ hist_expected <- function(tf_df, null_df, ribo_df, xlabel) {
           strip.text = element_text(size = 20),
           strip.background = element_rect(color = "black", fill = c("lightgrey")),
           plot.margin = margin(c(10, 20, 10, 10)))
-  
-  
 }
 
 
 
-
-py_hg <- hist_expected(tf_df = summ_tf_hg$Topk,
-                       null_df = summ_null_hg,
+py_hg <- hist_expected(summary_df = summ_tf_hg$Topk,
+                       null_df = summ_null_hg$Topk,
                        ribo_df = summ_ribo_hg$Topk,
                        xlabel = paste0("Mean Top k (k=", k, ")"))
 
 
-py_mm <- hist_expected(tf_df = summ_tf_mm$Topk,
-                       null_df = summ_null_mm,
+py_mm <- hist_expected(summary_df = summ_tf_mm$Topk,
+                       null_df = summ_null_mm$Topk,
                        ribo_df = summ_ribo_mm$Topk,
                        xlabel = paste0("Mean Top k (k=", k, ")"))
 
 
 
-
+# Combining point plot and hist of expected (labels left)
 pxy_hg1 <- plot_grid(py_hg, px_hg1, rel_widths = c(0.5, 1))
-pxy_hg2 <- plot_grid(py_hg, px_hg2, rel_widths = c(0.5, 1))
-
 pxy_mm1 <- plot_grid(py_mm, px_mm1, rel_widths = c(0.5, 1))
+
+# Combining point plot and hist of expected (labels right)
+pxy_hg2 <- plot_grid(py_hg, px_hg2, rel_widths = c(0.5, 1))
 pxy_mm2 <- plot_grid(py_mm, px_mm2, rel_widths = c(0.5, 1))
+
+# Flip mouse histogram for combining with human panels
 pxy_mm3 <- plot_grid(px_mm1, py_mm, rel_widths = c(1, 0.5))
+pxy_both <- plot_grid(pxy_hg1, pxy_mm3, nrow = 1)
 
 
-
-# ggsave(pxy_hg2, height = 9, width = 15, device = "png", dpi = 300,
+# ggsave(pxy_both, height = 8, width = 20, device = "png", dpi = 300,
 #        filename = file.path(plot_dir, "tt.png"))
-
-
-ggsave(plot_grid(pxy_hg1, pxy_mm3, nrow = 1), 
-       height = 8, width = 20, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "tt.png"))
 
 
 
 # Boxplot (show 1st and 3rd IQR) of TF median topk intersect
 
 
-
-boxplot_topk_median <- function(summary_df, summ_nullary) {
+boxplot_topk_median <- function(summary_df, null_df, plot_title, ylabel) {
+  
+  null_expected <- mean(null_df[, "Mean"])
+  
+  summary_df <- summary_df %>%
+    arrange(Mean) %>% 
+    mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
   
   ggplot(summary_df, aes(x = Symbol)) +
     geom_boxplot(
       # aes(ymin = Min., lower = `1st Qu.`, middle = Median, upper = `3rd Qu.`, ymax = Max.),
       aes(ymin = `1st Qu.`, lower = `1st Qu.`, middle = Median, upper = `3rd Qu.`, ymax = `3rd Qu.`),
       stat = "identity") +
-    geom_hline(yintercept = summ_nullary["Median"], colour = "firebrick", linewidth = 1.6) +
-    geom_hline(yintercept = summ_nullary["1st Qu."], colour = "grey85") +
-    geom_hline(yintercept = summ_nullary["3rd Qu."], colour = "grey40") +
-    ylab(paste0("Median Top k (k=", k, ")")) +
+    geom_hline(yintercept = null_expected , colour = "firebrick", linewidth = 1.6) +
+    ylab(ylabel) +
+    ggtitle(plot_title) +
     theme_classic() +
     theme(axis.text = element_text(size = 20),
           axis.text.x = element_blank(),
@@ -507,8 +541,93 @@ boxplot_topk_median <- function(summary_df, summ_nullary) {
 }
 
 
-p3a <- boxplot_topk_median(summ_tf_hg, summ_null_hg)
-p3b <- boxplot_topk_median(summ_tf_mm, summ_null_mm)
+pza <- boxplot_topk_median(summary_df = summ_tf_hg$Topk, 
+                           null_df = summ_null_hg$Topk,
+                           plot_title = "Human",
+                           ylabel = paste0("Mean Top k (k=", k, ")"))
+
+pzb <- boxplot_topk_median(summary_df = summ_tf_mm$Topk, 
+                           null_df = summ_null_mm$Topk,
+                           plot_title = "Mouse",
+                           ylabel = paste0("Mean Top k (k=", k, ")"))
+
+
+
+# Plot divergent: mean bottom k versus null of TFs with expected topk below null
+
+
+plot_divergent <- function(divergent_l, null_df, k, plot_title, nlabel = 30) {
+  
+  plot_df <- data.frame(
+    
+    Mean_bottomk = c(divergent_l$Below_null$Mean_Bottomk, null_df$Mean),
+    
+    Symbol = c(divergent_l$Below_null$Symbol, 
+               rep("Null", length(null_df$Mean))),
+    
+    Group = c(rep("TF", length(divergent_l$Below_null$Mean_Bottomk)),
+              rep("Null", length(null_df$Mean)))
+  )
+  
+  
+  div_symbol <- slice_max(divergent_l$Divergent, Mean_Bottomk, n = nlabel)$Symbol
+  
+  plot_df$Label <- plot_df$Symbol %in% div_symbol
+  
+  
+  ggplot(plot_df, aes(x = Group, y = Mean_bottomk)) +
+    
+    geom_violin(width = 0.3, fill = "slategrey") +
+    
+    geom_boxplot(
+      width = 0.1,
+      fill = "white",
+      # outlier.shape = NA,
+      outlier.fill = "white"
+    ) +
+    geom_point(
+      data = filter(plot_df, Label),
+      shape = 21,
+      alpha = 0.6,
+      size = 3.1
+    ) +
+    geom_text_repel(
+      data = filter(plot_df, Label),
+      aes(x = Group, y = Mean_bottomk, label = Symbol, fontface = "italic"),
+      max.overlaps = 30,
+      force = 0.5,
+      nudge_x = 500,
+      hjust = 0,
+      direction = "y",
+      size = 5,
+      segment.size = 0.1,
+      segment.color = "grey50") +
+    ggtitle(plot_title) +
+    ylab(paste0("Mean Bottom k=", k)) +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.ticks.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.title = element_text(size = 20),
+          plot.title = element_text(size = 20),
+          plot.margin = margin(c(10, 20, 10, 10)))
+}
+
+
+pma <- plot_divergent(divergent_l = divergent_hg,
+                      null_df = summ_null_hg$Bottomk,
+                      k = k,
+                      plot_title = "Human")
+
+
+pmb <- plot_divergent(divergent_l = divergent_mm,
+                      null_df = summ_null_mm$Bottomk,
+                      k = k,
+                      plot_title = "Mouse")
+
+
+pm <- plot_grid(pma, pmb, nrow = 1)
+
 
 
 # Density plot of topk intersect for select genes + null
@@ -539,8 +658,8 @@ density_topk <- function(plot_df) {
 example_tf_hg <- "ASCL1"
 example_tf_mm <- "Ascl1"
 
-max_tf_hg <- as.character(slice_max(summ_tf_hg, Median)$Symbol)
-max_tf_mm <- as.character(slice_max(summ_tf_mm, Median)$Symbol)
+max_tf_hg <- as.character(slice_max(summ_tf_hg$Topk, Median)$Symbol)
+max_tf_mm <- as.character(slice_max(summ_tf_mm$Topk, Median)$Symbol)
 
 example_ribo_hg <- "RPL7A"
 example_ribo_mm <- "Rpl3"
@@ -554,11 +673,10 @@ tf_df_mm <- sim_tf_mm[[example_tf_mm]]
 ribo_df_hg <- sim_ribo_hg[[example_ribo_hg]]
 ribo_df_mm <- sim_ribo_mm[[example_ribo_mm]]
 
-
+# Pull a random sample
 set.seed(154)
 rep_null_hg <- sim_null_hg[[sample(1:length(sim_null_hg), 1)]]
 rep_null_mm <- sim_null_mm[[sample(1:length(sim_null_mm), 1)]]
-
 
 
 plot_df_hg <- data.frame(
@@ -585,36 +703,61 @@ p4a <- density_topk(plot_df_hg)
 p4b <- density_topk(plot_df_mm)
 p4 <- plot_grid(p4a, p4b)
 
-ggsave(p4, height = 9, width = 18, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "density_topk_example.png"))
+# boxplot(log10(plot_df_hg$Topk+1) ~ plot_df_hg$Group)
+# boxplot(log10(plot_df_mm$Topk+1) ~ plot_df_mm$Group)
+
+# ggsave(p4, height = 9, width = 18, device = "png", dpi = 300,
+#        filename = file.path(plot_dir, "density_topk_example.png"))
 
 
 
-boxplot(log10(plot_df_hg$Topk+1) ~ plot_df_hg$Group)
-boxplot(log10(plot_df_mm$Topk+1) ~ plot_df_mm$Group)
+# Scatterplot of expected similarity of ortho TFs
 
 
-# Relationship between topk median and count of experiments
+qplot(ortho_rank_sim$Topk, xvar = "Mean_human", yvar = "Mean_mouse") +
+  geom_smooth() +
+  xlab(paste0("Human Mean Top k=", k)) +
+  ylab(paste0("Mouse Mean Top k=", k)) +
+  ggtitle("Top")
 
-topk_na_cor_hg <- suppressWarnings(cor.test(summ_tf_hg$Topk$Median, summ_tf_hg$Topk$N_exp, method = "spearman"))
-topk_na_cor_mm <- suppressWarnings(cor.test(summ_tf_mm$Topk$Median, summ_tf_mm$Topk$N_exp, method = "spearman"))
-
-# plot(summ_tf_hg$N_exp, y = summ_tf_hg$Median)
-# plot(summ_tf_mm$N_exp, y = summ_tf_mm$Median)
-
-n_break <- length(ids_mm)
-
-p5a <- summ_tf_hg %>% 
-  mutate(Group_nexp = cut(N_exp, n_break, include.lowest = TRUE)) %>% 
-  ggplot(aes(x = Group_nexp, y = Median)) +
-  geom_boxplot() +
-  theme_classic()
+qplot(ortho_rank_sim$Bottomk, xvar = "Mean_human", yvar = "Mean_mouse") +
+  geom_smooth() +
+  xlab(paste0("Human Mean Bottom k=", k)) +
+  ylab(paste0("Mouse Mean Bottom k=", k)) +
+  ggtitle("Bottom")
 
 
-p5b <- summ_tf_mm %>% 
-  mutate(Group_nexp = cut(N_exp, n_break, include.lowest = TRUE)) %>% 
-  ggplot(aes(x = Group_nexp, y = Median)) +
-  geom_boxplot() +
-  theme_classic()
+qplot(ortho_rank_sim$Jaccard, xvar = "Mean_human", yvar = "Mean_mouse")
 
 
+# Relationship between topk and count of experiments
+
+topk_na_cor_hg <- suppressWarnings(cor.test(summ_tf_hg$Topk$Mean, summ_tf_hg$Topk$N_exp, method = "spearman"))
+topk_na_cor_mm <- suppressWarnings(cor.test(summ_tf_mm$Topk$Mean, summ_tf_mm$Topk$N_exp, method = "spearman"))
+qplot(summ_tf_hg$Topk, xvar = "N_exp", yvar = "Mean")
+qplot(summ_tf_mm$Topk, xvar = "N_exp", yvar = "Mean")
+
+
+# Similarity by TF family
+
+
+plot_family_similarity <- function(summary_df) {
+  
+  ggplot(summary_df, 
+         aes(x = fct_reorder(Family, desc(Mean), .fun = median), 
+             y = Mean)) +
+    geom_boxplot(fill = "slategrey", outlier.shape = NA) +
+    geom_jitter(width = 0.25, height = 0.1, shape = 21) +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20),
+          axis.title.x = element_blank(),
+          plot.title = element_text(size = 20),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          plot.margin = margin(c(10, 20, 10, 10)))
+  
+}
+
+
+plot_family_similarity(summ_sub_tf_hg$Topk)
+plot_family_similarity(summ_sub_tf_mm$Topk)
