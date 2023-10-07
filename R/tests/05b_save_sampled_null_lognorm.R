@@ -8,7 +8,7 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/functions.R")
 source("R/00_config.R")
 
-k <- 200 
+k <- 1000 
 n_samps <- 1000
 force_resave <- TRUE
 
