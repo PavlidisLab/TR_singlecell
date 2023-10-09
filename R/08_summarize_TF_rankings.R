@@ -49,6 +49,56 @@ arrange(rank_tf_hg$E2F8, desc(Avg_RSR)) %>% head(30)
 arrange(rank_tf_mm$E2f8, desc(Avg_RSR)) %>% head(30)
 
 
+
+# Create a gene x TF matrix of summarized ranks
+# ------------------------------------------------------------------------------
+
+
+rank_mat_hg <- as.matrix(do.call(cbind, lapply(rank_tf_hg, `[`, "Rank_RSR")))
+colnames(rank_mat_hg) <- names(rank_tf_hg)
+rank_cor_hg <- mat_to_df(colwise_cor(rank_mat_hg), symmetric = TRUE)
+rank_topk_hg <- mat_to_df(colwise_topk_intersect(rank_mat_hg, k = 1000), symmetric = TRUE)
+
+rank_hg <- data.frame(Row = rank_cor_hg$Row, 
+                      Col = rank_cor_hg$Col,
+                      Topk = rank_topk_hg$Value,
+                      Cor = rank_cor_hg$Value)
+
+
+rank_mat_mm <- as.matrix(do.call(cbind, lapply(rank_tf_mm, `[`, "Rank_RSR")))
+colnames(rank_mat_mm) <- names(rank_tf_mm)
+rank_cor_mm <- mat_to_df(colwise_cor(rank_mat_mm), symmetric = TRUE)
+rank_topk_mm <- mat_to_df(colwise_topk_intersect(rank_mat_mm, k = 1000), symmetric = TRUE)
+
+
+rank_mm <- data.frame(Row = rank_cor_mm$Row, 
+                      Col = rank_cor_mm$Col,
+                      Topk = rank_topk_mm$Value,
+                      Cor = rank_cor_mm$Value)
+
+# Most commonly highly ranked genes
+# TODO: are these genes high because of technical aspect?
+
+rank_order_hg <- sort(rowMeans(rank_mat_hg, na.rm = TRUE))
+head(rank_order_hg)
+tail(rank_order_hg)
+
+head(sort(rank_mat_hg["DLL1",]), 50)
+tail(sort(rank_mat_hg["CSF1R",]), 50)
+
+
+rank_order_mm <- sort(rowMeans(rank_mat_mm, na.rm = TRUE))
+head(rank_order_mm)
+tail(rank_order_mm)
+
+
+head(sort(rank_mat_mm["Hes6",]), 50)
+tail(sort(rank_mat_mm["Pax6",]), 50)
+
+
+
+
+
 # Inspect ortho
 # ------------------------------------------------------------------------------
 
@@ -194,59 +244,18 @@ rank_binary_heatmap(ascl_rank_mm, rank_cutoff = 100)
 rank_heatmap(ascl_rank_mm)
 
 
-# Create a gene x TF matrix of summarized ranks
-
-
-rank_mat_hg <- as.matrix(do.call(cbind, lapply(rank_tf_hg, `[`, "Rank_RSR")))
-colnames(rank_mat_hg) <- names(rank_tf_hg)
-rank_cor_hg <- mat_to_df(colwise_cor(rank_mat_hg), symmetric = TRUE)
-rank_topk_hg <- mat_to_df(colwise_topk_intersect(rank_mat_hg, k = 1000), symmetric = TRUE)
-
-rank_hg <- data.frame(Row = rank_cor_hg$Row, 
-                      Col = rank_cor_hg$Col,
-                      Topk = rank_topk_hg$Value,
-                      Cor = rank_cor_hg$Value)
-
-
-rank_mat_mm <- as.matrix(do.call(cbind, lapply(rank_tf_mm, `[`, "Rank_RSR")))
-colnames(rank_mat_mm) <- names(rank_tf_mm)
-rank_cor_mm <- mat_to_df(colwise_cor(rank_mat_mm), symmetric = TRUE)
-rank_topk_mm <- mat_to_df(colwise_topk_intersect(rank_mat_mm, k = 1000), symmetric = TRUE)
-
-
-rank_mm <- data.frame(Row = rank_cor_mm$Row, 
-                      Col = rank_cor_mm$Col,
-                      Topk = rank_topk_mm$Value,
-                      Cor = rank_cor_mm$Value)
-
-# Most commonly highly ranked genes
-# TODO: are these genes high because of technical aspect?
-
-rank_order_hg <- sort(rowMeans(rank_mat_hg, na.rm = TRUE))
-head(rank_order_hg)
-tail(rank_order_hg)
-
-head(sort(rank_mat_hg["RUNX1",]), 50)
-
-
-rank_order_mm <- sort(rowMeans(rank_mat_mm, na.rm = TRUE))
-head(rank_order_mm)
-tail(rank_order_mm)
-
-
-head(sort(rank_mat_mm["Pax6",]), 50)
 
 
 
 # Distn of top k
 
 ggplot(rank_tf_hg$ASCL1, aes(x = Topk_count)) +
-  geom_histogram(bins = 32) +
+  geom_histogram(bins = 20) +
   geom_vline(xintercept = filter(rank_tf_hg$ASCL1, Symbol == "HES6")$Topk_count) +
   geom_vline(xintercept = filter(rank_tf_hg$ASCL1, Symbol == "DLL1")$Topk_count) +
   geom_vline(xintercept = filter(rank_tf_hg$ASCL1, Symbol == "DLL3")$Topk_count) +
   ggtitle("Human ASCL1") +
-  xlab("Top k (k=1000) count") +
+  xlab("Top k=1000 count") +
   ylab("Gene count") +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
