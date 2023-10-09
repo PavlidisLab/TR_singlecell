@@ -14,7 +14,7 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-k <- 1000
+k <- 200
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -633,14 +633,14 @@ pm <- plot_grid(pma, pmb, nrow = 1)
 # Density plot of topk intersect for select genes + null
 
 
-density_topk <- function(plot_df) {
+density_topk <- function(plot_df, k) {
   
   ggplot(plot_df, aes(x = Topk, fill = Group)) +
     geom_density(alpha = 0.6) +
     theme_classic() +
     ylab("Density") +
-    xlab(paste0("Topk intersect (k=", k, ")")) +
-    scale_fill_manual(values = c("#1b9e77", "#d95f02", "lightgrey", "#7570b3")) +
+    xlab(paste0("Top k=", k)) +
+    scale_fill_manual(values = c("lightgrey", "#7570b3", "#d95f02", "#1b9e77")) +
     theme(
       axis.text = element_text(size = 30),
       axis.title = element_text(size = 30),
@@ -658,11 +658,13 @@ density_topk <- function(plot_df) {
 example_tf_hg <- "ASCL1"
 example_tf_mm <- "Ascl1"
 
-max_tf_hg <- as.character(slice_max(summ_tf_hg$Topk, Median)$Symbol)
-max_tf_mm <- as.character(slice_max(summ_tf_mm$Topk, Median)$Symbol)
+max_tf_hg <- "E2F8"
+max_tf_mm <- "E2f8"
+# max_tf_hg <- as.character(slice_max(summ_sub_tf_hg$Topk, Median)$Symbol)
+# max_tf_mm <- as.character(slice_max(summ_sub_tf_mm$Topk, Median)$Symbol)
 
-example_ribo_hg <- "RPL7A"
-example_ribo_mm <- "Rpl3"
+example_ribo_hg <- "RPL32"
+example_ribo_mm <- "Rpl32"
 
 max_tf_df_hg <- sim_tf_hg[[max_tf_hg]]
 max_tf_df_mm <- sim_tf_mm[[max_tf_mm]]
@@ -680,27 +682,30 @@ rep_null_mm <- sim_null_mm[[sample(1:length(sim_null_mm), 1)]]
 
 
 plot_df_hg <- data.frame(
-  Group = c(rep(max_tf_hg, nrow(max_tf_df_hg)), 
-            rep(example_tf_hg, nrow(tf_df_hg)), 
-            rep(example_ribo_hg, nrow(ribo_df_hg)), 
-            rep("Null", nrow(rep_null_hg))),
-  Topk = c(max_tf_df_hg$Topk, tf_df_hg$Topk, ribo_df_hg$Topk, rep_null_hg$Topk)
-)
+  Group = c(
+    rep("Null", nrow(rep_null_hg)),
+    rep(example_ribo_hg, nrow(ribo_df_hg)),
+    rep(max_tf_hg, nrow(max_tf_df_hg)),
+    rep(example_tf_hg, nrow(tf_df_hg))
+  ), 
+  Topk = c(rep_null_hg$Topk, ribo_df_hg$Topk, max_tf_df_hg$Topk, tf_df_hg$Topk))
 
+plot_df_hg$Group <- factor(plot_df_hg$Group, levels = unique(plot_df_hg$Group))
 
 
 plot_df_mm <- data.frame(
-  Group = c(rep(max_tf_mm, nrow(max_tf_df_mm)), 
-            rep(example_tf_mm, nrow(tf_df_mm)), 
-            rep(example_ribo_mm, nrow(ribo_df_mm)), 
-            rep("Null", nrow(rep_null_mm))),
-  Topk = c(max_tf_df_mm$Topk, tf_df_mm$Topk, ribo_df_mm$Topk, rep_null_mm$Topk)
-)
+  Group = c(
+    rep("Null", nrow(rep_null_mm)),
+    rep(example_ribo_mm, nrow(ribo_df_mm)),
+    rep(max_tf_mm, nrow(max_tf_df_mm)),
+    rep(example_tf_mm, nrow(tf_df_mm))
+  ), 
+  Topk = c(rep_null_mm$Topk, ribo_df_mm$Topk, max_tf_df_mm$Topk, tf_df_mm$Topk))
 
+plot_df_mm$Group <- factor(plot_df_mm$Group, levels = unique(plot_df_mm$Group))
 
-
-p4a <- density_topk(plot_df_hg)
-p4b <- density_topk(plot_df_mm)
+p4a <- density_topk(plot_df_hg, k = k)
+p4b <- density_topk(plot_df_mm, k = k)
 p4 <- plot_grid(p4a, p4b)
 
 # boxplot(log10(plot_df_hg$Topk+1) ~ plot_df_hg$Group)
@@ -744,7 +749,7 @@ qplot(summ_tf_mm$Topk, xvar = "N_exp", yvar = "Mean")
 plot_family_similarity <- function(summary_df) {
   
   ggplot(summary_df, 
-         aes(x = fct_reorder(Family, desc(Mean), .fun = median), 
+         aes(x = fct_reorder(Family, desc(Mean), .fun = mean), 
              y = Mean)) +
     geom_boxplot(fill = "slategrey", outlier.shape = NA) +
     geom_jitter(width = 0.25, height = 0.1, shape = 21) +
