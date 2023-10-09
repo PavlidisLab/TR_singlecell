@@ -46,13 +46,13 @@ agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = p
 
 
 
-# TODO:
+# Functions
 # ------------------------------------------------------------------------------
 
 
 
-
-# TODO:
+# Given a gene x experiment matrix, return a count vector of the times that each
+# gene was in the top k of values for each column/experiment of gene_mat
 
 get_topk_count <- function(gene_mat, k, check_k_arg = TRUE) {
   
@@ -72,26 +72,42 @@ get_topk_count <- function(gene_mat, k, check_k_arg = TRUE) {
 
 
 
-# TODO: make explicit that proportion is count of datasets in which both
-# genes are measured, not just TF
 
-# For each gene in genes, generate a summary dataframe that includes:
-# TODO: update
-# 1) The gene ranking of coexpressed partners (average aggregate rank)
-# 2) The count of times the gene pair was mutually measured
-# 3) The count of NAs (no mutual measurement)
-# 4) For the best correlation partner, what was its best rank across datasets?
-# 5) And in what dataset did it achieve this best rank?
+# agg_l: list of gene x TF RSR matrices for each experiment
+# msr_mat: gene x experiment binary matrix indicating gene measurement
+# genes: the list of genes (assumed TFs) to generate a summary df for
+# k: integer used as the index for the cut-off of the "top" of each list
+# verbose: declare time for each calculated
+
+# returns a list of dataframes for each gene in genes that contains:
+# 1) Symbol: all genes in the rows of the RSR matrices of agg_l
+# 2) N_comeasured: How many datasets the TF and gene were both measured in
+# 3) Avg_RSR: Average RSR across experiments after imputation
+# 4) Rank_RSR: Rank of the average RSR (higher RSR = lower/better rank)
+# 5) Best_rank: The single best rank a gene obtained across experiments
+# 6) Topk_count: Count of times a gene was in the top K across experiments
+# 7) Topk_proportion: Topk_count divided by the count of comeasured experiments
+
+# NOTE: When a TF-gene is not co-measured, its RSR is imputed to the median
+# of the entire gene x experiment RSR matrix for the given TF (in practice 
+# ~0.51). This is done to set these non-measured genes to the "middle of the 
+# pack" as some will have an artificially high RSR (0.8+) for a given dataset 
+# because ties (NA values) were encountered early in the ranking due to shallow
+# measurement. This imputation down weights this artifact and still preserves 
+# the bottom of the list for the most consistently negative TF-gene pairs.
+
 
 all_rank_summary <- function(agg_l, 
                              msr_mat, 
                              genes, 
-                             k = 1000) {
+                             k = 1000,
+                             verbose = TRUE) {
   
   summ_l <- lapply(genes, function(x) {
     
-    message(paste(x))
+    if (verbose) message(paste(x, Sys.time()))
     
+    # Gene x experiment matrix for given TF, and TF itself set to NA
     gene_mat <- gene_vec_to_mat(agg_l, x)
     gene_mat[x, ] <- NA
     gene_mat <- subset_to_measured(gene_mat, msr_mat = msr_mat, gene = x)
@@ -100,32 +116,38 @@ all_rank_summary <- function(agg_l,
       return(NA)
     }
     
-    # Co-measurement between TF and genes
-    comsr <- vapply(rownames(gene_mat), function(y) {
-      sum(msr_mat[x,] & msr_mat[y,])
-    }, integer(1))
+    # Logical matrix of whether TF-genes were co-measured in an experiment
+    comsr <- lapply(rownames(gene_mat), function(y) {
+      msr_mat[x, colnames(gene_mat)] & msr_mat[y, colnames(gene_mat)]
+    })
+    comsr <- do.call(rbind, comsr)
+    rownames(comsr) <- rownames(gene_mat)
     
+    # Count of times the TF-gene were co-measured across experiments
+    comsr_sum <- rowSums(comsr)
     
+    # When a TF-gene was not co-measured, impute to the median NA
+    med <- median(gene_mat, na.rm = TRUE)
+    gene_mat[comsr == FALSE] <- med
+    
+    # Get a gene's ranking within each experiment and select the best
     colrank_gene_mat <- colrank_mat(gene_mat, ties_arg = "min")
-    
-    avg_rsr <- rowMeans(gene_mat, na.rm = TRUE)
-    # avg_colrank <- rowMeans(colrank_gene_mat, na.rm = TRUE)
-    
-    rank_rsr <- rank(-avg_rsr, ties.method = "min")
-    # rank_colrank <- rank(avg_colrank, ties.method = "min")
-    
     best_rank <- apply(colrank_gene_mat, 1, min)
     
-    topk_count <- get_topk_count(gene_mat, k)
-    topk_prop <- round(topk_count / comsr, 3)
+    # Average the RSR and rank (higher RSR = more important = lower/better rank)
+    avg_rsr <- rowMeans(gene_mat, na.rm = TRUE)
+    rank_rsr <- rank(-avg_rsr, ties.method = "min")
     
+    # Count/proportion of times a gene was in the top K across experiments  
+    topk_count <- get_topk_count(gene_mat, k)
+    topk_prop <- round(topk_count / comsr_sum, 3)
+    
+    # Organize summary df
     data.frame(
       Symbol = rownames(gene_mat),
-      N_comeasured = comsr,
+      N_comeasured = comsr_sum,
       Avg_RSR = avg_rsr,
-      # Avg_colrank = avg_colrank,
       Rank_RSR = rank_rsr,
-      # Rank_colrank = rank_colrank,
       Best_rank = best_rank,
       Topk_count = topk_count,
       Topk_proportion = topk_prop)
@@ -137,6 +159,10 @@ all_rank_summary <- function(agg_l,
   return(summ_l)
 }
 
+
+
+# Run and save
+# ------------------------------------------------------------------------------
 
 
 
