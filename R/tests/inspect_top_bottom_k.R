@@ -39,18 +39,19 @@ msr_mm <- readRDS(msr_mat_mm_path)
 sim_tf_hg <- readRDS(sim_tf_hg_path)
 sim_tf_mm <- readRDS(sim_tf_mm_path)
 
-# agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
 agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
 
 
-# Note that mouse Runx1 - Ankrd11 GSE200275 and GSE21166
+# Note that mouse Runx1 - Ankrd11 GSE200275 and GSE21166 was used to identify
+# marginally negative correlations tanking aggregate ranking
 # ------------------------------------------------------------------------------
 
 
-agg_l <- agg_tf_mm 
-msr_mat <- msr_mm 
-genes <- tfs_mm$Symbol
-x <- "Isx"
+agg_l <- agg_tf_hg
+msr_mat <- msr_hg
+genes <- tfs_hg$Symbol
+x <- "KMT2C"
 
 
 # For the given gene, create a matrix from the experiments that it is measured
@@ -75,8 +76,8 @@ sim_df <- arrange(sim_df, desc(Bottomk))
 id1 <- sim_df$Row[1]
 id2 <- sim_df$Col[1]
 
-# dat <- load_dat_list(c(id1, id2))  # CPM
-dat <- load_dat_list(c(id1, id2), pattern = "_clean_mat_and_meta.RDS")  # lognorm
+dat <- load_dat_list(c(id1, id2))  # CPM
+# dat <- load_dat_list(c(id1, id2), pattern = "_clean_mat_and_meta.RDS")  # lognorm
 
 sort1 <- sort(gene_mat[, id1], decreasing = TRUE)
 sort2 <- sort(gene_mat[, id2], decreasing = TRUE)
@@ -169,9 +170,3 @@ plot(sort2,
 
 abline(v = k2, col = "red")
 abline(v = which(names(sort2) == names(sort_rev2[k_rev2])), col = "red")
-
-
-
-plot(mat[, id1], mat[, id2])
-cor(mat[, id1], mat[, id2], method = "spearman")
-view(data.frame(Symbol = names(vec1), Vec1 = vec1, Vec2 = vec2))
