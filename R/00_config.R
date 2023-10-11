@@ -87,9 +87,11 @@ null_topk_hg_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersec
 null_topk_mm_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersect_mm.RDS"
 
 
-# List of summarized TF rankings
-rank_tf_hg_path <- "/space/scratch/amorin/R_objects/TF_agg_ranking_hg.RDS"
-rank_tf_mm_path <- "/space/scratch/amorin/R_objects/TF_agg_ranking_mm.RDS"
+# List of summarized aggregate coexpression rankings
+rank_tf_hg_path <- "/space/scratch/amorin/R_objects/ranking_agg_TF_hg.RDS"
+rank_tf_mm_path <- "/space/scratch/amorin/R_objects/ranking_agg_TF_mm.RDS"
+rank_ribo_hg_path <- "/space/scratch/amorin/R_objects/ranking_agg_ribo_hg.RDS"
+rank_ribo_mm_path <- "/space/scratch/amorin/R_objects/ranking_agg_ribo_mm.RDS"
 
 
 # Curated targets from on going curation and from Eric's 2021 paper
@@ -97,6 +99,7 @@ gsheets_curated <- "1PB2P-9Xk2zV0RSZnkY5BdnV6E4KkDpEKvo68Sw_Rnx8"
 pavlab_curation_path <- "/home/amorin/Data/Metadata/pavlab_curation_sep2023.tsv"
 chu2021_records_path <- "/home/amorin/Data/Metadata/Chu2021_records_DTRI.tsv"
 chu2021_all_path <- "/home/amorin/Data/Metadata/Chu2021_all_DTRI.tsv"
+
 
 # Output of formatted curated targets
 curated_all_path <- "/home/amorin/Data/Metadata/Curated_targets_all_Sept2023.tsv"
