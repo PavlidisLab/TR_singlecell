@@ -26,20 +26,30 @@ ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 # Protein coding genes 
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
+pc_ortho <- read.delim(pc_ortho_path)
 
 # Transcription Factors
 tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% pc_hg$Symbol)
 tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
 tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
 
+# Ribosomal genes
+sribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
+lribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
+ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
+
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
-# For each dataset, load the subset gene x TF aggregation matrix 
+# Loading the subset TF and ribosomal aggregate matrices
 agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
 agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
+agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
+agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
 
+tfs_hg <- filter(tfs_hg, Symbol %in% colnames(agg_tf_hg[[1]]))
+tfs_mm <- filter(tfs_mm, Symbol %in% colnames(agg_tf_mm[[1]]))
 
 
 # Functions
@@ -161,16 +171,17 @@ all_rank_summary <- function(agg_l,
 # ------------------------------------------------------------------------------
 
 
+
 if (!file.exists(rank_tf_hg_path) || force_resave) {
   
-  summ_hg <- all_rank_summary(agg_l = agg_tf_hg, 
-                              msr_mat = msr_hg, 
-                              genes = tfs_hg$Symbol,
-                              k = k)
+  tf_hg <- all_rank_summary(agg_l = agg_tf_hg,
+                            msr_mat = msr_hg,
+                            genes = tfs_hg$Symbol,
+                            k = k)
   
-  summ_hg <- summ_hg[!is.na(summ_hg)]
+  tf_hg <- tf_hg[!is.na(tf_hg)]
   
-  saveRDS(summ_hg, rank_tf_hg_path)
+  saveRDS(tf_hg, rank_tf_hg_path)
 
 }
 
@@ -178,13 +189,43 @@ if (!file.exists(rank_tf_hg_path) || force_resave) {
 
 if (!file.exists(rank_tf_mm_path) || force_resave) {
   
-  summ_mm <- all_rank_summary(agg_l = agg_tf_mm, 
-                              msr_mat = msr_mm, 
-                              genes = tfs_mm$Symbol,
+  tf_mm <- all_rank_summary(agg_l = agg_tf_mm,
+                            msr_mat = msr_mm,
+                            genes = tfs_mm$Symbol,
+                            k = k)
+  
+  tf_mm <- tf_mm[!is.na(tf_mm)]
+  
+  saveRDS(tf_mm, rank_tf_mm_path)
+  
+}
+
+
+
+if (!file.exists(rank_ribo_hg_path) || force_resave) {
+  
+  ribo_hg <- all_rank_summary(agg_l = agg_ribo_hg, 
+                              msr_mat = msr_hg, 
+                              genes = ribo_genes$Symbol_hg,
                               k = k)
   
-  summ_mm <- summ_mm[!is.na(summ_mm)]
+  ribo_hg <- ribo_hg[!is.na(ribo_hg)]
   
-  saveRDS(summ_mm, rank_tf_mm_path)
+  saveRDS(ribo_hg, rank_ribo_hg_path)
+  
+}
+
+
+
+if (!file.exists(rank_ribo_mm_path) || force_resave) {
+  
+  ribo_mm <- all_rank_summary(agg_l = agg_ribo_mm, 
+                              msr_mat = msr_mm, 
+                              genes = ribo_genes$Symbol_mm,
+                              k = k)
+  
+  ribo_mm <- ribo_mm[!is.na(ribo_mm)]
+  
+  saveRDS(ribo_mm, rank_ribo_mm_path)
   
 }
