@@ -89,5 +89,5 @@ avg_vs_ind_recover_curated_mm <- get_colwise_curated_auc_list(
 
 
 
-saveRDS(avg_vs_ind_recover_curated_hg, avg_vs_ind_recover_curated_hg_path)
-saveRDS(avg_vs_ind_recover_curated_mm, avg_vs_ind_recover_curated_mm_path)
+saveRDS(avg_vs_ind_recover_curated_hg, avg_vs_ind_auc_hg_path)
+saveRDS(avg_vs_ind_recover_curated_mm, avg_vs_ind_auc_mm_path)
