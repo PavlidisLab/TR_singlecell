@@ -25,11 +25,73 @@ pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 pc_ortho <- read.delim(pc_ortho_path)
 
-# Saved list RDS of the summaries
+# Ribosomal genes
+sribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
+lribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
+ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
+
+# Saved list RDS of the ranks
 rank_tf_hg <- readRDS(rank_tf_hg_path)
 rank_tf_mm <- readRDS(rank_tf_mm_path)
+rank_ribo_hg <- readRDS(rank_ribo_hg_path)
+rank_ribo_mm <- readRDS(rank_ribo_mm_path)
 
+# Genomic evidence from Morin 2023 
 evidence_l <- readRDS(evidence_path)
+
+
+
+# Create a gene x TF matrix of summarized ranks
+# ------------------------------------------------------------------------------
+
+
+
+rank_mat_hg <- as.matrix(do.call(cbind, lapply(rank_tf_hg, `[`, "Rank_RSR")))
+colnames(rank_mat_hg) <- names(rank_tf_hg)
+
+
+rank_mat_mm <- as.matrix(do.call(cbind, lapply(rank_tf_mm, `[`, "Rank_RSR")))
+colnames(rank_mat_mm) <- names(rank_tf_mm)
+
+
+
+
+# Ribosomal rankings
+# ------------------------------------------------------------------------------
+
+
+count_top_ribo <- function(ribo_l, topn = 82) {
+  
+  ribo_genes <- names(ribo_l)
+  
+  sum_l <- lapply(ribo_genes, function(x) {
+    sum(arrange(ribo_l[[x]], Rank_RSR)$Symbol[1:topn] %in% ribo_genes)
+  })
+  
+  return(data.frame(Symbol = ribo_genes, Count = unlist(sum_l)))
+}
+
+
+
+count_ribo_hg <- count_top_ribo(rank_ribo_hg)
+count_ribo_mm <- count_top_ribo(rank_ribo_mm)
+
+
+
+ggplot(count_ribo_hg, aes(x = reorder(Symbol, Count), y = Count)) +
+  geom_bar(stat = "identity", colour = "black", fill = "slategrey") +
+  ylab("Count of top coexpression partners that are also ribosomal") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        axis.title = element_text(size = 20),
+        axis.title.x = element_blank(),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 10, 10, 10)))
+
+
+
+plot_hist(count_ribo_hg, stat_col = "Count")
 
 
 
@@ -50,12 +112,7 @@ arrange(rank_tf_mm$E2f8, desc(Avg_RSR)) %>% head(30)
 
 
 
-# Create a gene x TF matrix of summarized ranks
-# ------------------------------------------------------------------------------
 
-
-rank_mat_hg <- as.matrix(do.call(cbind, lapply(rank_tf_hg, `[`, "Rank_RSR")))
-colnames(rank_mat_hg) <- names(rank_tf_hg)
 rank_cor_hg <- mat_to_df(colwise_cor(rank_mat_hg), symmetric = TRUE)
 rank_topk_hg <- mat_to_df(colwise_topk_intersect(rank_mat_hg, k = 1000), symmetric = TRUE)
 
@@ -65,8 +122,7 @@ rank_hg <- data.frame(Row = rank_cor_hg$Row,
                       Cor = rank_cor_hg$Value)
 
 
-rank_mat_mm <- as.matrix(do.call(cbind, lapply(rank_tf_mm, `[`, "Rank_RSR")))
-colnames(rank_mat_mm) <- names(rank_tf_mm)
+
 rank_cor_mm <- mat_to_df(colwise_cor(rank_mat_mm), symmetric = TRUE)
 rank_topk_mm <- mat_to_df(colwise_topk_intersect(rank_mat_mm, k = 1000), symmetric = TRUE)
 
@@ -83,7 +139,7 @@ rank_order_hg <- sort(rowMeans(rank_mat_hg, na.rm = TRUE))
 head(rank_order_hg)
 tail(rank_order_hg)
 
-head(sort(rank_mat_hg["DLL1",]), 50)
+head(sort(rank_mat_hg["TRIM28",]), 50)
 tail(sort(rank_mat_hg["CSF1R",]), 50)
 
 
