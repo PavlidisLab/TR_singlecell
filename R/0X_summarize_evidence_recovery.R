@@ -72,9 +72,52 @@ unibind_auc_hg <- readRDS(unibind_auc_hg_path)
 unibind_auc_mm <- readRDS(unibind_auc_mm_path)
 coexpr_auc_hg <- readRDS(coexpr_auc_hg_path)
 coexpr_auc_mm <- readRDS(coexpr_auc_mm_path)
-
 avg_vs_ind_auc_hg <- readRDS(avg_vs_ind_auc_hg_path)
 avg_vs_ind_auc_mm <- readRDS(avg_vs_ind_auc_mm_path)
+
+
+
+
+# Individual vs average
+# ------------------------------------------------------------------------------
+
+
+df1 <- do.call(rbind, lapply(avg_vs_ind_auc_hg, `[[`, "Summary_df"))
+df2 <- do.call(rbind, lapply(avg_vs_ind_auc_mm, `[[`, "Summary_df"))
+
+df1_sub <- filter(df1, N_targets >= 5)
+df2_sub <- filter(df2, N_targets >= 5)
+
+summary(df1_sub$AUROC_percentile)
+summary(df1_sub$AUPRC_percentile)
+
+summary(df2_sub$AUROC_percentile)
+summary(df2_sub$AUPRC_percentile)
+
+
+plot_grid(
+  plot_hist(df1_sub, stat_col = paste0("AUPRC", "_percentile")),
+  plot_hist(df1_sub, stat_col = paste0("AUROC", "_percentile")),
+  plot_hist(df2_sub, stat_col = paste0("AUPRC", "_percentile")),
+  plot_hist(df2_sub, stat_col = paste0("AUROC", "_percentile")),
+  nrow = 2)
+
+
+
+tf <- "ASCL1"
+auc_df <- arrange(avg_vs_ind_auc_hg[[tf]]$AUC_df, AUROC)
+auc_df_no_avg <- filter(auc_df, ID != "Average")
+auc_avg <- filter(auc_df, ID == "Average")
+
+
+# hist(auc_df_no_avg$AUPRC, breaks = 100, xlim = c(0, max(auprc_agg, max(auprc_no_agg)) * 1.2))
+hist(auc_df_no_avg$AUPRC, breaks = 100, xlim = c(0, 0.07))
+abline(v = auc_avg$AUPRC, col = "red")
+
+hist(auc_df_no_avg$AUROC, breaks = 100, xlim = c(0.3, 0.8))
+abline(v = auc_avg$AUROC, col = "red")
+
+
 
 
 #
@@ -86,11 +129,8 @@ avg_vs_ind_auc_mm <- readRDS(avg_vs_ind_auc_mm_path)
 
 join_auc_df <- function(coexpr_l, unibind_l) {
   
-  keep_coexpr <- names(which(unlist(lapply(coexpr_l, function(x) "auc_df" %in% names(x)))))
-  coexpr_df <- do.call(rbind, lapply(coexpr_l[keep_coexpr], `[[`, "auc_df"))
-  
-  keep_unibind <- names(which(unlist(lapply(unibind_l, function(x) "auc_df" %in% names(x)))))
-  unibind_df <- do.call(rbind, lapply(unibind_l[keep_unibind], `[[`, "auc_df"))
+  coexpr_df <- do.call(rbind, lapply(coexpr_l, `[[`, "Perf_df"))
+  unibind_df <- do.call(rbind, lapply(unibind_l, `[[`, "Perf_df"))
   
   left_join(coexpr_df, unibind_df,
             by = c("Symbol", "N_targets"),
@@ -110,22 +150,19 @@ min_targets <- 5
 auc_sub_hg <- filter(auc_hg, N_targets >= min_targets)
 auc_sub_mm <- filter(auc_mm, N_targets >= min_targets)
 
-
-summary(Filter(is.numeric, auc_sub_hg))
-summary(Filter(is.numeric, auc_sub_mm))
-
-
 # Minimum count of curated targets common to unibind and coexpr
 
 auc_common_hg <- filter(auc_sub_hg, !is.na(AUPRC_coexpr) & !is.na(AUPRC_unibind))
 auc_common_mm <- filter(auc_sub_mm, !is.na(AUPRC_coexpr) & !is.na(AUPRC_unibind))
 
+summary(Filter(is.numeric, auc_sub_hg))
+summary(Filter(is.numeric, auc_sub_mm))
 
 summary(Filter(is.numeric, auc_common_hg))
 summary(Filter(is.numeric, auc_common_mm))
 
 
-# Proportion with notably good or bad aucormance
+# Proportion with notably good or bad auc performance
 
 stat_cols <- c(
   "AUPRC_percentile_observed_coexpr",
@@ -165,16 +202,19 @@ top_and_bottom_prop(auc_common_mm, stat_cols)
 
 
 
+# Histogram of percentiles of observered AUCs versus null
 
-
-
-
-
-# This uses all TFs for coexpr and unibind
 
 stat <- "AUPRC"
-plot_df_hg <- auc_sub_hg  # auc_common_hg 
-plot_df_mm <- auc_sub_mm  # auc_common_mm
+
+# Using all TFs available for coexpression
+plot_df_hg <- auc_sub_hg 
+plot_df_mm <- auc_sub_mm
+
+# Using only TFs common to coexpression and unibind
+# plot_df_hg <- auc_common_hg 
+# plot_df_mm <- auc_common_mm
+
 
 p_auprc_hist_hg <- list(
   plot_hist(plot_df_hg, stat_col = paste0(stat, "_percentile_observed_coexpr")),
@@ -202,29 +242,32 @@ plot_grid(
 
 
 
-# Demo a single TF's aucormance relative to null distn
+# Demo a single TF's auc performance relative to null distn
 
 
 tf_hg <- "ASCL1"
 tf_mm <- "Ascl1"
 
-xmin <- 0.01
-xmax <- 0.06
-
 null <- unlist(lapply(unibind_auc_hg[[tf_hg]]$Null, `[[`, stat))
-obs <- unibind_auc_hg[[tf_hg]]$auc_df[[stat]]
+obs <- unibind_auc_hg[[tf_hg]]$Perf_df[[stat]]
+
+xmin <- min(obs, min(null)) * 0.95
+xmax <- max(obs, max(null)) * 1.05
 hist(null, xlim = c(xmin, xmax), main = tf_hg, breaks = 100)
 abline(v = obs, col = "red")
 
 
 null <- unlist(lapply(unibind_auc_mm[[tf_mm]]$Null, `[[`, stat))
-obs <- unibind_auc_mm[[tf_mm]]$auc_df[[stat]]
+obs <- unibind_auc_mm[[tf_mm]]$Perf_df[[stat]]
+
+xmin <- min(obs, min(null)) * 0.95
+xmax <- max(obs, max(null)) * 1.05
 hist(null, xlim = c(xmin, xmax), main = tf_mm, breaks = 100)
 abline(v = obs, col = "red")
 
 
 
-# 
+# Scatterplot of coexpression versus unibind performance for each TF
 
 ggplot(auc_common_hg, aes(x = AUPRC_percentile_observed_coexpr, y = AUPRC_percentile_observed_unibind)) +
   geom_point(shape = 21, size = 2.4) +
@@ -248,6 +291,8 @@ ggplot(auc_common_hg, aes(x = AUPRC_percentile_observed_coexpr, y = AUPRC_percen
 # cor(auc_common_mm$AUPRC_percentile_observed_coexpr, auc_common_mm$AUPRC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
 
 
+# Isolating TFs that performed well for coexpression and binding
+
 
 top_both_hg <- auc_common_hg %>% 
   filter(AUPRC_percentile_observed_coexpr > 0.9 &
@@ -263,6 +308,7 @@ top_ortho <- intersect(top_both_hg$Symbol, str_to_upper(top_both_mm$Symbol))
 
 
 
+# Looking at TFs that performed well in one but not both 
 
 diff_hg <- auc_common_hg %>%
   mutate(Diff_AUPRC = abs(
@@ -279,48 +325,6 @@ diff_mm <- auc_common_mm %>%
 
 
 
-# Individual vs average
-# ------------------------------------------------------------------------------
-
-
-df1 <- do.call(rbind, lapply(avg_vs_ind_auc_hg, `[[`, "Summary_df"))
-df2 <- do.call(rbind, lapply(avg_vs_ind_auc_mm, `[[`, "Summary_df"))
-
-df1_sub <- filter(df1, N_targets >= 5)
-df2_sub <- filter(df2, N_targets >= 5)
-
-summary(df1_sub$AUROC_percentile)
-summary(df1_sub$AUPRC_percentile)
-hist(df1_sub$AUROC_percentile, breaks = 50)
-hist(df1_sub$AUPRC_percentile, breaks = 50)
-
-summary(df2_sub$AUROC_percentile)
-summary(df2_sub$AUPRC_percentile)
-hist(df2_sub$AUROC_percentile, breaks = 50)
-hist(df2_sub$AUPRC_percentile, breaks = 50)
-
-
-plot_grid(
-  plot_hist(df1_sub, stat_col = paste0("AUPRC", "_percentile")),
-  plot_hist(df1_sub, stat_col = paste0("AUROC", "_percentile")),
-  plot_hist(df2_sub, stat_col = paste0("AUPRC", "_percentile")),
-  plot_hist(df2_sub, stat_col = paste0("AUROC", "_percentile")),
-  nrow = 2)
-
-
-
-tf <- "ASCL1"
-auc_df <- arrange(avg_vs_ind_auc_hg[[tf]]$AUC_df, AUROC)
-auc_df_no_avg <- filter(auc_df, ID != "Average")
-auc_avg <- filter(auc_df, ID == "Average")
-
-
-# hist(auc_df_no_avg$AUPRC, breaks = 100, xlim = c(0, max(auprc_agg, max(auprc_no_agg)) * 1.2))
-hist(auc_df_no_avg$AUPRC, breaks = 100, xlim = c(0, 0.07))
-abline(v = auc_avg$AUPRC, col = "red")
-
-hist(auc_df_no_avg$AUROC, breaks = 100, xlim = c(0.3, 0.8))
-abline(v = auc_avg$AUROC, col = "red")
 
 
 # Inspecting retrieved ranks for a given TF
