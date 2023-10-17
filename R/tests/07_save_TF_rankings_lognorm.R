@@ -43,8 +43,12 @@ msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
 # Loading the subset TF and ribosomal aggregate matrices
-agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
-agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
+agg_tf_hg_path <- "/space/scratch/amorin/R_objects/agg_mat_TF_list_hg_lognorm.RDS"
+agg_tf_mm_path <- "/space/scratch/amorin/R_objects/agg_mat_TF_list_mm_lognorm.RDS"
+agg_ribo_hg_path <- "/space/scratch/amorin/R_objects/agg_mat_ribo_list_hg_lognorm.RDS"
+agg_ribo_mm_path <- "/space/scratch/amorin/R_objects/agg_mat_ribo_list_hg_lognorm.RDS"
+agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol, pattern = "_RSR_allrank.tsv")
+agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol, pattern = "_RSR_allrank.tsv")
 agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
 agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
 
