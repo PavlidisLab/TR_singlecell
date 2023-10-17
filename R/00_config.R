@@ -69,10 +69,10 @@ avg_coexpr_mm_path <- "/space/scratch/amorin/R_objects/avg_coexpr_mm.RDS"
 
 
 # List of TF and L/S ribo aggregate matrices
-agg_tf_hg_path <- "/space/scratch/amorin/R_objects/TF_agg_mat_list_hg.RDS"
-agg_tf_mm_path <- "/space/scratch/amorin/R_objects/TF_agg_mat_list_mm.RDS"
-agg_ribo_hg_path <- "/space/scratch/amorin/R_objects/ribo_agg_mat_list_hg.RDS"
-agg_ribo_mm_path <- "/space/scratch/amorin/R_objects/ribo_agg_mat_list_mm.RDS"
+agg_tf_hg_path <- "/space/scratch/amorin/R_objects/agg_mat_TF_list_hg.RDS"
+agg_tf_mm_path <- "/space/scratch/amorin/R_objects/agg_mat_TF_list_mm.RDS"
+agg_ribo_hg_path <- "/space/scratch/amorin/R_objects/agg_mat_ribo_list_hg.RDS"
+agg_ribo_mm_path <- "/space/scratch/amorin/R_objects/agg_mat_ribo_list_mm.RDS"
 
 
 # List of TF and ribo vector similarities
