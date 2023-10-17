@@ -64,7 +64,7 @@ evidence_l <- readRDS(evidence_path)
 # targets_curated_mm <- intersect(pc_mm$Symbol, str_to_title(curated$Target_Symbol))
 
 # For each dataset, load the subset gene x TF aggregation matrix 
-# agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
 # agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
 
 # List of AUROC/AUPRC for TF lists ability to recover curated targets
@@ -77,29 +77,62 @@ avg_vs_ind_auc_mm <- readRDS(avg_vs_ind_auc_mm_path)
 
 
 
+# Functions
+# ------------------------------------------------------------------------------
 
-# Individual vs average
+# TODO: function that returns proportion of data in percentile bins
+
+top_and_bottom_prop <- function(df, stat_cols) {
+  
+  lapply(df[, stat_cols], function(col) {
+    
+    col <- col[!is.na(col)]
+    n <- length(col)
+    
+    round(c(
+      N = n,
+      Eq1 = sum(col == 1) / n,
+      Gt09 = sum(col > 0.9) / n,
+      Lt01 = sum(col < 0.1) / n
+    ), 3)
+  })
+}
+
+
+
+
+# Individual TF vector AUC vs averaged/final AUC
 # ------------------------------------------------------------------------------
 
 
-df1 <- do.call(rbind, lapply(avg_vs_ind_auc_hg, `[[`, "Summary_df"))
-df2 <- do.call(rbind, lapply(avg_vs_ind_auc_mm, `[[`, "Summary_df"))
+min_targets <- 5
 
-df1_sub <- filter(df1, N_targets >= 5)
-df2_sub <- filter(df2, N_targets >= 5)
 
-summary(df1_sub$AUROC_percentile)
-summary(df1_sub$AUPRC_percentile)
+avg_vs_ind_df_hg <-  lapply(avg_vs_ind_auc_hg, `[[`, "Summary_df") %>% 
+  do.call(rbind, .) %>%
+  rownames_to_column(var = "Symbol") %>% 
+  filter(N_targets >= min_targets)
 
-summary(df2_sub$AUROC_percentile)
-summary(df2_sub$AUPRC_percentile)
+
+avg_vs_ind_df_mm <-  lapply(avg_vs_ind_auc_mm, `[[`, "Summary_df") %>% 
+  do.call(rbind, .) %>%
+  rownames_to_column(var = "Symbol") %>% 
+  filter(N_targets >= min_targets)
+
+
+
+summary(Filter(is.numeric, avg_vs_ind_df_hg))
+summary(Filter(is.numeric, avg_vs_ind_df_mm))
+
+top_and_bottom_prop(avg_vs_ind_df_hg, c("AUROC_percentile", "AUPRC_percentile"))
+top_and_bottom_prop(avg_vs_ind_df_mm, c("AUROC_percentile", "AUPRC_percentile"))
 
 
 plot_grid(
-  plot_hist(df1_sub, stat_col = paste0("AUPRC", "_percentile")),
-  plot_hist(df1_sub, stat_col = paste0("AUROC", "_percentile")),
-  plot_hist(df2_sub, stat_col = paste0("AUPRC", "_percentile")),
-  plot_hist(df2_sub, stat_col = paste0("AUROC", "_percentile")),
+  plot_hist(avg_vs_ind_df_hg, stat_col = paste0("AUPRC", "_percentile")),
+  plot_hist(avg_vs_ind_df_hg, stat_col = paste0("AUROC", "_percentile")),
+  plot_hist(avg_vs_ind_df_mm, stat_col = paste0("AUPRC", "_percentile")),
+  plot_hist(avg_vs_ind_df_mm, stat_col = paste0("AUROC", "_percentile")),
   nrow = 2)
 
 
@@ -114,7 +147,27 @@ auc_avg <- filter(auc_df, ID == "Average")
 hist(auc_df_no_avg$AUPRC, breaks = 100, xlim = c(0, 0.07))
 abline(v = auc_avg$AUPRC, col = "red")
 
-hist(auc_df_no_avg$AUROC, breaks = 100, xlim = c(0.3, 0.8))
+hist(auc_df_no_avg$AUROC, breaks = 20, xlim = c(0.3, 0.8))
+abline(v = auc_avg$AUROC, col = "red")
+
+
+ggplot(auc_df_no_avg, aes(x = AUROC)) +
+  geom_density(fill = "lightgrey") +
+  geom_vline(xintercept = auc_avg$AUROC, col = "firebrick") +
+  ylab("Density") +
+  ggtitle(tf) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 10, 10, 10)))
+
+
+plot_hist(auc_df_no_avg, stat_col = "AUROC") +
+  geom_vline(xintercept = auc_avg$AUROC, col = "firebrick")
+
+
+plot(density(auc_df_no_avg$AUROC))
 abline(v = auc_avg$AUROC, col = "red")
 
 
@@ -172,25 +225,7 @@ stat_cols <- c(
 )
 
 
-# TODO: function that returns proportion of data in percentile bins
 
-
-
-top_and_bottom_prop <- function(df, stat_cols) {
-  
-  lapply(df[, stat_cols], function(col) {
-    
-    col <- col[!is.na(col)]
-    n <- length(col)
-    
-    round(c(
-      N = n,
-      Eq1 = sum(col == 1) / n,
-      Gt09 = sum(col > 0.9) / n,
-      Lt01 = sum(col < 0.1) / n
-      ), 3)
-  })
-}
 
 
 top_and_bottom_prop(auc_sub_hg, stat_cols)
@@ -237,7 +272,7 @@ plot_grid(
   plot_hist(plot_df_hg, stat_col = paste0("AUROC", "_percentile_observed_coexpr")),
   plot_hist(plot_df_mm, stat_col = paste0("AUPRC", "_percentile_observed_coexpr")),
   plot_hist(plot_df_mm, stat_col = paste0("AUROC", "_percentile_observed_coexpr")),
-  nrow = 2)
+  nrow = 4)
 
 
 
@@ -269,13 +304,98 @@ abline(v = obs, col = "red")
 
 # Scatterplot of coexpression versus unibind performance for each TF
 
-ggplot(auc_common_hg, aes(x = AUPRC_percentile_observed_coexpr, y = AUPRC_percentile_observed_unibind)) +
-  geom_point(shape = 21, size = 2.4) +
+ggplot(auc_common_hg, aes(x = AUPRC_percentile_observed_coexpr, 
+                          y = AUPRC_percentile_observed_unibind)) +
+  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = 0.9, ymax = 1.05), fill = NA, colour = "forestgreen") +
+  geom_rect(aes(xmin = -0.05, xmax = 0.1, ymin = 0.9, ymax = 1.05), fill = NA, colour = "grey") +
+  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = -0.05, ymax = 0.1), fill = NA, colour = "grey") +
+  geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = NA, colour = "firebrick") +
+  geom_point(shape = 21, size = 3.4) +
+  xlab("AUPRC percentile coexpression") +
+  ylab("AUPRC percentile binding") +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         axis.title = element_text(size = 20),
-        plot.title = element_text(size = 20))
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 10, 10, 10)))
 
+
+
+ggplot(auc_common_hg, aes(x = AUPRC_percentile_observed_coexpr, 
+                          y = AUPRC_percentile_observed_unibind)) +
+  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = 0.9, ymax = 1.05), fill = "forestgreen", colour = NA, alpha = 0.006) +
+  geom_rect(aes(xmin = -0.05, xmax = 0.1, ymin = 0.9, ymax = 1.05), fill = "grey", colour = NA, alpha = 0.006) +
+  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = -0.05, ymax = 0.1), fill = "grey", colour = NA, alpha = 0.006) +
+  geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = "firebrick", colour = NA, alpha = 0.006) +
+  geom_point(shape = 21, size = 3.4) +
+  xlab("AUPRC percentile coexpression") +
+  ylab("AUPRC percentile binding") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 10, 10, 10)))
+
+
+
+# Looking at the distribution of observed percentiles for coexpr/binding
+# TODO: function
+
+plot(density(auc_common_hg$AUPRC_percentile_observed_coexpr))
+lines(density(auc_common_hg$AUPRC_percentile_observed_unibind), col = "red")
+
+
+plot(density(auc_sub_hg$AUPRC_coexpr))
+lines(density(auc_sub_hg$AUPRC_unibind, na.rm = TRUE), col = "red")
+
+
+
+# tt <- data.frame(
+#     Percentile = c(
+#       auc_sub_hg$AUPRC_percentile_observed_coexpr,
+#       auc_sub_hg$AUPRC_percentile_observed_unibind,
+#       auc_sub_hg$AUROC_percentile_observed_coexpr,
+#       auc_sub_hg$AUROC_percentile_observed_unibind
+#     ),
+#     Group = c(
+#       rep("Coexpr_AUPRC", length(auc_sub_hg$AUPRC_percentile_observed_coexpr)),
+#       rep("Binding_AUPRC", length(auc_sub_hg$AUPRC_percentile_observed_unibind)),
+#       rep("Coexpr_AUROC", length(auc_sub_hg$AUROC_percentile_observed_coexpr)),
+#       rep("Binding_AUROC", length(auc_sub_hg$AUROC_percentile_observed_unibind))
+#     )
+#   )
+# 
+# tt$Group <- factor(tt$Group, levels = unique(tt$Group))
+
+tt <- data.frame(
+  Percentile = c(
+    auc_common_hg$AUPRC_percentile_observed_coexpr,
+    auc_common_hg$AUPRC_percentile_observed_unibind,
+    auc_common_hg$AUROC_percentile_observed_coexpr,
+    auc_common_hg$AUROC_percentile_observed_unibind
+  ),
+  Group = c(
+    rep("Coexpr_AUPRC", length(auc_common_hg$AUPRC_percentile_observed_coexpr)),
+    rep("Binding_AUPRC", length(auc_common_hg$AUPRC_percentile_observed_unibind)),
+    rep("Coexpr_AUROC", length(auc_common_hg$AUROC_percentile_observed_coexpr)),
+    rep("Binding_AUROC", length(auc_common_hg$AUROC_percentile_observed_unibind))
+  )
+)
+
+tt$Group <- factor(tt$Group, levels = unique(tt$Group))
+
+
+
+
+ggplot(tt, aes(y = Group, x = Percentile)) +
+  geom_violin(fill = "slategrey") +
+  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
+  xlab("Percentile observed") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        axis.title.y = element_blank(),
+        plot.title = element_text(size = 20))
 
 
 # plot(auc_common_hg$AUPRC_percentile_observed_coexpr, auc_common_hg$AUPRC_percentile_observed_unibind)
@@ -398,13 +518,14 @@ abline(v = auc_avg$AUROC, col = "red")
 # ------------------------------------------------------------------------------
 
 
-tf <- "Runx1"
-agg_l <- agg_tf_mm
-msr_mat <- msr_mm
-labels_curated <- get_curated_labels(tf = tf, curated_df = curated, pc_df = pc_mm, species = "Mouse", remove_self = TRUE)
+tf <- "ASCL1"
+agg_l <- agg_tf_hg
+msr_mat <- msr_hg
+labels_curated <- get_curated_labels(tf = tf, curated_df = curated, pc_df = pc_hg, species = "Human", remove_self = TRUE)
 
 score_mat <- gene_vec_to_mat(agg_l, tf)
 score_mat <- subset_to_measured(score_mat, msr_mat = msr_mat, gene = tf)
+score_mat <- score_mat[setdiff(rownames(score_mat), tf), ]
 score_mat <- cbind(score_mat, Average = rowMeans(score_mat))
 
 # Scoring where ties have been broken
@@ -422,15 +543,15 @@ label_vec_noties <- names(score_vec_noties) %in% labels_curated
 auc <- get_auc(score_vec, label_vec, measure = "both")
 auc_noties <- get_auc(score_vec_noties, label_vec_noties, measure = "both")
 
-auc_df <- get_aucormance_df(score_vec, label_vec, measure = "both")
-auc_df_noties <- get_aucormance_df(score_vec_noties, label_vec_noties, measure = "both")
+auc_df <- get_performance_df(score_vec, label_vec, measure = "both")
+auc_df_noties <- get_performance_df(score_vec_noties, label_vec_noties, measure = "both")
 
 
 # Directly accessing ROCR prediction/plots
 pred <- ROCR::prediction(predictions = score_vec, labels = label_vec)
 pred_noties <- ROCR::prediction(predictions = score_vec_noties, labels = label_vec_noties)
-roc <- ROCR::aucormance(pred, measure = "tpr", x.measure = "fpr")
-roc_noties <- ROCR::aucormance(pred_noties, measure = "tpr", x.measure = "fpr")
+roc <- ROCR::performance(pred, measure = "tpr", x.measure = "fpr")
+roc_noties <- ROCR::performance(pred_noties, measure = "tpr", x.measure = "fpr")
 plot(roc)
 plot(roc_noties)
 
@@ -439,8 +560,8 @@ plot(roc_noties)
 auc_all <- get_colwise_auc(score_mat, labels = labels_curated, ncores = 8)
 auc_all_noties <- get_colwise_auc(score_mat_noties, labels = labels_curated, ncores = 8)
 
-auc_df_all <- get_colwise_aucormance_df(score_mat, labels = labels_curated, ncores = 8)
-auc_df_all_noties <- get_colwise_aucormance_df(score_mat_noties, labels = labels_curated, ncores = 8)
+auc_df_all <- get_colwise_performance_df(score_mat, labels = labels_curated, ncores = 8)
+auc_df_all_noties <- get_colwise_performance_df(score_mat_noties, labels = labels_curated, ncores = 8)
 
 auc_l <- split(auc_df_all, auc_df_all$ID)
 auc_noties_l <- split(auc_df_all_noties, auc_df_all_noties$ID)
@@ -501,8 +622,8 @@ plot_df_noties$ID <- factor(plot_df_noties$ID, levels = rev(unique(names(cols)))
 
 
 
-p_all <- plot_auc(df = plot_df, measure = "ROC", cols = cols, title = tf)
-p_all_noties <- plot_auc(df = plot_df_noties, measure = "ROC", cols = cols, title = tf)
+p_all <- plot_perf(df = plot_df, measure = "ROC", cols = cols, title = tf)
+p_all_noties <- plot_perf(df = plot_df_noties, measure = "ROC", cols = cols, title = tf)
 
 
 pdf("myplot.pdf")
