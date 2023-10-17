@@ -39,6 +39,16 @@ rank_ribo_mm <- readRDS(rank_ribo_mm_path)
 # Genomic evidence from Morin 2023 
 evidence_l <- readRDS(evidence_path)
 
+# Measurement matrices used for filtering when a gene was never expressed
+msr_hg <- readRDS(msr_mat_hg_path)
+# msr_mm <- readRDS(msr_mat_mm_path)
+
+# Loading the TF aggregate matrices
+agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+# agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
+agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
+# agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
+
 
 
 # Create a gene x TF matrix of summarized ranks
@@ -73,10 +83,16 @@ count_top_ribo <- function(ribo_l, topn = 82) {
 
 
 
+
 count_ribo_hg <- count_top_ribo(rank_ribo_hg)
 count_ribo_mm <- count_top_ribo(rank_ribo_mm)
 
+summary(count_ribo_hg$Count)
+summary(count_ribo_mm$Count)
 
+
+
+# Barchart of count of ribo top-ranked partners that are also ribo
 
 ggplot(count_ribo_hg, aes(x = reorder(Symbol, Count), y = Count)) +
   geom_bar(stat = "identity", colour = "black", fill = "slategrey") +
@@ -92,6 +108,12 @@ ggplot(count_ribo_hg, aes(x = reorder(Symbol, Count), y = Count)) +
 
 
 plot_hist(count_ribo_hg, stat_col = "Count")
+
+
+
+
+
+
 
 
 
@@ -321,3 +343,243 @@ ggplot(rank_tf_hg$ASCL1, aes(x = Topk_count)) +
 
 
 
+# RSR heatmap
+# ------------------------------------------------------------------------------
+
+
+# TODO: remove when finalized
+# agg_tf_cpm <- agg_tf_hg
+# agg_tf_ln <- readRDS("/space/scratch/amorin/R_objects/agg_mat_TF_list_hg_lognorm.RDS")
+# rank_cpm <- rank_tf_hg
+# rank_ln <- readRDS("/space/scratch/amorin/R_objects/ranking_agg_TF_hg_lognorm.RDS")
+# msr_cpm <- msr_hg
+# msr_ln <- readRDS("~/Robj/binary_measurement_matrix_hg_lognorm.RDS")
+
+
+gene <- "ASCL1"
+
+# msr_mat <- msr_hg
+# msr_mat <- msr_cpm
+msr_mat <- msr_ln
+
+# agg_l <- agg_ribo_hg
+# agg_l <- agg_tf_hg
+# agg_l <- agg_tf_cpm
+agg_l <- agg_tf_ln
+
+# rank_l <- rank_tf_hg
+# rank_l <- rank_ribo_hg
+# rank_l <- rank_cpm
+rank_l <- rank_ln
+
+
+rank_df <- filter(rank_l[[gene]], Symbol != gene) %>% arrange(Rank_RSR)
+
+# 
+gene_mat <- subset_to_measured(gene_vec_to_mat(agg_l, gene), msr_mat, gene)
+gene_mat <- gene_mat[setdiff(rownames(gene_mat), gene), ]
+
+
+# Logical matrix of whether TF-genes were co-measured in an experiment
+comsr <- lapply(rownames(gene_mat), function(y) {
+  msr_mat[gene, colnames(gene_mat)] & msr_mat[y, colnames(gene_mat)]
+})
+comsr <- do.call(rbind, comsr)
+rownames(comsr) <- rownames(gene_mat)
+
+
+#
+med <- median(gene_mat, na.rm = TRUE)
+gene_mat_med <- gene_mat_na <- gene_mat
+gene_mat_med[comsr == FALSE] <- med
+gene_mat_na[comsr == FALSE] <- NA
+
+
+# Organizing rank dataframe for different ways of handling NAs and aggregating.
+# NAs: keep as tied RSR values, impute to median of matrix, or keep as NAs to be
+# ignored in following aggregation)
+# aggregation: average RSR, median RSR, average rank of RSR, median rank of RSR,
+# and rank product
+
+# TODO: Avg/Medrank_wo_imp/w_NA selects for all NAs
+# TODO: rank product with NAs select for all non-NAs
+
+rsr_avg_wo_imp <- rowMeans(gene_mat)
+rsr_avg_w_imp <- rowMeans(gene_mat_med)
+rsr_avg_w_na <- rowMeans(gene_mat_na, na.rm = TRUE)
+
+rsr_med_wo_imp <- rowMeans(gene_mat)
+rsr_med_w_imp <- apply(gene_mat_med, 1, median)
+rsr_med_w_na <- apply(gene_mat_na, 1, function(x) median(na.omit(x)))
+
+rsr_avgrank_wo_imp <- rowMeans(colrank_mat(gene_mat))
+rsr_avgrank_w_imp <- rowMeans(colrank_mat(gene_mat_med))
+rsr_avgrank_w_na <- rowMeans(colrank_mat(gene_mat_na), na.rm = TRUE)
+
+rsr_medrank_wo_imp <- apply(colrank_mat(gene_mat), 1, median)
+rsr_medrank_w_imp <- apply(colrank_mat(gene_mat_med), 1, median)
+rsr_medrank_w_na <- apply(colrank_mat(gene_mat_na), 1, function(x) median(na.omit(x)))
+
+# NOTE: Often run into integer overflow issue with rank product
+rsr_rankprod_wo_imp <- rank(matrixStats::rowProds(colrank_mat(gene_mat)))
+rsr_rankprod_w_imp <- rank(matrixStats::rowProds(colrank_mat(gene_mat_med)))
+rsr_rankprod_w_na <- rank(matrixStats::rowProds(colrank_mat(gene_mat_na)))
+
+
+df <- data.frame(
+  
+  Symbol = names(rsr_avg_wo_imp),
+  
+  Avg_wo_imp = rsr_avg_wo_imp,
+  Avg_w_imp = rsr_avg_w_imp,
+  Avg_w_na = rsr_avg_w_na,
+  
+  Med_wo_imp = rsr_med_wo_imp,
+  Med_w_imp = rsr_med_w_imp,
+  Med_w_na = rsr_med_w_na,
+  
+  Avgrank_wo_imp = rsr_avgrank_wo_imp,
+  Avgrank_w_imp = rsr_avgrank_w_imp,
+  Avgrank_w_na = rsr_avgrank_w_na,
+  
+  Medrank_wo_imp = rsr_medrank_wo_imp,
+  Medrank_w_imp = rsr_medrank_w_imp,
+  Medrank_w_na = rsr_medrank_w_na,
+  
+  Rankprod_wo_imp = rsr_rankprod_wo_imp,
+  Rankprod_w_imp = rsr_rankprod_w_imp,
+  Rankprod_w_na = rsr_rankprod_w_na
+)
+
+
+df <- left_join(df, rank_df[, c("Symbol", "N_comeasured")], by = "Symbol")
+
+cor_rank <- cor(select_if(df, is.numeric), method = "spearman", use = "pairwise.complete.obs")
+
+
+# Heatmap colours and breaks
+
+pal <- c('#ffffff','#f0f0f0','#d9d9d9','#bdbdbd','#969696','#737373','#525252','#252525','#000000')
+na_col <- "red" 
+# breaks <- seq(min(rank_df$Avg_RSR), max(rank_df$Avg_RSR), length.out = length(pal))
+breaks <- seq(0, 1, length.out = length(pal))
+
+
+
+# Look at top ranked genes
+
+n <- 100
+rank_order <- arrange(df, desc(Avg_w_imp))$Symbol
+
+# plot_mat <- gene_mat
+# plot_mat <- gene_mat_med
+plot_mat <- gene_mat_na
+
+
+top_mat <- plot_mat[rank_order[1:n], ]
+top_na_order <- sort(-apply(top_mat, 2, function(x) sum(is.na(x))))
+top_mat <- top_mat[, names(top_na_order)]
+
+
+pheatmap(top_mat, 
+         breaks = breaks,
+         color = pal,
+         cluster_rows = FALSE, 
+         cluster_cols = FALSE,
+         # show_rownames = FALSE,
+         show_rownames = TRUE,
+         fontsize_row = 10,
+         border_color = NA,
+         # cellheight = 10,
+         na_col = na_col)
+
+
+
+# Lower ranks as a comparison
+
+pheatmap(plot_mat[rank_order[11000:(11000 + n)], ], 
+         breaks = breaks,
+         color = pal,
+         cluster_rows = FALSE, 
+         cluster_cols = FALSE,
+         # show_rownames = FALSE,
+         show_rownames = TRUE,
+         fontsize_row = 10,
+         border_color = NA,
+         na_col = na_col)
+
+
+
+# Looking at all genes/experiments with NAs coloured
+
+na_order <- sort(-apply(gene_mat_na, 2, function(x) sum(is.na(x))))
+
+
+# No gene order
+pheatmap(gene_mat_na[, names(na_order)],
+         color = pal,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         show_rownames = FALSE,
+         na_col = na_col)
+
+
+# Order by average RSR with median imputation
+pheatmap(gene_mat_na[arrange(df, desc(Avg_w_imp))$Symbol, names(na_order)],
+         color = pal,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         show_rownames = FALSE,
+         na_col = na_col)
+
+
+# Order by average RSR without median imputation
+pheatmap(gene_mat_na[arrange(df, desc(Avg_wo_imp))$Symbol, na_order],
+         color = pal,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         show_rownames = FALSE,
+         na_col = na_col)
+
+
+# Relationship between measurement and ranking
+
+
+pqa <- qplot(df, yvar = "Avg_w_imp", xvar = "N_comeasured")
+
+
+pqb <- df %>%
+  mutate(Bin = cut_width(N_comeasured, width = 10, boundary = 0)) %>%
+  ggplot(aes(x = Bin, y = Avg_w_imp)) +
+  geom_boxplot(width = 0.2, fill = "#69b3a2") +
+  xlab("N comeasured") +
+  ylab("Average RSR (+imputation)") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 10, 10, 10)))
+
+
+
+pqc <- qplot(df, yvar = "Avg_wo_imp", xvar = "N_comeasured")
+
+
+pqd <- df %>%
+  mutate(Bin = cut_width(N_comeasured, width = 10, boundary = 0)) %>%
+  ggplot(aes(x = Bin, y = Avg_wo_imp)) +
+  geom_boxplot(width = 0.2, fill = "#69b3a2") +
+  xlab("N comeasured") +
+  ylab("Average RSR (-imputation)") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 10, 10, 10)))
+
+
+plot_grid(
+  plot_grid(pqa, pqc, ncol = 1),
+  plot_grid(pqb, pqd, ncol = 1),
+  rel_widths = c(0.5, 1)
+)
