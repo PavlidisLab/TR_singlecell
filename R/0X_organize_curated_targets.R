@@ -166,12 +166,17 @@ n_target <- lt_final %>%
   
 
 
+summary(filter(n_target, N_target >= 5)$N_target)
+
+
+
 #
 # ------------------------------------------------------------------------------
 
 
-ggplot(n_target, aes(x = TF_Symbol, y = N_target)) +
-  geom_bar(stat = "identity") +
+p1 <- ggplot(n_target, aes(x = TF_Symbol, y = N_target)) +
+  geom_bar(stat = "identity", fill = "slategrey") +
+  geom_vline(xintercept = which(n_target$N_target == 5)[1], col = "firebrick") +
   ylab("Count of distinct curated targets") +
   xlab("TF") +
   theme_classic() +
@@ -179,6 +184,12 @@ ggplot(n_target, aes(x = TF_Symbol, y = N_target)) +
         axis.text.x = element_blank(),
         axis.title = element_text(size = 20),
         axis.ticks.x = element_blank())
+
+
+
+
+ggsave(p1, height = 6, width = 9, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "count_of_distinct_curated_targets.png"))
 
 
 n_distinct(str_to_upper(lt_final$Target_Symbol))
