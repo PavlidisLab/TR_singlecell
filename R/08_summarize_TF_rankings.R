@@ -8,6 +8,7 @@ library(parallel)
 library(pheatmap)
 library(RColorBrewer)
 library(cowplot)
+library(ggrepel)
 source("R/utils/functions.R")
 source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
@@ -40,29 +41,63 @@ rank_ribo_mm <- readRDS(rank_ribo_mm_path)
 evidence_l <- readRDS(evidence_path)
 
 # Measurement matrices used for filtering when a gene was never expressed
-msr_hg <- readRDS(msr_mat_hg_path)
+# msr_hg <- readRDS(msr_mat_hg_path)
 # msr_mm <- readRDS(msr_mat_mm_path)
 
 # Loading the TF aggregate matrices
-agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+# agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
 # agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
-agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
+# agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
 # agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
 
 
 
-# Create a gene x TF matrix of summarized ranks
+# Create a gene x TF matrix of summarized ranks for general inspection
 # ------------------------------------------------------------------------------
 
 
+gen_rank_matrix <- function(rank_l) {
+  
+  rank_mat <- as.matrix(do.call(cbind, lapply(rank_l, `[`, "Rank_RSR")))
+  colnames(rank_mat) <- names(rank_l)
+  return(rank_mat)
+}
 
-rank_mat_hg <- as.matrix(do.call(cbind, lapply(rank_tf_hg, `[`, "Rank_RSR")))
-colnames(rank_mat_hg) <- names(rank_tf_hg)
+
+rank_mat_hg <- gen_rank_matrix(rank_tf_hg)
+rank_mat_mm <- gen_rank_matrix(rank_tf_mm)
 
 
-rank_mat_mm <- as.matrix(do.call(cbind, lapply(rank_tf_mm, `[`, "Rank_RSR")))
-colnames(rank_mat_mm) <- names(rank_tf_mm)
 
+# Most commonly highly ranked genes
+# TODO: are these genes high because of technical aspect?
+
+rank_order_hg <- sort(rowMeans(rank_mat_hg, na.rm = TRUE))
+rank_order_mm <- sort(rowMeans(rank_mat_mm, na.rm = TRUE))
+
+
+head(rank_order_hg)
+tail(rank_order_hg)
+
+head(rank_order_mm)
+tail(rank_order_mm)
+
+head(sort(rank_mat_hg["RPL27",]), 50)
+tail(sort(rank_mat_hg["RPL27",]), 50)
+
+
+head(sort(rank_mat_mm["Hes6",]), 50)
+tail(sort(rank_mat_mm["Pax6",]), 50)
+
+
+# microglia
+head(sort(rank_mat_hg["TRIM28",]), 50)
+head(sort(rank_mat_hg["CSF1R",]), 50)
+head(sort(rank_mat_hg["SPI1",]), 50)
+
+head(sort(rank_mat_mm["Trim28",]), 50)
+head(sort(rank_mat_mm["Csf1r",]), 50)
+head(sort(rank_mat_mm["Spi1",]), 50)
 
 
 
@@ -82,8 +117,6 @@ count_top_ribo <- function(ribo_l, topn = 82) {
 }
 
 
-
-
 count_ribo_hg <- count_top_ribo(rank_ribo_hg)
 count_ribo_mm <- count_top_ribo(rank_ribo_mm)
 
@@ -92,40 +125,22 @@ summary(count_ribo_mm$Count)
 
 
 
-# Barchart of count of ribo top-ranked partners that are also ribo
-
-ggplot(count_ribo_hg, aes(x = reorder(Symbol, Count), y = Count)) +
-  geom_bar(stat = "identity", colour = "black", fill = "slategrey") +
-  ylab("Count of top coexpression partners that are also ribosomal") +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
-        axis.title = element_text(size = 20),
-        axis.title.x = element_blank(),
-        plot.title = element_text(size = 20),
-        plot.margin = margin(c(10, 10, 10, 10)))
-
-
-
-plot_hist(count_ribo_hg, stat_col = "Count")
-
-
-
-
-
-
-
-
-
-# Global top
+# Top coexpr partner for each TF
 # ------------------------------------------------------------------------------
 
 
-top_hg <- do.call(rbind, lapply(rank_tf_hg, slice_min, Rank_RSR))
-top_mm <- do.call(rbind, lapply(rank_tf_mm, slice_min, Rank_RSR))
+top_hg <- lapply(rank_tf_hg, slice_min, Rank_RSR) %>% 
+  do.call(rbind, .,) %>% 
+  rownames_to_column(var = "TF") %>% 
+  arrange(desc(Topk_count))
 
-hist(top_hg$Topk_count)
-hist(top_hg$Topk_proportion)
+
+top_mm <- lapply(rank_tf_mm, slice_min, Rank_RSR) %>% 
+  do.call(rbind, .,) %>% 
+  rownames_to_column(var = "TF") %>% 
+  arrange(desc(Topk_count))
+
+
 
 
 # Inspecting targets from the most similar TFs
@@ -134,61 +149,72 @@ arrange(rank_tf_mm$E2f8, desc(Avg_RSR)) %>% head(30)
 
 
 
-
-rank_cor_hg <- mat_to_df(colwise_cor(rank_mat_hg), symmetric = TRUE)
-rank_topk_hg <- mat_to_df(colwise_topk_intersect(rank_mat_hg, k = 1000), symmetric = TRUE)
-
-rank_hg <- data.frame(Row = rank_cor_hg$Row, 
-                      Col = rank_cor_hg$Col,
-                      Topk = rank_topk_hg$Value,
-                      Cor = rank_cor_hg$Value)
+# Correlate the final rankings between TF to find similar/dissimilar
+# ------------------------------------------------------------------------------
 
 
-
-rank_cor_mm <- mat_to_df(colwise_cor(rank_mat_mm), symmetric = TRUE)
-rank_topk_mm <- mat_to_df(colwise_topk_intersect(rank_mat_mm, k = 1000), symmetric = TRUE)
-
-
-rank_mm <- data.frame(Row = rank_cor_mm$Row, 
-                      Col = rank_cor_mm$Col,
-                      Topk = rank_topk_mm$Value,
-                      Cor = rank_cor_mm$Value)
-
-# Most commonly highly ranked genes
-# TODO: are these genes high because of technical aspect?
-
-rank_order_hg <- sort(rowMeans(rank_mat_hg, na.rm = TRUE))
-head(rank_order_hg)
-tail(rank_order_hg)
-
-head(sort(rank_mat_hg["TRIM28",]), 50)
-tail(sort(rank_mat_hg["CSF1R",]), 50)
-
-
-rank_order_mm <- sort(rowMeans(rank_mat_mm, na.rm = TRUE))
-head(rank_order_mm)
-tail(rank_order_mm)
+rank_similarity <- function(rank_mat) {
+  
+  rank_cor <- mat_to_df(colwise_cor(rank_mat), symmetric = TRUE)
+  
+  rank_topk <-
+    mat_to_df(colwise_topk_intersect(rank_mat, k = 1000), symmetric = TRUE)
+  
+  rank_bottomk <-
+    mat_to_df(colwise_topk_intersect(rank_mat, k = 1000, decreasing = FALSE),
+              symmetric = TRUE)
+  
+  rank_df <- data.frame(Row = rank_cor$Row, 
+                        Col = rank_cor$Col,
+                        Cor = rank_cor$Value,
+                        Topk = rank_topk$Value,
+                        Bottomk = rank_bottomk$Value)
+  
+  return(rank_df)
+}
 
 
-head(sort(rank_mat_mm["Hes6",]), 50)
-tail(sort(rank_mat_mm["Pax6",]), 50)
 
+rank_sim_hg <- rank_similarity(rank_mat_hg)
+rank_sim_mm <- rank_similarity(rank_mat_mm)
 
 
 
 
 # Inspect ortho
+# TODO: helpers to get ortho
 # ------------------------------------------------------------------------------
 
 
-tfs_ortho <- filter(pc_ortho, Symbol_hg %in% names(rank_tf_hg) & Symbol_mm %in% names(rank_tf_mm))
-  
+tfs_ortho <- filter(pc_ortho, 
+                    Symbol_hg %in% names(rank_tf_hg) & 
+                    Symbol_mm %in% names(rank_tf_mm))
 
-df_hg <- left_join(rank_tf_hg$ASCL1, pc_ortho, by = c("Symbol" = "Symbol_hg")) %>% filter(!is.na(ID))
-df_mm <- left_join(rank_tf_mm$Ascl1, pc_ortho, by = c("Symbol" = "Symbol_mm")) %>% filter(!is.na(ID))
-ortho_df <- left_join(df_hg, df_mm, by = "ID", suffix = c("_Human", "_Mouse")) %>% filter(!is.na(Avg_RSR_Human) & !is.na(Avg_RSR_Mouse))
+
+gene_hg <- "ASCL1"
+gene_mm <- "Ascl1"
+
+  
+df_hg <- left_join(rank_tf_hg[[gene_hg]], pc_ortho,
+                   by = c("Symbol" = "Symbol_hg")) %>%
+  filter(!is.na(ID))
+
+
+df_mm <- left_join(rank_tf_mm[[gene_mm]], pc_ortho, 
+                   by = c("Symbol" = "Symbol_mm")) %>% 
+  filter(!is.na(ID))
+
+
+ortho_df <- left_join(df_hg, df_mm, 
+                      by = "ID", 
+                      suffix = c("_Human", "_Mouse")) %>% 
+  filter(!is.na(Avg_RSR_Human) & !is.na(Avg_RSR_Mouse))
+
+
 plot(ortho_df$Avg_RSR_Human, ortho_df$Avg_RSR_Mouse)
 cor(ortho_df$Avg_RSR_Human, ortho_df$Avg_RSR_Mouse, method = "spearman")
+filter(ortho_df, Rank_RSR_Human <= 100 & Rank_RSR_Mouse <= 100)
+
 
 
 ortho_cor <- mclapply(1:nrow(tfs_ortho), function(x) {
@@ -204,12 +230,138 @@ ortho_cor <- mclapply(1:nrow(tfs_ortho), function(x) {
 ortho_cor <- data.frame(Cor = unlist(ortho_cor), Symbol = tfs_ortho$Symbol_hg)
 
 
-px <- plot_hist(ortho_cor, stat_col = "Cor", xlab = "Similarity of TF coexpression partners", title = "n=1241 orthologous TFs") + 
+px <- plot_hist(ortho_cor, 
+                stat_col = "Cor", 
+                xlab = "Spearman", 
+                title = "n=1241 orthologous TFs") + 
   xlim(c(-0.4, 1))
+
 
 
 ggsave(px, height = 5, width = 7, device = "png", dpi = 300,
        filename = file.path(plot_dir, "ortho_rank_similarity.png"))
+
+
+
+# Topk overlap of targets and relative to other TFs
+
+
+
+gene_query <- "ASCL1"
+
+# NOTE: this is taking the top k AFTER filtering for ortho, so not necessarily
+# within the top k ranks of the unfiltered (non-ortho) data
+# TODO: no reason to do so many joins, just use once and reference main
+
+topk_relative <- function(gene_query, 
+                          tfs_ortho, 
+                          pc_ortho, 
+                          rank_tf_hg, 
+                          rank_tf_mm, 
+                          k = 100) {
+  
+  gene_ortho <- filter(pc_ortho, 
+                       Symbol_hg == gene_query | Symbol_mm == gene_query)
+  
+  
+  topk_query_hg <- left_join(rank_tf_hg[[gene_ortho$Symbol_hg]], pc_ortho,
+                     by = c("Symbol" = "Symbol_hg")) %>%
+    filter(!is.na(ID)) %>% 
+    slice_min(Rank_RSR, n = k) 
+  
+  
+  topk_query_mm <- left_join(rank_tf_mm[[gene_ortho$Symbol_mm]], pc_ortho,
+                       by = c("Symbol" = "Symbol_mm")) %>%
+    filter(!is.na(ID)) %>% 
+    slice_min(Rank_RSR, n = k) 
+  
+  
+  # length(intersect(topk_query_hg$ID, topk_query_mm$ID))
+  
+  
+  topk_hg_in_mm <- lapply(tfs_ortho$Symbol_mm, function(x) {
+    
+    topk <- filter(rank_tf_mm[[x]], Symbol %in% pc_ortho$Symbol_mm) %>%
+      slice_min(Rank_RSR, n = k) %>% 
+      pull(Symbol)
+    
+    length(intersect(topk_query_hg$Symbol_mm, topk))
+    
+  })
+  
+  names(topk_hg_in_mm) <- tfs_ortho$Symbol_mm
+  topk_hg_in_mm <- unlist(topk_hg_in_mm)
+  
+  
+  
+  topk_mm_in_hg <- lapply(tfs_ortho$Symbol_hg, function(x) {
+    
+    topk <- filter(rank_tf_hg[[x]], Symbol %in% pc_ortho$Symbol_hg) %>%
+      slice_min(Rank_RSR, n = k) %>% 
+      pull(Symbol)
+    
+    length(intersect(topk_query_mm$Symbol_hg, topk))
+    
+  })
+  
+  names(topk_mm_in_hg) <- tfs_ortho$Symbol_hg
+  topk_mm_in_hg <- unlist(topk_mm_in_hg)
+  
+  
+  topk_df <- data.frame(
+    Symbol = tfs_ortho$Symbol_hg, 
+    Topk_hg_in_mm = topk_hg_in_mm, 
+    Topk_mm_in_hg = topk_mm_in_hg
+  )
+  
+  return(topk_df)
+  
+}
+
+
+
+topk_ascl1 <- topk_relative(gene_query = "ASCL1", 
+                            tfs_ortho, 
+                            pc_ortho, 
+                            rank_tf_hg, 
+                            rank_tf_mm, 
+                            k = 100)
+
+
+
+qplot(topk_ascl1, xvar = "Topk_hg_in_mm", yvar = "Topk_mm_in_hg")
+
+
+
+plot_df <- mutate(topk_ascl1, Label = Symbol == "ASCL1")
+
+
+ggplot(plot_df, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
+  # geom_point(shape = 21, size = 2.4) +
+  geom_jitter(shape = 21, size = 2.4, width = 0.5, height = 0.5) +
+  geom_text_repel(
+    data = filter(plot_df, Label),
+    aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg, label = Symbol, fontface = "italic"),
+    size = 5,
+    segment.size = 0.1,
+    segment.color = "grey50") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+plot_grid(plot_hist(topk_ascl1, stat_col = "Topk_hg_in_mm") + 
+            geom_vline(xintercept = filter(topk_ascl1, Symbol == "ASCL1_Ascl1")$Topk_hg_in_mm, col = "royalblue"),
+          
+          plot_hist(topk_ascl1, stat_col = "Topk_mm_in_hg") + 
+            geom_vline(xintercept = filter(topk_ascl1, Symbol == "ASCL1_Ascl1")$Topk_mm_in_hg, col = "goldenrod"),
+          nrow = 1)
+
+
+
 
 
 
@@ -322,10 +474,30 @@ rank_binary_heatmap(ascl_rank_mm, rank_cutoff = 100)
 rank_heatmap(ascl_rank_mm)
 
 
+# Plots 
+# ------------------------------------------------------------------------------
+
+
+# Barchart of count of ribo top-ranked partners that are also ribo
+
+ggplot(count_ribo_hg, aes(x = reorder(Symbol, Count), y = Count)) +
+  geom_bar(stat = "identity", colour = "black", fill = "slategrey") +
+  ylab("Count of top coexpression partners that are also ribosomal") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        axis.title = element_text(size = 20),
+        axis.title.x = element_blank(),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 10, 10, 10)))
 
 
 
-# Distn of top k
+plot_hist(count_ribo_hg, stat_col = "Count")
+
+
+
+# Distn of top k for a given TF
 
 ggplot(rank_tf_hg$ASCL1, aes(x = Topk_count)) +
   geom_histogram(bins = 20) +
@@ -340,6 +512,15 @@ ggplot(rank_tf_hg$ASCL1, aes(x = Topk_count)) +
         axis.title = element_text(size = 20),
         plot.title = element_text(size = 20),
         plot.margin = margin(c(10, 10, 10, 10)))
+
+
+
+# Inspecting the topk count/proportion of the top coexpr partner for each TF
+plot_hist(top_hg, stat_col = "Topk_count")
+plot_hist(top_mm, stat_col = "Topk_count")
+
+plot_hist(top_hg, stat_col = "Topk_proportion")
+plot_hist(top_mm, stat_col = "Topk_proportion")
 
 
 
