@@ -183,6 +183,7 @@ rank_sim_mm <- rank_similarity(rank_mat_mm)
 
 # Inspect ortho
 # TODO: helpers to get ortho
+# TODO: move to own script
 # ------------------------------------------------------------------------------
 
 
@@ -228,11 +229,12 @@ ortho_cor <- mclapply(1:nrow(tfs_ortho), function(x) {
 
 
 ortho_cor <- data.frame(Cor = unlist(ortho_cor), Symbol = tfs_ortho$Symbol_hg)
+summary(ortho_cor$Cor)
 
 
 px <- plot_hist(ortho_cor, 
                 stat_col = "Cor", 
-                xlab = "Spearman", 
+                xlab = "Spearman's correlation", 
                 title = "n=1241 orthologous TFs") + 
   xlim(c(-0.4, 1))
 
@@ -247,8 +249,7 @@ ggsave(px, height = 5, width = 7, device = "png", dpi = 300,
 
 
 
-gene_query <- "ASCL1"
-
+# For each ortho TF, gets its top k overlap between species
 # NOTE: this is taking the top k AFTER filtering for ortho, so not necessarily
 # within the top k ranks of the unfiltered (non-ortho) data
 # TODO: no reason to do so many joins, just use once and reference main
@@ -320,24 +321,61 @@ topk_relative <- function(gene_query,
 
 
 
-topk_ascl1 <- topk_relative(gene_query = "ASCL1", 
-                            tfs_ortho, 
-                            pc_ortho, 
-                            rank_tf_hg, 
-                            rank_tf_mm, 
-                            k = 100)
+topk_all <- mclapply(tfs_ortho$Symbol_hg, function(x) {
+  
+  
+  topk_relative(gene_query = x,
+                tfs_ortho,
+                pc_ortho,
+                rank_tf_hg,
+                rank_tf_mm,
+                k = 100)
+
+}, mc.cores = 8)
+names(topk_all) <- tfs_ortho$Symbol_hg
+# saveRDS(topk_all, "/space/scratch/amorin/R_objects/ortho_tf_topk=100.RDS")
+
+
+x <- "ASCL1"
 
 
 
-qplot(topk_ascl1, xvar = "Topk_hg_in_mm", yvar = "Topk_mm_in_hg")
+# For each species, calculate the percentile of the matched ortho TF relative to
+# all others
+
+
+ortho_perc <- lapply(tfs_ortho$Symbol_hg, function(x) {
+  
+  df <- topk_all[[x]]
+  tf_in <- filter(df, Symbol == x)
+  tf_out <- filter(df, Symbol != x)
+  
+  data.frame(
+    Symbol = x,
+    Count_mm_in_hg = tf_in$Topk_mm_in_hg,
+    Mm_in_hg = ecdf(tf_out$Topk_mm_in_hg)(tf_in$Topk_mm_in_hg),
+    Count_hg_in_mm = tf_in$Topk_hg_in_mm,
+    Hg_in_mm = ecdf(tf_out$Topk_hg_in_mm)(tf_in$Topk_hg_in_mm)
+  )
+})
+
+
+ortho_perc_df <- data.frame(
+  Symbol = tfs_ortho$Symbol_hg,
+  do.call(rbind, ortho_perc)
+)
 
 
 
-plot_df <- mutate(topk_ascl1, Label = Symbol == "ASCL1")
+qplot(ortho_perc_df, xvar = "Mm_in_hg", yvar = "Hg_in_mm")
+
+
+gene <- "PAX6"
+
+plot_df <- mutate(topk_all[[gene]], Label = Symbol == gene)
 
 
 ggplot(plot_df, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
-  # geom_point(shape = 21, size = 2.4) +
   geom_jitter(shape = 21, size = 2.4, width = 0.5, height = 0.5) +
   geom_text_repel(
     data = filter(plot_df, Label),
@@ -353,12 +391,15 @@ ggplot(plot_df, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
 
 
 
-plot_grid(plot_hist(topk_ascl1, stat_col = "Topk_hg_in_mm") + 
-            geom_vline(xintercept = filter(topk_ascl1, Symbol == "ASCL1_Ascl1")$Topk_hg_in_mm, col = "royalblue"),
+plot_grid(
+  
+  plot_hist(plot_df, stat_col = "Topk_hg_in_mm") + 
+    geom_vline(xintercept = filter(plot_df, Symbol == gene)$Topk_hg_in_mm, col = "royalblue"),
           
-          plot_hist(topk_ascl1, stat_col = "Topk_mm_in_hg") + 
-            geom_vline(xintercept = filter(topk_ascl1, Symbol == "ASCL1_Ascl1")$Topk_mm_in_hg, col = "goldenrod"),
-          nrow = 1)
+  plot_hist(plot_df, stat_col = "Topk_mm_in_hg") + 
+    geom_vline(xintercept = filter(plot_df, Symbol == gene)$Topk_mm_in_hg, col = "goldenrod"),
+  
+  nrow = 1)
 
 
 
