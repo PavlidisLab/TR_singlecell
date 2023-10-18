@@ -13,7 +13,7 @@ source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-force_resave <- TRUE
+force_resave <- FALSE
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -75,8 +75,11 @@ if (!file.exists(avg_coexpr_mm_path) || force_resave) {
 
 
 
-head(avg_coexpr_hg, 30)
-head(avg_coexpr_mm, 30)
+# head(avg_coexpr_hg, 30)
+# head(avg_coexpr_mm, 30)
+# 
+# tail(avg_coexpr_hg, 30)
+# tail(avg_coexpr_mm, 30)
 
 
 
@@ -85,25 +88,45 @@ head(avg_coexpr_mm, 30)
 
 
 
-outfile <- "/space/scratch/amorin/R_objects/top_cor_pair_list.RDS"
+# topcor_path <- "/space/scratch/amorin/R_objects/top_cor_pair_list.RDS"
+topcor_path <- "/space/scratch/amorin/R_objects/top_cor_pair_list_RPS12-RPS27A_Rps24-Rps20.RDS"
+btmcor_path <- "/space/scratch/amorin/R_objects/bottom_cor_pair_list.RDS"
 
 
-if (!file.exists(outfile) || force_resave) {
+if (!file.exists(topcor_path) || force_resave) {
+
+  topcor_l <- list(
+    Human = get_all_cor_l(ids_hg, gene1 = "FOS", gene2 = "EGR1"),
+    Mouse = get_all_cor_l(ids_mm, gene1 = "Mt1", gene2 = "Mt2"))
   
-  cor_l <- list(
-    Human = get_all_cor_l(ids_hg, gene1 = "FOS", gene2 = "FOSB"),
-    Mouse = get_all_cor_l(ids_mm, gene1 = "Fos", gene2 = "Fosb"))
-  
-  saveRDS(cor_l, outfile)
+  saveRDS(topcor_l, topcor_path)
   
 } else {
   
-  cor_l <- readRDS(outfile)
+  topcor_l <- readRDS(topcor_path)
   
 }
 
 
+
+if (!file.exists(btmcor_path) || force_resave) {
+  
+  btmcor_l <- list(
+    Human = get_all_cor_l(ids_hg, gene1 = "GAPDH", gene2 = "ZNF644"),
+    Mouse = get_all_cor_l(ids_mm, gene1 = "Fth1", gene2 = "Rbm6"))
+  
+  saveRDS(btmcor_l, btmcor_path)
+  
+} else {
+  
+  btmcor_l <- readRDS(btmcor_path)
+  
+}
+
+
+
 stop()
+
 
 # Plotting
 # ------------------------------------------------------------------------------
@@ -113,21 +136,21 @@ stop()
 # gene pair across all experiments
 
 
-# TODO: finalize plotting
+# TODO: finalize plotting and explicitly save out final examples
 # cor_forest_plot <- function(cor_l) { }
 
 
-# species <- "Human"
-species <- "Mouse"
+species <- "Human"
+# species <- "Mouse"
 
 
 cor_df <- do.call(
   rbind, 
-  lapply(names(cor_l[[species]]), function(x) data.frame(Cor = cor_l[[species]][[x]], ID = x))
+  lapply(names(topcor_l[[species]]), function(x) data.frame(Cor = topcor_l[[species]][[x]], ID = x))
 )
 
 
-cor_summ <- do.call(rbind, lapply(cor_l[[species]], summary)) %>%
+cor_summ <- do.call(rbind, lapply(topcor_l[[species]], summary)) %>%
   as.data.frame() %>% 
   rownames_to_column(var = "ID") %>% 
   arrange(Median) %>% 
@@ -135,103 +158,73 @@ cor_summ <- do.call(rbind, lapply(cor_l[[species]], summary)) %>%
 
 
 
-# Cor of every cell type for each dataset as points
+# Gene-gene cor of every cell type for each dataset as boxplot + points
 
-ggplot(cor_df, aes(x = Cor, y = reorder(ID, Cor, FUN = median))) +
-  geom_point(alpha = 0.4) +
-  geom_boxplot(outlier.shape = NA, coef = 0) +
+px <- ggplot(cor_df, aes(x = Cor, y = reorder(ID, Cor, FUN = median))) +
+  geom_point(alpha = 0.4, shape = 21) +
+  geom_boxplot(outlier.shape = NA, coef = 0, fill = "slategrey") +
+  geom_vline(xintercept = 0, colour = "lightgrey") +
   xlab("Pearson's correlation across cell types") +
   theme_classic() +
   theme(axis.title.y = element_blank(),
         axis.title = element_text(size = 20),
-        axis.text.x = element_text(size = 15),
-        axis.text.y = element_text(size = 10))
-
-
-ggplot(cor_df, aes(x = Cor, y = reorder(ID, Cor, FUN = median))) +
-  geom_point() +
-  xlab("Pearson's correlation across cell types") +
-  theme_classic() +
-  theme(axis.title.y = element_blank(),
-        axis.title = element_text(size = 20),
-        axis.text.x = element_text(size = 15),
-        axis.text.y = element_text(size = 10))
+        axis.text.x = element_text(size = 20),
+        axis.text.y = element_text(size = 10),
+        plot.margin = margin(c(10, 20, 10, 10)))
 
 
 
-# Cor of every cell type for each dataset as a bar (IRQ or min/max?)
-
-ggplot(cor_summ) +
-  geom_errorbarh(aes(xmin = `Min.`, xmax = `Max.`, y = ID)) +
-  xlab("Pearson's correlation across cell types") +
-  theme_classic() +
-  theme(axis.title.y = element_blank(),
-        axis.title = element_text(size = 20),
-        axis.text.x = element_text(size = 15),
-        axis.text.y = element_text(size = 10))
-
-
-
-ggplot(cor_summ) +
-  geom_errorbarh(aes(xmin = `1st Qu.`, xmax = `3rd Qu.`, y = ID)) +
-  xlab("Pearson's correlation across cell types") +
-  theme_classic() +
-  theme(axis.title.y = element_blank(),
-        axis.title = element_text(size = 20),
-        axis.text.x = element_text(size = 15),
-        axis.text.y = element_text(size = 10))
-
+ggsave(px, height = 14, width = 9, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "top_cor_pair_RPS12-RPS27A.png"))
 
 
 # Cell-type scatter plots + cor heatmap of representative experiment and gene pair
 
 
 
-demo_id <- "GSE212606Human"  
-gene1 <- "RPL3" 
-gene2 <- "RPL13"
+demo_id <- "GSE212606Human"
+gene1 <- "MAP1A" 
+gene2 <- "MAP1B"
 dat <- load_dat_list(demo_id)[[1]]
 mat <- dat$Mat
 meta <- dat$Meta
 
-
-
+# All cell type cors
 ct_cors <- all_celltype_cor(mat, meta, gene1, gene2)
 
-
+# All cell type scatter plots
 ct_scatter_l <- all_celltype_scatter(mat, meta, gene1, gene2)
 ct_scatter_plot <- plot_grid(plotlist = ct_scatter_l)
+
+# Heatmap of cors as vertical/horizontal
 ct_heatmap_h <- cor_heatmap(ct_cors)
 ct_heatmap_v <- cor_heatmap(t(ct_cors))
 
 
-px1_h <- plot_grid(ct_scatter_l[[names(ct_cors[1])]], ct_heatmap_h$gtable, nrow = 2)
-px2_h <- plot_grid(ct_scatter_plot, ct_heatmap_h$gtable, nrow = 2)
-px1_v <-  plot_grid(ct_scatter_l[[names(ct_cors[1])]], ct_heatmap_v$gtable, ncol = 2)
-px2_v <-  plot_grid(ct_scatter_plot, ct_heatmap_v$gtable, ncol = 2, rel_widths = c(2, 1))
-
-
+# Demonstrating the top, median, and bottom cor scatterplots
 ct_scatter_plot_3 <- plot_grid(
   plotlist = c(ct_scatter_l[names(ct_cors)[1]],
                ct_scatter_l[names(ct_cors)[ceiling(length(ct_cors) / 2)]],
                ct_scatter_l[names(ct_cors)[length(ct_cors)]]),
-  ncol = 1)
+  ncol = 3)
 
 
+# Combining top/med/bottom scatter with heatmap
 px3_h <- plot_grid(ct_scatter_plot_3, ct_heatmap_h$gtable, nrow = 2, rel_heights = c(2, 1))
 px3_v <- plot_grid(ct_scatter_plot_3, ct_heatmap_v$gtable, ncol = 2, rel_widths = c(0.5, 0.25))
 
 
 
-# Inspecting lowest cor
+# Inspecting dataset that had the lowest cor
 
-# dat <- load_dat_list("GSE212606Human")[[1]]
-# mat <- dat$Mat
-# meta <- dat$Meta
-# agg <- load_agg_mat_list("GSE212606Human", genes = pc_hg$Symbol)[[1]]
-# agg_df <- mat_to_df(agg, symmetric = TRUE)
-# head(arrange(agg_df, desc(Value)))
-# ct_cors <- all_celltype_cor(mat, meta, "MAP1A", "CLU")
+
+dat <- load_dat_list("GSE212606Human")[[1]]
+mat <- dat$Mat
+meta <- dat$Meta
+agg <- load_agg_mat_list("GSE212606Human", genes = pc_hg$Symbol)[[1]]
+agg_df <- mat_to_df(agg, symmetric = TRUE)
+head(arrange(agg_df, desc(Value)))
+ct_cors <- all_celltype_cor(mat, meta, "MAP1A", "MAP1B")
 
 
 
