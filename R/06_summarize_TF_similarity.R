@@ -507,8 +507,8 @@ pxy_mm3 <- plot_grid(px_mm1, py_mm, rel_widths = c(1, 0.5))
 pxy_both <- plot_grid(pxy_hg1, pxy_mm3, nrow = 1)
 
 
-# ggsave(pxy_both, height = 8, width = 20, device = "png", dpi = 300,
-#        filename = file.path(plot_dir, "tt.png"))
+ggsave(pxy_both, height = 10, width = 21, device = "png", dpi = 600,
+       filename = file.path(paste0(plot_dir, "mean_topk=", k, "_human_and_mouse.png")))
 
 
 
