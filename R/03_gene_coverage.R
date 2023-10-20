@@ -14,7 +14,7 @@ source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-force_resave <- TRUE
+force_resave <- FALSE
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -85,9 +85,9 @@ if (!file.exists(msr_mat_mm_path) || force_resave) {
 
 
 # Get the average/proportion of gene measurement across experiments
-# Human: 450 genes are never measured and 5,120 genes always measured
-# Mouse: 882 genes are never measured and 838 genes are always measured
-# Ortho: 628 genes measured in every mouse and human dataset
+# Human: 450 genes are never measured and 5,155 genes always measured
+# Mouse: 887 genes are never measured and 838 genes are always measured
+# Ortho: 630 genes measured in every mouse and human dataset
 # TFs: In both species TF genes show small trend of being measured more than non-TF genes 
 # ------------------------------------------------------------------------------
 
@@ -181,8 +181,8 @@ pheatmap(
   cluster_cols = FALSE,
   show_rownames = FALSE,
   show_colnames = FALSE,
-  height = 10,
-  width = 10,
+  height = 20,
+  width = 20,
   treeheight_row = 0,
   treeheight_col = 0,
   legend = FALSE,
