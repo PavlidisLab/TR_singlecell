@@ -88,9 +88,10 @@ if (!file.exists(avg_coexpr_mm_path) || force_resave) {
 
 
 
-# topcor_path <- "/space/scratch/amorin/R_objects/top_cor_pair_list.RDS"
-topcor_path <- "/space/scratch/amorin/R_objects/top_cor_pair_list_RPS12-RPS27A_Rps24-Rps20.RDS"
-btmcor_path <- "/space/scratch/amorin/R_objects/bottom_cor_pair_list.RDS"
+topcor_path <- "/space/scratch/amorin/R_objects/top_cor_pair_list.RDS"
+# topcor_path <- "/space/scratch/amorin/R_objects/top_cor_pair_list_RPS12-RPS27A_Rps24-Rps20.RDS"
+# btmcor_path <- "/space/scratch/amorin/R_objects/bottom_cor_pair_list.RDS"
+btmcor_path <- "/space/scratch/amorin/R_objects/bottom_cor_pair_list_ASCL1-ANXA4_Ascl1-Apbb2.RDS"
 
 
 if (!file.exists(topcor_path) || force_resave) {
@@ -112,8 +113,8 @@ if (!file.exists(topcor_path) || force_resave) {
 if (!file.exists(btmcor_path) || force_resave) {
   
   btmcor_l <- list(
-    Human = get_all_cor_l(ids_hg, gene1 = "GAPDH", gene2 = "ZNF644"),
-    Mouse = get_all_cor_l(ids_mm, gene1 = "Fth1", gene2 = "Rbm6"))
+    Human = get_all_cor_l(ids_hg, gene1 = "ASCL1", gene2 = "ANXA4"),
+    Mouse = get_all_cor_l(ids_mm, gene1 = "Ascl1", gene2 = "Apbb2"))
   
   saveRDS(btmcor_l, btmcor_path)
   
@@ -140,17 +141,18 @@ stop()
 # cor_forest_plot <- function(cor_l) { }
 
 
-species <- "Human"
-# species <- "Mouse"
+# species <- "Human"
+species <- "Mouse"
+cor_l <- btmcor_l
 
 
 cor_df <- do.call(
   rbind, 
-  lapply(names(topcor_l[[species]]), function(x) data.frame(Cor = topcor_l[[species]][[x]], ID = x))
+  lapply(names(cor_l[[species]]), function(x) data.frame(Cor = cor_l[[species]][[x]], ID = x))
 )
 
 
-cor_summ <- do.call(rbind, lapply(topcor_l[[species]], summary)) %>%
+cor_summ <- do.call(rbind, lapply(cor_l[[species]], summary)) %>%
   as.data.frame() %>% 
   rownames_to_column(var = "ID") %>% 
   arrange(Median) %>% 
@@ -163,7 +165,7 @@ cor_summ <- do.call(rbind, lapply(topcor_l[[species]], summary)) %>%
 px <- ggplot(cor_df, aes(x = Cor, y = reorder(ID, Cor, FUN = median))) +
   geom_point(alpha = 0.4, shape = 21) +
   geom_boxplot(outlier.shape = NA, coef = 0, fill = "slategrey") +
-  geom_vline(xintercept = 0, colour = "lightgrey") +
+  geom_vline(xintercept = 0, colour = "black") +
   xlab("Pearson's correlation across cell types") +
   theme_classic() +
   theme(axis.title.y = element_blank(),
@@ -173,9 +175,14 @@ px <- ggplot(cor_df, aes(x = Cor, y = reorder(ID, Cor, FUN = median))) +
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
-
 ggsave(px, height = 14, width = 9, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "top_cor_pair_RPS12-RPS27A.png"))
+       filename = file.path(plot_dir, "bottom_cor_pair_Fth1-Rbm6.png"))
+
+# ggsave(px, height = 14, width = 9, device = "png", dpi = 300,
+#        filename = file.path(plot_dir, "bottom_cor_pair_GAPDH-ZNF644.png"))
+
+# ggsave(px, height = 14, width = 9, device = "png", dpi = 300,
+#        filename = file.path(plot_dir, "top_cor_pair_RPS12-RPS27A.png"))
 
 
 # Cell-type scatter plots + cor heatmap of representative experiment and gene pair
