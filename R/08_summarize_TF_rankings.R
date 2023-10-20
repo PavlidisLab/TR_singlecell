@@ -41,13 +41,13 @@ rank_ribo_mm <- readRDS(rank_ribo_mm_path)
 evidence_l <- readRDS(evidence_path)
 
 # Measurement matrices used for filtering when a gene was never expressed
-# msr_hg <- readRDS(msr_mat_hg_path)
+msr_hg <- readRDS(msr_mat_hg_path)
 # msr_mm <- readRDS(msr_mat_mm_path)
 
 # Loading the TF aggregate matrices
-# agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
 # agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
-# agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
+agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
 # agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
 
 
@@ -334,6 +334,7 @@ topk_all <- mclapply(tfs_ortho$Symbol_hg, function(x) {
 }, mc.cores = 8)
 names(topk_all) <- tfs_ortho$Symbol_hg
 # saveRDS(topk_all, "/space/scratch/amorin/R_objects/ortho_tf_topk=100.RDS")
+topk_all <- readRDS("/space/scratch/amorin/R_objects/ortho_tf_topk=100.RDS")
 
 
 x <- "ASCL1"
@@ -353,24 +354,23 @@ ortho_perc <- lapply(tfs_ortho$Symbol_hg, function(x) {
   data.frame(
     Symbol = x,
     Count_mm_in_hg = tf_in$Topk_mm_in_hg,
-    Mm_in_hg = ecdf(tf_out$Topk_mm_in_hg)(tf_in$Topk_mm_in_hg),
+    Perc_mm_in_hg = ecdf(tf_out$Topk_mm_in_hg)(tf_in$Topk_mm_in_hg),
     Count_hg_in_mm = tf_in$Topk_hg_in_mm,
-    Hg_in_mm = ecdf(tf_out$Topk_hg_in_mm)(tf_in$Topk_hg_in_mm)
+    Perc_hg_in_mm = ecdf(tf_out$Topk_hg_in_mm)(tf_in$Topk_hg_in_mm)
   )
 })
 
 
-ortho_perc_df <- data.frame(
-  Symbol = tfs_ortho$Symbol_hg,
-  do.call(rbind, ortho_perc)
-)
+ortho_perc_df <- do.call(rbind, ortho_perc)
 
 
 
-qplot(ortho_perc_df, xvar = "Mm_in_hg", yvar = "Hg_in_mm")
+qplot(ortho_perc_df, xvar = "Perc_mm_in_hg", yvar = "Perc_hg_in_mm") +
+  xlab("Percentile mouse in human") +
+  ylab("Percentile human in mouse")
 
 
-gene <- "PAX6"
+gene <- "ASCL1"
 
 plot_df <- mutate(topk_all[[gene]], Label = Symbol == gene)
 
@@ -383,6 +383,8 @@ ggplot(plot_df, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
     size = 5,
     segment.size = 0.1,
     segment.color = "grey50") +
+  xlab("Human in mouse") +
+  ylab("Mouse in human") +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         axis.title = element_text(size = 20),
@@ -394,10 +396,16 @@ ggplot(plot_df, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
 plot_grid(
   
   plot_hist(plot_df, stat_col = "Topk_hg_in_mm") + 
-    geom_vline(xintercept = filter(plot_df, Symbol == gene)$Topk_hg_in_mm, col = "royalblue"),
+    geom_vline(xintercept = filter(plot_df, Symbol == gene)$Topk_hg_in_mm,
+               linewidth = 1.6,
+               col = "royalblue") +
+    xlab("Human in mouse"),
           
   plot_hist(plot_df, stat_col = "Topk_mm_in_hg") + 
-    geom_vline(xintercept = filter(plot_df, Symbol == gene)$Topk_mm_in_hg, col = "goldenrod"),
+    geom_vline(xintercept = filter(plot_df, Symbol == gene)$Topk_mm_in_hg, 
+               linewidth = 1.6,
+               col = "goldenrod") +
+    xlab("Mouse in human"),
   
   nrow = 1)
 
@@ -545,6 +553,7 @@ ggplot(rank_tf_hg$ASCL1, aes(x = Topk_count)) +
   geom_vline(xintercept = filter(rank_tf_hg$ASCL1, Symbol == "HES6")$Topk_count) +
   geom_vline(xintercept = filter(rank_tf_hg$ASCL1, Symbol == "DLL1")$Topk_count) +
   geom_vline(xintercept = filter(rank_tf_hg$ASCL1, Symbol == "DLL3")$Topk_count) +
+  geom_vline(xintercept = filter(rank_tf_hg$ASCL1, Symbol == "DLL4")$Topk_count) +
   ggtitle("Human ASCL1") +
   xlab("Top k=1000 count") +
   ylab("Gene count") +
@@ -570,12 +579,12 @@ plot_hist(top_mm, stat_col = "Topk_proportion")
 
 
 # TODO: remove when finalized
-# agg_tf_cpm <- agg_tf_hg
-# agg_tf_ln <- readRDS("/space/scratch/amorin/R_objects/agg_mat_TF_list_hg_lognorm.RDS")
-# rank_cpm <- rank_tf_hg
-# rank_ln <- readRDS("/space/scratch/amorin/R_objects/ranking_agg_TF_hg_lognorm.RDS")
-# msr_cpm <- msr_hg
-# msr_ln <- readRDS("~/Robj/binary_measurement_matrix_hg_lognorm.RDS")
+agg_tf_cpm <- agg_tf_hg
+agg_tf_ln <- readRDS("/space/scratch/amorin/R_objects/agg_mat_TF_list_hg_lognorm.RDS")
+rank_cpm <- rank_tf_hg
+rank_ln <- readRDS("/space/scratch/amorin/R_objects/ranking_agg_TF_hg_lognorm.RDS")
+msr_cpm <- msr_hg
+msr_ln <- readRDS("~/Robj/binary_measurement_matrix_hg_lognorm.RDS")
 
 
 gene <- "ASCL1"
