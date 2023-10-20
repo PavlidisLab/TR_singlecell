@@ -350,44 +350,30 @@ lines(density(auc_sub_hg$AUPRC_unibind, na.rm = TRUE), col = "red")
 
 
 
-# tt <- data.frame(
-#     Percentile = c(
-#       auc_sub_hg$AUPRC_percentile_observed_coexpr,
-#       auc_sub_hg$AUPRC_percentile_observed_unibind,
-#       auc_sub_hg$AUROC_percentile_observed_coexpr,
-#       auc_sub_hg$AUROC_percentile_observed_unibind
-#     ),
-#     Group = c(
-#       rep("Coexpr_AUPRC", length(auc_sub_hg$AUPRC_percentile_observed_coexpr)),
-#       rep("Binding_AUPRC", length(auc_sub_hg$AUPRC_percentile_observed_unibind)),
-#       rep("Coexpr_AUROC", length(auc_sub_hg$AUROC_percentile_observed_coexpr)),
-#       rep("Binding_AUROC", length(auc_sub_hg$AUROC_percentile_observed_unibind))
-#     )
-#   )
-# 
-# tt$Group <- factor(tt$Group, levels = unique(tt$Group))
+# plot_perc_df <- auc_common_hg
+plot_perc_df <- auc_sub_hg
 
-tt <- data.frame(
+plot_perc_df <- data.frame(
   Percentile = c(
-    auc_common_hg$AUPRC_percentile_observed_coexpr,
-    auc_common_hg$AUPRC_percentile_observed_unibind,
-    auc_common_hg$AUROC_percentile_observed_coexpr,
-    auc_common_hg$AUROC_percentile_observed_unibind
+    plot_perc_df$AUPRC_percentile_observed_coexpr,
+    plot_perc_df$AUPRC_percentile_observed_unibind,
+    plot_perc_df$AUROC_percentile_observed_coexpr,
+    plot_perc_df$AUROC_percentile_observed_unibind
   ),
   Group = c(
-    rep("Coexpr_AUPRC", length(auc_common_hg$AUPRC_percentile_observed_coexpr)),
-    rep("Binding_AUPRC", length(auc_common_hg$AUPRC_percentile_observed_unibind)),
-    rep("Coexpr_AUROC", length(auc_common_hg$AUROC_percentile_observed_coexpr)),
-    rep("Binding_AUROC", length(auc_common_hg$AUROC_percentile_observed_unibind))
+    rep("Coexpr_AUPRC", length(plot_perc_df$AUPRC_percentile_observed_coexpr)),
+    rep("Binding_AUPRC", length(plot_perc_df$AUPRC_percentile_observed_unibind)),
+    rep("Coexpr_AUROC", length(plot_perc_df$AUROC_percentile_observed_coexpr)),
+    rep("Binding_AUROC", length(plot_perc_df$AUROC_percentile_observed_unibind))
   )
 )
 
-tt$Group <- factor(tt$Group, levels = unique(tt$Group))
+plot_perc_df$Group <- factor(plot_perc_df$Group, levels = unique(plot_perc_df$Group))
 
 
 
 
-ggplot(tt, aes(y = Group, x = Percentile)) +
+pb <- ggplot(plot_perc_df, aes(y = Group, x = Percentile)) +
   geom_violin(fill = "slategrey") +
   geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
   xlab("Percentile observed") +
@@ -396,6 +382,13 @@ ggplot(tt, aes(y = Group, x = Percentile)) +
         axis.title = element_text(size = 20),
         axis.title.y = element_blank(),
         plot.title = element_text(size = 20))
+
+
+ggsave(pb, height = 4, width = 8, device = "png", dpi = 600,
+       filename = file.path(paste0(plot_dir, "binding_vs_agg_AUC_all_human.png")))
+
+# ggsave(pb, height = 4, width = 8, device = "png", dpi = 600,
+#        filename = file.path(paste0(plot_dir, "binding_vs_agg_AUC_common_human.png")))
 
 
 # plot(auc_common_hg$AUPRC_percentile_observed_coexpr, auc_common_hg$AUPRC_percentile_observed_unibind)
