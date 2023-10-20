@@ -142,7 +142,7 @@ p2 <- ggplot(meta_loaded, aes(x = log10(N_cells), fill = Species)) +
         plot.margin = margin(10, 5, 5, 5))
 
 
-ggsave(p2, height = 6, width = 6, device = "png", dpi = 300,
+ggsave(p2, height = 6, width = 6, device = "png", dpi = 600,
        filename = file.path(plot_dir, "cell_counts_by_species.png"))
 
 
@@ -161,5 +161,5 @@ p3 <- ggplot(meta_loaded, aes(x = N_celltypes, fill = Species)) +
         legend.position = c(0.85, 0.75))
 
 
-ggsave(p3, height = 6, width = 6, device = "png", dpi = 300,
+ggsave(p3, height = 6, width = 6, device = "png", dpi = 600,
        filename = file.path(plot_dir, "celltype_counts_by_species.png"))
