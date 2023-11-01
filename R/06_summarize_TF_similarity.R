@@ -14,7 +14,7 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-k <- 200
+k <- 1000
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -115,6 +115,7 @@ summ_null_hg <- get_summary_df(sim_null_hg, add_nexp = FALSE)
 summ_null_mm <- get_summary_df(sim_null_mm, add_nexp = FALSE)
 
 
+
 # summary(summ_ribo_hg$Topk[, "Mean"])
 # summary(summ_ribo_mm$Topk[, "Mean"])
 
@@ -123,6 +124,8 @@ summ_null_mm <- get_summary_df(sim_null_mm, add_nexp = FALSE)
 
 # summary(summ_sub_tf_hg$Topk[, "Mean"])
 # summary(summ_sub_tf_mm$Topk[, "Mean"])
+
+
 
 
 
@@ -191,6 +194,40 @@ divergent_mm <- calc_prop_divergent(topk_df = summ_sub_tf_mm$Topk,
                                     bottomk_df = summ_sub_tf_mm$Bottomk,
                                     null_topk = summ_null_mm$Topk,
                                     null_bottomk = summ_null_mm$Bottomk)
+
+
+
+
+# ratio of tf expected to null expected for top and bottomk
+
+
+ratio_hg <- left_join(summ_sub_tf_hg$Topk[, c("Symbol", "Mean")], 
+                      summ_sub_tf_hg$Bottomk[, c("Symbol", "Mean")],
+                      by = "Symbol",
+                      suffix = c("_Topk", "_Bottomk")) %>% 
+  mutate(
+    Topk_ratio = Mean_Topk / mean(summ_null_hg$Topk$Mean),
+    Btmk_ratio = Mean_Bottomk / mean(summ_null_hg$Bottomk$Mean),
+    Odds_ratio = Topk_ratio / Btmk_ratio,
+    LOR = log(Odds_ratio)
+  )
+
+
+
+ratio_mm <- left_join(summ_sub_tf_mm$Topk[, c("Symbol", "Mean")], 
+                      summ_sub_tf_mm$Bottomk[, c("Symbol", "Mean")],
+                      by = "Symbol",
+                      suffix = c("_Topk", "_Bottomk")) %>% 
+  mutate(
+    Topk_ratio = Mean_Topk / mean(summ_null_mm$Topk$Mean),
+    Btmk_ratio = Mean_Bottomk / mean(summ_null_mm$Bottomk$Mean),
+    Odds_ratio = Topk_ratio / Btmk_ratio,
+    LOR = log(Odds_ratio)
+  )
+
+
+# view(filter(ratio_hg, Topk_ratio < 1))
+# view(filter(ratio_mm, Topk_ratio < 1))
 
 
 
