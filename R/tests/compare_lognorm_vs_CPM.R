@@ -9,7 +9,7 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-k <- 200
+k <- 1000
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -35,8 +35,8 @@ sim_ln_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_TF_mm_k=
 # TF rankings
 rank_cpm_hg <- readRDS(rank_tf_hg_path)
 rank_cpm_mm <- readRDS(rank_tf_mm_path)
-rank_ln_hg <- readRDS("/space/scratch/amorin/R_objects/TF_agg_ranking_hg_lognorm.RDS")
-rank_ln_mm <- readRDS("/space/scratch/amorin/R_objects/TF_agg_ranking_mm_lognorm.RDS")
+rank_ln_hg <- readRDS("/space/scratch/amorin/R_objects/ranking_agg_TF_hg_lognorm.RDS")
+rank_ln_mm <- readRDS("/space/scratch/amorin/R_objects/ranking_agg_TF_mm_lognorm.RDS")
 
 stopifnot(identical(names(rank_cpm_hg), names(rank_ln_hg)))
 stopifnot(identical(names(rank_cpm_mm), names(rank_ln_mm)))
@@ -44,8 +44,8 @@ stopifnot(identical(rank_cpm_hg[[1]]$Symbol, rank_ln_hg[[1]]$Symbol))
 stopifnot(identical(rank_cpm_mm[[1]]$Symbol, rank_ln_mm[[1]]$Symbol))
 
 # Focus on human aggregate lists due to size
-agg_cpm_hg <- readRDS("/space/scratch/amorin/R_objects/TF_agg_mat_list_hg.RDS")
-agg_ln_hg <- readRDS("/space/scratch/amorin/R_objects/TF_agg_mat_list_hg_lognorm.RDS")
+agg_cpm_hg <- readRDS("/space/scratch/amorin/R_objects/agg_mat_TF_list_hg.RDS")
+agg_ln_hg <- readRDS("/space/scratch/amorin/R_objects/agg_mat_TF_list_hg_lognorm.RDS")
 
 
 # 1. Differences in binary measurement
@@ -103,6 +103,7 @@ summ_cpm_hg <- get_summary_df(sim_cpm_hg, msr_cpm_hg)
 summ_cpm_mm <- get_summary_df(sim_cpm_mm, msr_cpm_mm)
 summ_ln_hg <- get_summary_df(sim_ln_hg, msr_ln_hg)
 summ_ln_mm <- get_summary_df(sim_ln_mm, msr_ln_mm)
+
 
 
 sim_df_hg <- left_join(summ_cpm_hg$Topk,
@@ -244,6 +245,61 @@ diff_rank_df <- left_join(rank_cpm_hg[[gene]],
 
 
 qplot(diff_rank_df, xvar = "Avg_RSR_CPM", yvar = "Avg_RSR_LN")
+
+
+
+# Looking at delta of topk overlap... assume genes that are boosted are generic
+
+
+calc_delta_topk <- function(cpm_l, lognorm_l) {
+  
+  symbols <- intersect(names(cpm_l), names(lognorm_l))
+  
+  delta_count_l <- lapply(symbols, function(x) {
+    lognorm_l[[x]]$Topk_count - cpm_l[[x]]$Topk_count
+  })
+  
+  delta_count_l <- do.call(cbind, delta_count_l)
+  colnames(delta_count_l) <- symbols
+  rownames(delta_count_l) <- cpm_l[[1]]$Symbol
+  return(delta_count_l)
+}
+
+
+delta_topk_hg <- calc_delta_topk(cpm_l = rank_cpm_hg, lognorm_l = rank_ln_hg)
+delta_topk_mm <- calc_delta_topk(cpm_l = rank_cpm_mm, lognorm_l = rank_ln_mm)
+
+head(sort(rowMeans(delta_topk_hg)))
+head(sort(rowMeans(delta_topk_hg), decreasing = TRUE))
+
+head(sort(rowMeans(delta_topk_mm)))
+head(sort(rowMeans(delta_topk_mm), decreasing = TRUE))
+
+delta_topk_cor_hg <- mat_to_df(colwise_cor(delta_topk_hg), symmetric = TRUE)
+delta_topk_cor_mm <- mat_to_df(colwise_cor(delta_topk_mm), symmetric = TRUE)
+
+
+# Larger topk overlap in lognorm null == more generic overlap
+sim_null_cpm <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_null_hg_k=", k, ".RDS"))
+sim_null_ln <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_null_hg_k=", k, "_lognorm.RDS"))
+
+
+null_df <- data.frame(
+  Mean_topk = c(
+    vapply(sim_null_ln, function(x) mean(x$Topk), numeric(1)),
+    vapply(sim_null_cpm, function(x) mean(x$Topk), numeric(1))
+    ),
+  Mean_bottomk = c(
+    vapply(sim_null_ln, function(x) mean(x$Bottomk), numeric(1)),
+    vapply(sim_null_cpm, function(x) mean(x$Bottomk), numeric(1))
+  ),
+  Group = c(rep("LN", length(sim_null_ln)), rep("CPM", length(sim_null_cpm)))
+)
+
+
+boxplot(null_df$Mean_topk ~ null_df$Group)
+boxplot(null_df$Mean_bottomk ~ null_df$Group)
+
 
 
 # Explore at level of aggregate matrices
