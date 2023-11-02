@@ -1,4 +1,5 @@
-## TODO:
+## Organize and describe the ability of the coexpression and binding rankings
+## to recover literature curated targets
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -49,10 +50,10 @@ curated <- read.delim(curated_all_path, stringsAsFactors = FALSE)
 # bind_dat <- readRDS(bind_dat_path)
 
 # Average bind scores and output of binding specificity model
-bind_summary_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_summary.RDS"
-bind_model_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_modelfit.RDS"
-bind_summary <- readRDS(bind_summary_path)
-bind_model <- readRDS(bind_model_path)
+# bind_summary_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_summary.RDS"
+# bind_model_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_modelfit.RDS"
+# bind_summary <- readRDS(bind_summary_path)
+# bind_model <- readRDS(bind_model_path)
 
 
 evidence_l <- readRDS(evidence_path)
@@ -64,7 +65,7 @@ evidence_l <- readRDS(evidence_path)
 # targets_curated_mm <- intersect(pc_mm$Symbol, str_to_title(curated$Target_Symbol))
 
 # For each dataset, load the subset gene x TF aggregation matrix 
-agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+# agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
 # agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
 
 # List of AUROC/AUPRC for TF lists ability to recover curated targets
@@ -72,73 +73,88 @@ unibind_auc_hg <- readRDS(unibind_auc_hg_path)
 unibind_auc_mm <- readRDS(unibind_auc_mm_path)
 coexpr_auc_hg <- readRDS(coexpr_auc_hg_path)
 coexpr_auc_mm <- readRDS(coexpr_auc_mm_path)
-avg_vs_ind_auc_hg <- readRDS(avg_vs_ind_auc_hg_path)
-avg_vs_ind_auc_mm <- readRDS(avg_vs_ind_auc_mm_path)
+avi_auc_hg <- readRDS(avg_vs_ind_auc_hg_path)
+avi_auc_mm <- readRDS(avg_vs_ind_auc_mm_path)
+rev_coexpr_auc_hg <- readRDS("/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_hg.RDS")
+rev_coexpr_auc_mm <- readRDS("/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_mm.RDS")
 
+# The minimum count of curated targets for a TF for reporting
+min_targets <- 5
 
 
 # Functions
 # ------------------------------------------------------------------------------
 
-# TODO: function that returns proportion of data in percentile bins
 
-top_and_bottom_prop <- function(df, stat_cols) {
+# Give the proportion of data within the supplied numeric columns of df that are
+# in the extreme ranges
+
+extreme_proportions <- function(df, stat_cols, upper = 0.9, lower = 0.1) {
   
-  lapply(df[, stat_cols], function(col) {
+  res <- lapply(df[, stat_cols], function(col) {
     
     col <- col[!is.na(col)]
     n <- length(col)
     
-    round(c(
+    stats <- c(
       N = n,
       Eq1 = sum(col == 1) / n,
-      Gt09 = sum(col > 0.9) / n,
-      Lt01 = sum(col < 0.1) / n
-    ), 3)
+      Gt_upper = sum(col > upper) / n,
+      Lt_lower = sum(col < lower) / n
+    )
+    
+    stats <- round(stats, 3)
   })
+  
+  df <- do.call(rbind, res)
+  row.names(df) <- stat_cols
+  colnames(df) <- c("N", "Eq1", paste0("Gt", upper), paste0("Lt", lower))
+  
+  return(df)
 }
 
 
 
 
-# Individual TF vector AUC vs averaged/final AUC
+
+# The AUC percentile of the averaged/final network relative to the distribution
+# of the individual TFs
 # ------------------------------------------------------------------------------
 
 
-min_targets <- 5
-
-
-avg_vs_ind_df_hg <-  lapply(avg_vs_ind_auc_hg, `[[`, "Summary_df") %>% 
+avi_df_hg <-  lapply(avi_auc_hg, `[[`, "Summary_df") %>% 
   do.call(rbind, .) %>%
   rownames_to_column(var = "Symbol") %>% 
   filter(N_targets >= min_targets)
 
 
-avg_vs_ind_df_mm <-  lapply(avg_vs_ind_auc_mm, `[[`, "Summary_df") %>% 
+avi_df_mm <-  lapply(avi_auc_mm, `[[`, "Summary_df") %>% 
   do.call(rbind, .) %>%
   rownames_to_column(var = "Symbol") %>% 
   filter(N_targets >= min_targets)
 
 
+# Summaries
 
-summary(Filter(is.numeric, avg_vs_ind_df_hg))
-summary(Filter(is.numeric, avg_vs_ind_df_mm))
+avi_summ_hg <- summary(Filter(is.numeric, avi_df_hg))
+avi_summ_mm <- summary(Filter(is.numeric, avi_df_mm))
 
-top_and_bottom_prop(avg_vs_ind_df_hg, c("AUROC_percentile", "AUPRC_percentile"))
-top_and_bottom_prop(avg_vs_ind_df_mm, c("AUROC_percentile", "AUPRC_percentile"))
+ext_avi_hg <- extreme_proportions(avi_df_hg, c("AUROC_percentile", "AUPRC_percentile"))
+ext_avi_mm <- extreme_proportions(avi_df_mm, c("AUROC_percentile", "AUPRC_percentile"))
 
 
-plot_grid(
-  plot_hist(avg_vs_ind_df_hg, stat_col = paste0("AUPRC", "_percentile")),
-  plot_hist(avg_vs_ind_df_hg, stat_col = paste0("AUROC", "_percentile")),
-  plot_hist(avg_vs_ind_df_mm, stat_col = paste0("AUPRC", "_percentile")),
-  plot_hist(avg_vs_ind_df_mm, stat_col = paste0("AUROC", "_percentile")),
-  nrow = 2)
+# Inspect TFs where the average was outperformed by most individual
+# TODO: Why are LYL1 and NRF1 poor in both species? 
+
+view(filter(avi_df_hg, AUROC_percentile < 0.1 | AUPRC_percentile < 0.1))
+view(filter(avi_df_mm, AUROC_percentile < 0.1 | AUPRC_percentile < 0.1))
+
+
 
 
 
 tf <- "ASCL1"
-auc_df <- arrange(avg_vs_ind_auc_hg[[tf]]$AUC_df, AUROC)
+auc_df <- arrange(avi_auc_hg[[tf]]$AUC_df, AUROC)
 auc_df_no_avg <- filter(auc_df, ID != "Average")
 auc_avg <- filter(auc_df, ID == "Average")
 
@@ -438,6 +454,80 @@ diff_mm <- auc_common_mm %>%
 
 
 
+# Are there TFs where reversing ranks (neg coexpr) increased performance?
+# ------------------------------------------------------------------------------
+
+
+
+rev_coexpr_hg <- do.call(rbind, lapply(rev_coexpr_auc_hg, `[[`, "Perf_df")) %>% 
+  left_join(auc_hg, by = "Symbol") %>% 
+  filter(N_targets.x >= 10)
+
+rev_coexpr_mm <- do.call(rbind, lapply(rev_coexpr_auc_mm, `[[`, "Perf_df")) %>% 
+  left_join(auc_mm, by = "Symbol") %>% 
+  filter(N_targets.x >= 10)
+
+
+plot(rev_coexpr_hg$AUPRC_percentile_observed_coexpr, rev_coexpr_hg$AUPRC_percentile_observed)
+plot(rev_coexpr_mm$AUPRC_percentile_observed_coexpr, rev_coexpr_mm$AUPRC_percentile_observed)
+
+plot(rev_coexpr_hg$AUPRC_coexpr, rev_coexpr_hg$AUPRC)
+plot(rev_coexpr_mm$AUPRC_coexpr, rev_coexpr_mm$AUPRC)
+
+plot(rev_coexpr_hg$AUROC_coexpr, rev_coexpr_hg$AUROC)
+plot(rev_coexpr_mm$AUROC_coexpr, rev_coexpr_mm$AUROC)
+
+
+plot(rev_coexpr_hg$AUPRC_coexpr, rev_coexpr_hg$AUPRC_unibind)
+plot(rev_coexpr_hg$AUPRC, rev_coexpr_hg$AUPRC_unibind)
+plot(rev_coexpr_hg$AUROC_coexpr, rev_coexpr_hg$AUROC_unibind)
+plot(rev_coexpr_hg$AUROC, rev_coexpr_hg$AUROC_unibind)
+
+
+# plot_df <- data.frame(
+#   AUROC = c(
+#     rev_coexpr_hg$AUROC,
+#     rev_coexpr_hg$AUROC_coexpr,
+#     rev_coexpr_hg$AUROC_unibind
+#   ),
+#   Group = c(
+#     rep("Coexpr_reverse", length(rev_coexpr_hg$AUROC)),
+#     rep("Coexpr", length(rev_coexpr_hg$AUROC_coexpr)),
+#     rep("Binding", length(rev_coexpr_hg$AUROC_unibind))
+#   )
+# )
+# 
+# plot_df <- filter(plot_df, !is.na(AUROC))
+# 
+# boxplot(plot_df$AUROC ~ plot_df$Group)
+
+
+plot_df <- data.frame(
+  AUPRC = c(
+    rev_coexpr_hg$AUPRC,
+    rev_coexpr_hg$AUPRC_coexpr,
+    rev_coexpr_hg$AUPRC_unibind
+  ),
+  Group = c(
+    rep("Coexpr_reverse", length(rev_coexpr_hg$AUPRC)),
+    rep("Coexpr", length(rev_coexpr_hg$AUPRC_coexpr)),
+    rep("Binding", length(rev_coexpr_hg$AUPRC_unibind))
+  )
+)
+
+plot_df <- filter(plot_df, !is.na(AUPRC))
+
+boxplot(plot_df$AUPRC ~ plot_df$Group)
+
+
+
+
+rev_coexpr_hg %>% 
+  filter(AUPRC_percentile_observed_coexpr < 0.5 & 
+         AUPRC_percentile_observed > 0.8) %>% 
+  view()
+
+
 
 
 # Inspecting retrieved ranks for a given TF
@@ -642,6 +732,21 @@ p_l <- lapply(names(auc_noties_l), function(x) {
 
 graphics.off()
 
+
+
+
+# Plotting
+# ------------------------------------------------------------------------------
+
+
+# Histograms of Average versus individual AUCs
+
+plot_grid(
+  plot_hist(avi_df_hg, stat_col = paste0("AUPRC", "_percentile")),
+  plot_hist(avi_df_hg, stat_col = paste0("AUROC", "_percentile")),
+  plot_hist(avi_df_mm, stat_col = paste0("AUPRC", "_percentile")),
+  plot_hist(avi_df_mm, stat_col = paste0("AUROC", "_percentile")),
+  nrow = 2)
 
 
 
