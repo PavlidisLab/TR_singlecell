@@ -115,6 +115,19 @@ extreme_proportions <- function(df, stat_cols, upper = 0.9, lower = 0.1) {
 
 
 
+# Join the summary dataframes from the list of coexpression and unibind AUCs
+
+join_auc_df <- function(coexpr_l, unibind_l, min_targets) {
+  
+  coexpr_df <- do.call(rbind, lapply(coexpr_l, `[[`, "Perf_df"))
+  unibind_df <- do.call(rbind, lapply(unibind_l, `[[`, "Perf_df"))
+  
+  left_join(coexpr_df, unibind_df,
+            by = c("Symbol", "N_targets"),
+            suffix = c("_coexpr", "_unibind")) %>% 
+    filter(N_targets >= min_targets)
+}
+
 
 
 # The AUC percentile of the averaged/final network relative to the distribution
@@ -139,8 +152,11 @@ avi_df_mm <-  lapply(avi_auc_mm, `[[`, "Summary_df") %>%
 avi_summ_hg <- summary(Filter(is.numeric, avi_df_hg))
 avi_summ_mm <- summary(Filter(is.numeric, avi_df_mm))
 
-ext_avi_hg <- extreme_proportions(avi_df_hg, c("AUROC_percentile", "AUPRC_percentile"))
-ext_avi_mm <- extreme_proportions(avi_df_mm, c("AUROC_percentile", "AUPRC_percentile"))
+
+avi_cols <- c("AUROC_percentile", "AUPRC_percentile")
+
+ext_avi_hg <- extreme_proportions(avi_df_hg, avi_cols)
+ext_avi_mm <- extreme_proportions(avi_df_mm, avi_cols)
 
 
 # Inspect TFs where the average was outperformed by most individual
@@ -150,90 +166,36 @@ view(filter(avi_df_hg, AUROC_percentile < 0.1 | AUPRC_percentile < 0.1))
 view(filter(avi_df_mm, AUROC_percentile < 0.1 | AUPRC_percentile < 0.1))
 
 
-
-
-
-tf <- "ASCL1"
-auc_df <- arrange(avi_auc_hg[[tf]]$AUC_df, AUROC)
-auc_df_no_avg <- filter(auc_df, ID != "Average")
-auc_avg <- filter(auc_df, ID == "Average")
-
-
-# hist(auc_df_no_avg$AUPRC, breaks = 100, xlim = c(0, max(auprc_agg, max(auprc_no_agg)) * 1.2))
-hist(auc_df_no_avg$AUPRC, breaks = 100, xlim = c(0, 0.07))
-abline(v = auc_avg$AUPRC, col = "red")
-
-hist(auc_df_no_avg$AUROC, breaks = 20, xlim = c(0.3, 0.8))
-abline(v = auc_avg$AUROC, col = "red")
-
-
-ggplot(auc_df_no_avg, aes(x = AUROC)) +
-  geom_density(fill = "lightgrey") +
-  geom_vline(xintercept = auc_avg$AUROC, col = "firebrick") +
-  ylab("Density") +
-  ggtitle(tf) +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        plot.title = element_text(size = 20),
-        plot.margin = margin(c(10, 10, 10, 10)))
-
-
-plot_hist(auc_df_no_avg, stat_col = "AUROC") +
-  geom_vline(xintercept = auc_avg$AUROC, col = "firebrick")
-
-
-plot(density(auc_df_no_avg$AUROC))
-abline(v = auc_avg$AUROC, col = "red")
-
-
-
-
-#
+# Join and summarize the aggregated coexpression and binding AUCs
 # ------------------------------------------------------------------------------
 
 
-
-# TODO: can keep be done upstream?
-
-join_auc_df <- function(coexpr_l, unibind_l) {
-  
-  coexpr_df <- do.call(rbind, lapply(coexpr_l, `[[`, "Perf_df"))
-  unibind_df <- do.call(rbind, lapply(unibind_l, `[[`, "Perf_df"))
-  
-  left_join(coexpr_df, unibind_df,
-            by = c("Symbol", "N_targets"),
-            suffix = c("_coexpr", "_unibind"))
-}
+agg_df_hg <- join_auc_df(coexpr_l = coexpr_auc_hg, 
+                         unibind_l = unibind_auc_hg, 
+                         min_targets = min_targets)
 
 
+agg_df_mm <- join_auc_df(coexpr_l = coexpr_auc_mm, 
+                         unibind_l = unibind_auc_mm,
+                         min_targets = min_targets)
 
 
-auc_hg <- join_auc_df(coexpr_l = coexpr_auc_hg, unibind_l = unibind_auc_hg)
-auc_mm <- join_auc_df(coexpr_l = coexpr_auc_mm, unibind_l = unibind_auc_mm)
+# Subset of TFs with data for both binding and coexpr along with min targets
+
+agg_df_common_hg <- filter(agg_df_hg, !is.na(AUPRC_coexpr) & !is.na(AUPRC_unibind))
+agg_df_common_mm <- filter(agg_df_mm, !is.na(AUPRC_coexpr) & !is.na(AUPRC_unibind))
 
 
-# Keep only TFs with a minimum count of curated targets
+# Summaries
 
-min_targets <- 5
-auc_sub_hg <- filter(auc_hg, N_targets >= min_targets)
-auc_sub_mm <- filter(auc_mm, N_targets >= min_targets)
+agg_summ_hg <- summary(Filter(is.numeric, agg_df_hg))
+agg_summ_mm <- summary(Filter(is.numeric, agg_df_mm))
 
-# Minimum count of curated targets common to unibind and coexpr
-
-auc_common_hg <- filter(auc_sub_hg, !is.na(AUPRC_coexpr) & !is.na(AUPRC_unibind))
-auc_common_mm <- filter(auc_sub_mm, !is.na(AUPRC_coexpr) & !is.na(AUPRC_unibind))
-
-summary(Filter(is.numeric, auc_sub_hg))
-summary(Filter(is.numeric, auc_sub_mm))
-
-summary(Filter(is.numeric, auc_common_hg))
-summary(Filter(is.numeric, auc_common_mm))
+agg_summ_common_hg <- summary(Filter(is.numeric, agg_df_common_hg))
+agg_summ_common_mm <- summary(Filter(is.numeric, agg_df_common_mm))
 
 
-# Proportion with notably good or bad auc performance
-
-stat_cols <- c(
+agg_cols <- c(
   "AUPRC_percentile_observed_coexpr",
   "AUPRC_percentile_observed_unibind",
   "AUROC_percentile_observed_coexpr",
@@ -241,116 +203,30 @@ stat_cols <- c(
 )
 
 
+ext_agg_hg <- extreme_proportions(agg_df_hg, agg_cols)
+ext_agg_mm <- extreme_proportions(agg_df_mm, agg_cols)
+
+ext_agg_common_hg <- extreme_proportions(agg_df_common_hg, agg_cols)
+ext_agg_common_mm <- extreme_proportions(agg_df_common_mm, agg_cols)
 
 
-
-top_and_bottom_prop(auc_sub_hg, stat_cols)
-top_and_bottom_prop(auc_sub_mm, stat_cols)
-
-top_and_bottom_prop(auc_common_hg, stat_cols)
-top_and_bottom_prop(auc_common_mm, stat_cols)
-
-
-
-
-# Histogram of percentiles of observered AUCs versus null
-
-
-stat <- "AUPRC"
-
-# Using all TFs available for coexpression
-plot_df_hg <- auc_sub_hg 
-plot_df_mm <- auc_sub_mm
-
-# Using only TFs common to coexpression and unibind
-# plot_df_hg <- auc_common_hg 
-# plot_df_mm <- auc_common_mm
-
-
-p_auprc_hist_hg <- list(
-  plot_hist(plot_df_hg, stat_col = paste0(stat, "_percentile_observed_coexpr")),
-  plot_hist(plot_df_hg, stat_col = paste0(stat, "_percentile_observed_unibind")))
-
-
-p_auprc_hist_mm <- list(
-  plot_hist(plot_df_mm, stat_col = paste0(stat, "_percentile_observed_coexpr")),
-  plot_hist(plot_df_mm, stat_col = paste0(stat, "_percentile_observed_unibind")))
-
-
-plot_grid(
-  plot_grid(plotlist = p_auprc_hist_hg), 
-  plot_grid(plotlist = p_auprc_hist_mm),
-  nrow = 2)
-
-
-plot_grid(
-  plot_hist(plot_df_hg, stat_col = paste0("AUPRC", "_percentile_observed_coexpr")),
-  plot_hist(plot_df_hg, stat_col = paste0("AUROC", "_percentile_observed_coexpr")),
-  plot_hist(plot_df_mm, stat_col = paste0("AUPRC", "_percentile_observed_coexpr")),
-  plot_hist(plot_df_mm, stat_col = paste0("AUROC", "_percentile_observed_coexpr")),
-  nrow = 4)
+# Relationship between the count of datasets, targets, and performance
+# TODO: this should also look at # of coexpr and binding datasets
+# plot(agg_df_common_hg$AUPRC_percentile_observed_coexpr ~ agg_df_common_hg$N_targets)
+# cor.test(agg_df_common_hg$AUPRC_percentile_observed_coexpr, agg_df_common_hg$N_targets, method = "spearman")
 
 
 
 
-# Demo a single TF's auc performance relative to null distn
-
-
-tf_hg <- "ASCL1"
-tf_mm <- "Ascl1"
-
-null <- unlist(lapply(unibind_auc_hg[[tf_hg]]$Null, `[[`, stat))
-obs <- unibind_auc_hg[[tf_hg]]$Perf_df[[stat]]
-
-xmin <- min(obs, min(null)) * 0.95
-xmax <- max(obs, max(null)) * 1.05
-hist(null, xlim = c(xmin, xmax), main = tf_hg, breaks = 100)
-abline(v = obs, col = "red")
-
-
-null <- unlist(lapply(unibind_auc_mm[[tf_mm]]$Null, `[[`, stat))
-obs <- unibind_auc_mm[[tf_mm]]$Perf_df[[stat]]
-
-xmin <- min(obs, min(null)) * 0.95
-xmax <- max(obs, max(null)) * 1.05
-hist(null, xlim = c(xmin, xmax), main = tf_mm, breaks = 100)
-abline(v = obs, col = "red")
 
 
 
-# Scatterplot of coexpression versus unibind performance for each TF
-
-ggplot(auc_common_hg, aes(x = AUPRC_percentile_observed_coexpr, 
-                          y = AUPRC_percentile_observed_unibind)) +
-  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = 0.9, ymax = 1.05), fill = NA, colour = "forestgreen") +
-  geom_rect(aes(xmin = -0.05, xmax = 0.1, ymin = 0.9, ymax = 1.05), fill = NA, colour = "grey") +
-  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = -0.05, ymax = 0.1), fill = NA, colour = "grey") +
-  geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = NA, colour = "firebrick") +
-  geom_point(shape = 21, size = 3.4) +
-  xlab("AUPRC percentile coexpression") +
-  ylab("AUPRC percentile binding") +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        plot.title = element_text(size = 20),
-        plot.margin = margin(c(10, 10, 10, 10)))
 
 
 
-ggplot(auc_common_hg, aes(x = AUPRC_percentile_observed_coexpr, 
-                          y = AUPRC_percentile_observed_unibind)) +
-  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = 0.9, ymax = 1.05), fill = "forestgreen", colour = NA, alpha = 0.006) +
-  geom_rect(aes(xmin = -0.05, xmax = 0.1, ymin = 0.9, ymax = 1.05), fill = "grey", colour = NA, alpha = 0.006) +
-  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = -0.05, ymax = 0.1), fill = "grey", colour = NA, alpha = 0.006) +
-  geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = "firebrick", colour = NA, alpha = 0.006) +
-  geom_point(shape = 21, size = 3.4) +
-  xlab("AUPRC percentile coexpression") +
-  ylab("AUPRC percentile binding") +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        plot.title = element_text(size = 20),
-        plot.margin = margin(c(10, 10, 10, 10)))
+
+
+
 
 
 
@@ -748,6 +624,115 @@ plot_grid(
   plot_hist(avi_df_mm, stat_col = paste0("AUROC", "_percentile")),
   nrow = 2)
 
+
+# Density plot of a TF's individual AUCs overlaid with the average AUC
+
+tf <- "ASCL1"
+auc_df <- arrange(avi_auc_hg[[tf]]$AUC_df, AUROC)
+auc_df_no_avg <- filter(auc_df, ID != "Average")
+auc_avg <- filter(auc_df, ID == "Average")
+
+
+ggplot(auc_df_no_avg, aes(x = AUROC)) +
+  geom_density(fill = "lightgrey") +
+  geom_vline(xintercept = auc_avg$AUROC, col = "firebrick") +
+  ylab("Density") +
+  ggtitle(tf) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 10, 10, 10)))
+
+
+
+# Histogram of percentiles of observered AUCs versus null
+
+
+stat <- "AUPRC"
+
+# Using all TFs available for coexpression
+# plot_df_hg <- agg_df_hg 
+# plot_df_mm <- agg_df_mm
+
+# Using only TFs common to coexpression and unibind
+plot_df_hg <- agg_df_common_hg
+plot_df_mm <- agg_df_common_mm
+
+
+p_auprc_hist_hg <- list(
+  plot_hist(plot_df_hg, stat_col = paste0(stat, "_percentile_observed_coexpr")),
+  plot_hist(plot_df_hg, stat_col = paste0(stat, "_percentile_observed_unibind")))
+
+
+p_auprc_hist_mm <- list(
+  plot_hist(plot_df_mm, stat_col = paste0(stat, "_percentile_observed_coexpr")),
+  plot_hist(plot_df_mm, stat_col = paste0(stat, "_percentile_observed_unibind")))
+
+
+plot_grid(
+  plot_grid(plotlist = p_auprc_hist_hg), 
+  plot_grid(plotlist = p_auprc_hist_mm),
+  nrow = 2)
+
+
+plot_grid(
+  plot_hist(plot_df_hg, stat_col = paste0("AUPRC", "_percentile_observed_coexpr")),
+  plot_hist(plot_df_hg, stat_col = paste0("AUROC", "_percentile_observed_coexpr")),
+  plot_hist(plot_df_mm, stat_col = paste0("AUPRC", "_percentile_observed_coexpr")),
+  plot_hist(plot_df_mm, stat_col = paste0("AUROC", "_percentile_observed_coexpr")),
+  nrow = 4)
+
+
+
+
+# Demo a single TF's auc performance relative to null distn
+# TODO: function and clean
+
+tf_hg <- "ASCL1"
+tf_mm <- "Ascl1"
+
+null <- unlist(lapply(unibind_auc_hg[[tf_hg]]$Null, `[[`, stat))
+obs <- unibind_auc_hg[[tf_hg]]$Perf_df[[stat]]
+
+xmin <- min(obs, min(null)) * 0.95
+xmax <- max(obs, max(null)) * 1.05
+hist(null, xlim = c(xmin, xmax), main = tf_hg, breaks = 100)
+abline(v = obs, col = "red")
+
+null <- unlist(lapply(unibind_auc_mm[[tf_mm]]$Null, `[[`, stat))
+obs <- unibind_auc_mm[[tf_mm]]$Perf_df[[stat]]
+
+xmin <- min(obs, min(null)) * 0.95
+xmax <- max(obs, max(null)) * 1.05
+hist(null, xlim = c(xmin, xmax), main = tf_mm, breaks = 100)
+abline(v = obs, col = "red")
+
+
+
+# Scatterplot of coexpression versus unibind performance for each TF
+
+ggplot(agg_df_common_hg, aes(x = AUPRC_percentile_observed_coexpr, 
+                             y = AUPRC_percentile_observed_unibind)) +
+  
+  # geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = 0.9, ymax = 1.05), fill = NA, colour = "forestgreen") +
+  # geom_rect(aes(xmin = -0.05, xmax = 0.1, ymin = 0.9, ymax = 1.05), fill = NA, colour = "grey") +
+  # geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = -0.05, ymax = 0.1), fill = NA, colour = "grey") +
+  # geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = NA, colour = "firebrick") +
+  
+  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = 0.9, ymax = 1.05), fill = "forestgreen", colour = NA, alpha = 0.006) +
+  geom_rect(aes(xmin = -0.05, xmax = 0.1, ymin = 0.9, ymax = 1.05), fill = "grey", colour = NA, alpha = 0.006) +
+  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = -0.05, ymax = 0.1), fill = "grey", colour = NA, alpha = 0.006) +
+  geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = "firebrick", colour = NA, alpha = 0.006) +
+  
+  geom_point(shape = 21, size = 3.4) +
+  xlab("AUPRC percentile coexpression") +
+  ylab("AUPRC percentile binding") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 10, 10, 10)))
 
 
 
