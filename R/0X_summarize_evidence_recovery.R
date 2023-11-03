@@ -212,121 +212,138 @@ ext_agg_common_mm <- extreme_proportions(agg_df_common_mm, agg_cols)
 
 # Relationship between the count of datasets, targets, and performance
 # TODO: this should also look at # of coexpr and binding datasets
-# plot(agg_df_common_hg$AUPRC_percentile_observed_coexpr ~ agg_df_common_hg$N_targets)
-# cor.test(agg_df_common_hg$AUPRC_percentile_observed_coexpr, agg_df_common_hg$N_targets, method = "spearman")
+
+cor(select_if(agg_df_common_hg, is.numeric), method = "spearman")
+cor(select_if(agg_df_common_mm, is.numeric), method = "spearman")
+cor.test(agg_df_common_hg$AUPRC_percentile_observed_coexpr, agg_df_common_hg$N_targets, method = "spearman")
 
 
 
+# Isolating TFs that performed well for for both aggregations
+# ------------------------------------------------------------------------------
+
+
+both_hg <- agg_df_common_hg %>% 
+  filter(AUPRC_percentile_observed_coexpr > 0.9 &
+           AUPRC_percentile_observed_unibind > 0.9)
+
+
+both_mm <- agg_df_common_mm %>% 
+  filter(AUPRC_percentile_observed_coexpr > 0.9 &
+           AUPRC_percentile_observed_unibind > 0.9)
+
+
+both_ortho <- pc_ortho %>% 
+  filter(Symbol_hg %in% both_hg$Symbol & Symbol_mm %in% both_mm$Symbol) %>% 
+  pull(Symbol_hg)
 
 
 
+both_prop_hg <- length(both_ortho) / nrow(both_hg)
+both_prop_mm <- length(both_ortho) / nrow(both_mm)
 
 
 
+# Looking at TFs that performed well in one aggregation but not the other
+# ------------------------------------------------------------------------------
 
 
+# Coexpression
 
-
-
-
-
-# Looking at the distribution of observed percentiles for coexpr/binding
-# TODO: function
-
-plot(density(auc_common_hg$AUPRC_percentile_observed_coexpr))
-lines(density(auc_common_hg$AUPRC_percentile_observed_unibind), col = "red")
-
-
-plot(density(auc_sub_hg$AUPRC_coexpr))
-lines(density(auc_sub_hg$AUPRC_unibind, na.rm = TRUE), col = "red")
-
-
-
-# plot_perc_df <- auc_common_hg
-plot_perc_df <- auc_sub_hg
-
-plot_perc_df <- data.frame(
-  Percentile = c(
-    plot_perc_df$AUPRC_percentile_observed_coexpr,
-    plot_perc_df$AUPRC_percentile_observed_unibind,
-    plot_perc_df$AUROC_percentile_observed_coexpr,
-    plot_perc_df$AUROC_percentile_observed_unibind
-  ),
-  Group = c(
-    rep("Coexpr_AUPRC", length(plot_perc_df$AUPRC_percentile_observed_coexpr)),
-    rep("Binding_AUPRC", length(plot_perc_df$AUPRC_percentile_observed_unibind)),
-    rep("Coexpr_AUROC", length(plot_perc_df$AUROC_percentile_observed_coexpr)),
-    rep("Binding_AUROC", length(plot_perc_df$AUROC_percentile_observed_unibind))
-  )
+only_coexpr_hg <- filter(
+  agg_df_common_hg, 
+  (AUPRC_percentile_observed_coexpr > 0.9 & AUPRC_percentile_observed_unibind < 0.5) |
+  (AUROC_percentile_observed_coexpr > 0.9 & AUROC_percentile_observed_unibind < 0.5)
 )
 
-plot_perc_df$Group <- factor(plot_perc_df$Group, levels = unique(plot_perc_df$Group))
+
+only_coexpr_mm <- filter(
+  agg_df_common_mm, 
+  (AUPRC_percentile_observed_coexpr > 0.9 & AUPRC_percentile_observed_unibind < 0.5) |
+    (AUROC_percentile_observed_coexpr > 0.9 & AUROC_percentile_observed_unibind < 0.5)
+)
+
+
+only_coexpr_ortho <- pc_ortho %>% 
+  filter(Symbol_hg %in% only_coexpr_hg$Symbol & Symbol_mm %in% only_coexpr_mm$Symbol) %>% 
+  pull(Symbol_hg)
 
 
 
+# Binding
 
-pb <- ggplot(plot_perc_df, aes(y = Group, x = Percentile)) +
-  geom_violin(fill = "slategrey") +
-  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
-  xlab("Percentile observed") +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        axis.title.y = element_blank(),
-        plot.title = element_text(size = 20))
+only_binding_hg <- filter(
+  agg_df_common_hg, 
+  (AUPRC_percentile_observed_unibind > 0.9 & AUPRC_percentile_observed_coexpr < 0.5) |
+    (AUROC_percentile_observed_unibind > 0.9 & AUROC_percentile_observed_coexpr < 0.5)
+)
 
 
-ggsave(pb, height = 4, width = 8, device = "png", dpi = 600,
-       filename = file.path(paste0(plot_dir, "binding_vs_agg_AUC_all_human.png")))
-
-# ggsave(pb, height = 4, width = 8, device = "png", dpi = 600,
-#        filename = file.path(paste0(plot_dir, "binding_vs_agg_AUC_common_human.png")))
-
-
-# plot(auc_common_hg$AUPRC_percentile_observed_coexpr, auc_common_hg$AUPRC_percentile_observed_unibind)
-# cor(auc_common_hg$AUPRC_percentile_observed_coexpr, auc_common_hg$AUPRC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
-# 
-# plot(auc_common_hg$AUROC_percentile_observed_coexpr, auc_common_hg$AUROC_percentile_observed_unibind)
-# cor(auc_common_hg$AUROC_percentile_observed_coexpr, auc_common_hg$AUROC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
-# 
-# plot(auc_common_mm$AUPRC_percentile_observed_coexpr, auc_common_mm$AUPRC_percentile_observed_unibind)
-# cor(auc_common_mm$AUPRC_percentile_observed_coexpr, auc_common_mm$AUPRC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
-# 
-# plot(auc_common_mm$AUPRC_percentile_observed_coexpr, auc_common_mm$AUPRC_percentile_observed_unibind)
-# cor(auc_common_mm$AUPRC_percentile_observed_coexpr, auc_common_mm$AUPRC_percentile_observed_unibind, use = "pairwise.complete.obs", method = "spearman")
+only_binding_mm <- filter(
+  agg_df_common_mm, 
+  (AUPRC_percentile_observed_unibind > 0.9 & AUPRC_percentile_observed_coexpr < 0.5) |
+    (AUROC_percentile_observed_unibind > 0.9 & AUROC_percentile_observed_coexpr < 0.5)
+)
 
 
-# Isolating TFs that performed well for coexpression and binding
-
-
-top_both_hg <- auc_common_hg %>% 
-  filter(AUPRC_percentile_observed_coexpr > 0.9 &
-           AUPRC_percentile_observed_unibind > 0.9)
-
-
-top_both_mm <- auc_common_mm %>% 
-  filter(AUPRC_percentile_observed_coexpr > 0.9 &
-           AUPRC_percentile_observed_unibind > 0.9)
-
-
-top_ortho <- intersect(top_both_hg$Symbol, str_to_upper(top_both_mm$Symbol))
+only_binding_ortho <- pc_ortho %>% 
+  filter(Symbol_hg %in% only_binding_hg$Symbol & Symbol_mm %in% only_binding_mm$Symbol) %>% 
+  pull(Symbol_hg)
 
 
 
-# Looking at TFs that performed well in one but not both 
-
-diff_hg <- auc_common_hg %>%
-  mutate(Diff_AUPRC = abs(
-    AUPRC_percentile_observed_coexpr - AUPRC_percentile_observed_unibind
-  )) 
-# %>% filter(Diff_AUPRC > 0.8)
+# Inspecting behavior of null AUCs
+# ------------------------------------------------------------------------------
 
 
-diff_mm <- auc_common_mm %>%
-  mutate(Diff_AUPRC = abs(
-    AUPRC_percentile_observed_coexpr - AUPRC_percentile_observed_unibind
-  )) 
-# %>% filter(Diff_AUPRC > 0.8)
+# Instances where a TFs aggregation was not performant relative to 
+# the null, and yet its AUROC is greater than 0.5. This would suggest that its
+# aggregate ranking is somewhat "generic" in its ability to recover targets.
+
+
+check_coexpr_auroc <- agg_df_hg %>% 
+  filter(AUROC_percentile_observed_coexpr < 0.5 & AUROC_coexpr > 0.5) %>% 
+  slice_max(AUROC_coexpr)
+
+
+check_binding_auroc <- agg_df_hg %>% 
+  filter(AUROC_percentile_observed_unibind < 0.5 & AUROC_unibind > 0.5) %>% 
+  slice_max(AUROC_unibind)
+
+
+# Summarize and order null AUROCs
+
+
+null_coexpr_auroc <- 
+  lapply(coexpr_auc_hg, function(x) summary(unlist(lapply(x$Null, `[[`, "AUROC")))) %>% 
+  do.call(rbind, .) %>%
+  as.data.frame() %>% 
+  rownames_to_column(var = "Symbol") %>% 
+  filter(Symbol %in% agg_df_hg$Symbol) %>% 
+  arrange(desc(Median))
+
+
+
+null_binding_auroc <- 
+  lapply(unibind_auc_hg, function(x) summary(unlist(lapply(x$Null, `[[`, "AUROC")))) %>% 
+  do.call(rbind, .) %>%
+  as.data.frame() %>% 
+  rownames_to_column(var = "Symbol") %>% 
+  filter(Symbol %in% agg_df_hg$Symbol) %>% 
+  arrange(desc(Median))
+
+
+# Note that the TFs with the highest null AUROCs still exceeded the null
+# expectation in their respective aggregations.
+
+
+top_nulls <- filter(agg_df_hg, Symbol %in% c("GATA6", "FOXC1"))
+
+
+plot(density(agg_df_hg$AUROC_coexpr), ylim = c(0, 20))
+lines(density(null_coexpr_auroc$Median), col = "red")
+
+
 
 
 
@@ -712,8 +729,16 @@ abline(v = obs, col = "red")
 
 # Scatterplot of coexpression versus unibind performance for each TF
 
-ggplot(agg_df_common_hg, aes(x = AUPRC_percentile_observed_coexpr, 
-                             y = AUPRC_percentile_observed_unibind)) +
+
+qplot(agg_df_common_hg, xvar = "AUPRC_coexpr", yvar = "AUPRC_unibind")
+qplot(agg_df_common_mm, xvar = "AUPRC_coexpr", yvar = "AUPRC_unibind")
+qplot(agg_df_common_hg, xvar = "AUROC_coexpr", yvar = "AUROC_unibind")
+qplot(agg_df_common_mm, xvar = "AUROC_coexpr", yvar = "AUROC_unibind")
+
+
+ggplot(agg_df_common_hg, 
+       aes(x = AUPRC_percentile_observed_coexpr, 
+           y = AUPRC_percentile_observed_unibind)) +
   
   # geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = 0.9, ymax = 1.05), fill = NA, colour = "forestgreen") +
   # geom_rect(aes(xmin = -0.05, xmax = 0.1, ymin = 0.9, ymax = 1.05), fill = NA, colour = "grey") +
@@ -733,6 +758,61 @@ ggplot(agg_df_common_hg, aes(x = AUPRC_percentile_observed_coexpr,
         axis.title = element_text(size = 20),
         plot.title = element_text(size = 20),
         plot.margin = margin(c(10, 10, 10, 10)))
+
+
+# Scatterplot of count of targets and performance
+
+qplot(agg_df_common_hg, yvar = "AUPRC_coexpr", xvar = "N_targets")
+qplot(agg_df_common_hg, yvar = "AUPRC_percentile_observed_coexpr", xvar = "N_targets")
+
+qplot(agg_df_common_hg, yvar = "AUROC_coexpr", xvar = "N_targets")
+qplot(agg_df_common_hg, yvar = "AUROC_percentile_observed_coexpr", xvar = "N_targets")
+
+
+
+# Looking at the distribution of observed percentiles for coexpr/binding
+# TODO: function
+
+
+plot_perc_df <- agg_df_common_hg
+# plot_perc_df <- agg_df_hg
+
+plot_perc_df <- data.frame(
+  Percentile = c(
+    plot_perc_df$AUPRC_percentile_observed_coexpr,
+    plot_perc_df$AUPRC_percentile_observed_unibind,
+    plot_perc_df$AUROC_percentile_observed_coexpr,
+    plot_perc_df$AUROC_percentile_observed_unibind
+  ),
+  Group = c(
+    rep("Coexpr_AUPRC", length(plot_perc_df$AUPRC_percentile_observed_coexpr)),
+    rep("Binding_AUPRC", length(plot_perc_df$AUPRC_percentile_observed_unibind)),
+    rep("Coexpr_AUROC", length(plot_perc_df$AUROC_percentile_observed_coexpr)),
+    rep("Binding_AUROC", length(plot_perc_df$AUROC_percentile_observed_unibind))
+  )
+)
+
+plot_perc_df$Group <- factor(plot_perc_df$Group, levels = unique(plot_perc_df$Group))
+
+
+
+
+pb <- ggplot(plot_perc_df, aes(y = Group, x = Percentile)) +
+  geom_violin(fill = "slategrey") +
+  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
+  xlab("Percentile observed") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        axis.title.y = element_blank(),
+        plot.title = element_text(size = 20))
+
+
+# ggsave(pb, height = 4, width = 8, device = "png", dpi = 600,
+#        filename = file.path(paste0(plot_dir, "binding_vs_agg_AUC_all_human.png")))
+
+# ggsave(pb, height = 4, width = 8, device = "png", dpi = 600,
+#        filename = file.path(paste0(plot_dir, "binding_vs_agg_AUC_common_human.png")))
 
 
 
