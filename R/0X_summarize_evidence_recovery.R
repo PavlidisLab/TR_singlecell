@@ -162,8 +162,8 @@ ext_avi_mm <- extreme_proportions(avi_df_mm, avi_cols)
 # Inspect TFs where the average was outperformed by most individual
 # TODO: Why are LYL1 and NRF1 poor in both species? 
 
-view(filter(avi_df_hg, AUROC_percentile < 0.1 | AUPRC_percentile < 0.1))
-view(filter(avi_df_mm, AUROC_percentile < 0.1 | AUPRC_percentile < 0.1))
+# view(filter(avi_df_hg, AUROC_percentile < 0.1 | AUPRC_percentile < 0.1))
+# view(filter(avi_df_mm, AUROC_percentile < 0.1 | AUPRC_percentile < 0.1))
 
 
 # Join and summarize the aggregated coexpression and binding AUCs
@@ -223,14 +223,18 @@ cor.test(agg_df_common_hg$AUPRC_percentile_observed_coexpr, agg_df_common_hg$N_t
 # ------------------------------------------------------------------------------
 
 
-both_hg <- agg_df_common_hg %>% 
-  filter(AUPRC_percentile_observed_coexpr > 0.9 &
-           AUPRC_percentile_observed_unibind > 0.9)
+both_hg <- filter(
+  agg_df_common_hg, 
+  (AUPRC_percentile_observed_coexpr > 0.9 & AUPRC_percentile_observed_unibind > 0.9) |
+    (AUROC_percentile_observed_coexpr > 0.9 & AUROC_percentile_observed_unibind > 0.9)
+)
 
 
-both_mm <- agg_df_common_mm %>% 
-  filter(AUPRC_percentile_observed_coexpr > 0.9 &
-           AUPRC_percentile_observed_unibind > 0.9)
+both_mm <- filter(
+  agg_df_common_mm, 
+  (AUPRC_percentile_observed_coexpr > 0.9 & AUPRC_percentile_observed_unibind > 0.9) |
+    (AUROC_percentile_observed_coexpr > 0.9 & AUROC_percentile_observed_unibind > 0.9)
+)
 
 
 both_ortho <- pc_ortho %>% 
@@ -241,6 +245,11 @@ both_ortho <- pc_ortho %>%
 
 both_prop_hg <- length(both_ortho) / nrow(both_hg)
 both_prop_mm <- length(both_ortho) / nrow(both_mm)
+
+
+# TODO: explain when percentile is high for one AUC but not the other
+filter(both_hg, sum())
+both_hg$AUPRC_percentile_observed_coexpr - both_hg$AUROC_percentile_observed_coexpr
 
 
 
@@ -336,14 +345,7 @@ null_binding_auroc <-
 # Note that the TFs with the highest null AUROCs still exceeded the null
 # expectation in their respective aggregations.
 
-
 top_nulls <- filter(agg_df_hg, Symbol %in% c("GATA6", "FOXC1"))
-
-
-plot(density(agg_df_hg$AUROC_coexpr), ylim = c(0, 20))
-lines(density(null_coexpr_auroc$Median), col = "red")
-
-
 
 
 
@@ -352,74 +354,72 @@ lines(density(null_coexpr_auroc$Median), col = "red")
 
 
 
-rev_coexpr_hg <- do.call(rbind, lapply(rev_coexpr_auc_hg, `[[`, "Perf_df")) %>% 
-  left_join(auc_hg, by = "Symbol") %>% 
-  filter(N_targets.x >= 10)
-
-rev_coexpr_mm <- do.call(rbind, lapply(rev_coexpr_auc_mm, `[[`, "Perf_df")) %>% 
-  left_join(auc_mm, by = "Symbol") %>% 
-  filter(N_targets.x >= 10)
-
-
-plot(rev_coexpr_hg$AUPRC_percentile_observed_coexpr, rev_coexpr_hg$AUPRC_percentile_observed)
-plot(rev_coexpr_mm$AUPRC_percentile_observed_coexpr, rev_coexpr_mm$AUPRC_percentile_observed)
-
-plot(rev_coexpr_hg$AUPRC_coexpr, rev_coexpr_hg$AUPRC)
-plot(rev_coexpr_mm$AUPRC_coexpr, rev_coexpr_mm$AUPRC)
-
-plot(rev_coexpr_hg$AUROC_coexpr, rev_coexpr_hg$AUROC)
-plot(rev_coexpr_mm$AUROC_coexpr, rev_coexpr_mm$AUROC)
+rev_coexpr_hg <- lapply(rev_coexpr_auc_hg, `[[`, "Perf_df") %>%
+  do.call(rbind, .) %>% 
+  as.data.frame() %>% 
+  rename_with(~paste0(., "_reverse_coexpr"), -c("Symbol", "N_targets")) %>% 
+  left_join(agg_df_hg, by = c("Symbol", "N_targets")) %>% 
+  filter(N_targets >= min_targets)
 
 
-plot(rev_coexpr_hg$AUPRC_coexpr, rev_coexpr_hg$AUPRC_unibind)
-plot(rev_coexpr_hg$AUPRC, rev_coexpr_hg$AUPRC_unibind)
-plot(rev_coexpr_hg$AUROC_coexpr, rev_coexpr_hg$AUROC_unibind)
-plot(rev_coexpr_hg$AUROC, rev_coexpr_hg$AUROC_unibind)
+
+rev_coexpr_mm <- lapply(rev_coexpr_auc_mm, `[[`, "Perf_df") %>%
+  do.call(rbind, .) %>% 
+  as.data.frame() %>% 
+  rename_with(~paste0(., "_reverse_coexpr"), -c("Symbol", "N_targets")) %>% 
+  left_join(agg_df_mm, by = c("Symbol", "N_targets")) %>% 
+  filter(N_targets >= min_targets)
 
 
-# plot_df <- data.frame(
-#   AUROC = c(
-#     rev_coexpr_hg$AUROC,
-#     rev_coexpr_hg$AUROC_coexpr,
-#     rev_coexpr_hg$AUROC_unibind
-#   ),
-#   Group = c(
-#     rep("Coexpr_reverse", length(rev_coexpr_hg$AUROC)),
-#     rep("Coexpr", length(rev_coexpr_hg$AUROC_coexpr)),
-#     rep("Binding", length(rev_coexpr_hg$AUROC_unibind))
-#   )
-# )
-# 
-# plot_df <- filter(plot_df, !is.na(AUROC))
-# 
-# boxplot(plot_df$AUROC ~ plot_df$Group)
 
-
-plot_df <- data.frame(
-  AUPRC = c(
-    rev_coexpr_hg$AUPRC,
-    rev_coexpr_hg$AUPRC_coexpr,
-    rev_coexpr_hg$AUPRC_unibind
-  ),
-  Group = c(
-    rep("Coexpr_reverse", length(rev_coexpr_hg$AUPRC)),
-    rep("Coexpr", length(rev_coexpr_hg$AUPRC_coexpr)),
-    rep("Binding", length(rev_coexpr_hg$AUPRC_unibind))
-  )
+only_rev_hg <- filter(
+  rev_coexpr_hg, 
+  (AUPRC_percentile_observed_reverse_coexpr > 0.9 & AUPRC_percentile_observed_coexpr < 0.5) |
+    (AUROC_percentile_observed_reverse_coexpr > 0.9 & AUROC_percentile_observed_coexpr < 0.5)
 )
 
-plot_df <- filter(plot_df, !is.na(AUPRC))
 
-boxplot(plot_df$AUPRC ~ plot_df$Group)
+only_rev_mm <- filter(
+  rev_coexpr_mm, 
+  (AUPRC_percentile_observed_reverse_coexpr > 0.9 & AUPRC_percentile_observed_coexpr < 0.5) |
+    (AUROC_percentile_observed_reverse_coexpr > 0.9 & AUROC_percentile_observed_coexpr < 0.5)
+)
+
+
+only_rev_ortho <- pc_ortho %>% 
+  filter(Symbol_hg %in% only_rev_hg$Symbol & Symbol_mm %in% only_rev_mm$Symbol) %>% 
+  pull(Symbol_hg)
 
 
 
+# Elevated performance in reverse coexpression and binding: repression?
 
-rev_coexpr_hg %>% 
-  filter(AUPRC_percentile_observed_coexpr < 0.5 & 
-         AUPRC_percentile_observed > 0.8) %>% 
-  view()
+rev_binding_hg <- filter(only_rev_hg, Symbol %in% only_binding_hg$Symbol)
+rev_binding_mm <- filter(only_rev_mm, Symbol %in% only_binding_mm$Symbol)
 
+
+# Performant in coexpression and reverse coexpression... suggests targets are
+# at extremes of rankings
+
+
+both_coexpr_hg <- filter(
+  rev_coexpr_hg, 
+  (AUPRC_percentile_observed_reverse_coexpr > 0.9 & AUPRC_percentile_observed_coexpr > 0.9) |
+    (AUROC_percentile_observed_reverse_coexpr > 0.9 & AUROC_percentile_observed_coexpr > 0.9)
+)
+
+
+both_coexpr_mm <- filter(
+  rev_coexpr_mm, 
+  (AUPRC_percentile_observed_reverse_coexpr > 0.9 & AUPRC_percentile_observed_coexpr > 0.9) |
+    (AUROC_percentile_observed_reverse_coexpr > 0.9 & AUROC_percentile_observed_coexpr > 0.9)
+)
+
+
+
+check_tf <- "PAX7"
+targets <- filter(curated, TF_Symbol == check_tf)$Target_Symbol
+targets_rank <- rank_tf_hg[[check_tf]] %>% filter(Symbol %in% targets) %>% arrange(Rank_RSR)
 
 
 
@@ -814,6 +814,116 @@ pb <- ggplot(plot_perc_df, aes(y = Group, x = Percentile)) +
 # ggsave(pb, height = 4, width = 8, device = "png", dpi = 600,
 #        filename = file.path(paste0(plot_dir, "binding_vs_agg_AUC_common_human.png")))
 
+
+
+# Plotting null versus observed AUROCs
+
+
+plot(density(agg_df_hg$AUROC_coexpr), ylim = c(0, 20))
+lines(density(null_coexpr_auroc$Median), col = "red")
+
+
+left_join(agg_df_hg, null_coexpr_auroc, by = "Symbol") %>% 
+  qplot(., xvar = "Median", yvar = "AUROC_coexpr") +
+  geom_hline(yintercept = 0.5, col = "red") +
+  geom_vline(xintercept = 0.5, col = "red") +
+  ylab("Observed coexpression AUROC") +
+  xlab("Median null coexpression AUROC")
+
+
+
+left_join(agg_df_hg, null_binding_auroc, by = "Symbol") %>% 
+  qplot(., xvar = "Median", yvar = "AUROC_unibind") +
+  geom_hline(yintercept = 0.5, col = "red") +
+  geom_vline(xintercept = 0.5, col = "red") +
+  ylab("Observed binding AUROC") +
+  xlab("Median null binding AUROC")
+
+
+
+# Scatter of coexpr versus reverse coexpr
+plot(rev_coexpr_hg$AUPRC_percentile_observed_coexpr, rev_coexpr_hg$AUPRC_percentile_observed_reverse_coexpr)
+plot(rev_coexpr_mm$AUPRC_percentile_observed_coexpr, rev_coexpr_mm$AUPRC_percentile_observed_reverse_coexpr)
+
+plot(rev_coexpr_hg$AUPRC_coexpr, rev_coexpr_hg$AUPRC_reverse_coexpr)
+plot(rev_coexpr_mm$AUPRC_coexpr, rev_coexpr_mm$AUPRC_reverse_coexpr)
+
+plot(rev_coexpr_hg$AUROC_percentile_observed_coexpr, rev_coexpr_hg$AUROC_percentile_observed_reverse_coexpr)
+plot(rev_coexpr_mm$AUROC_percentile_observed_coexpr, rev_coexpr_mm$AUROC_percentile_observed_reverse_coexpr)
+
+plot(rev_coexpr_hg$AUROC_coexpr, rev_coexpr_hg$AUROC_reverse_coexpr)
+plot(rev_coexpr_mm$AUROC_coexpr, rev_coexpr_mm$AUROC_reverse_coexpr)
+
+
+# Scatter of reverse coexpr versus binding
+plot(rev_coexpr_hg$AUPRC_percentile_observed_reverse_coexpr, rev_coexpr_hg$AUPRC_percentile_observed_unibind)
+plot(rev_coexpr_mm$AUPRC_percentile_observed_reverse_coexpr, rev_coexpr_mm$AUPRC_percentile_observed_unibind)
+
+plot(rev_coexpr_hg$AUPRC_reverse_coexpr, rev_coexpr_hg$AUPRC_unibind)
+plot(rev_coexpr_mm$AUPRC_reverse_coexpr, rev_coexpr_mm$AUPRC_unibind)
+
+plot(rev_coexpr_hg$AUROC_percentile_observed_reverse_coexpr, rev_coexpr_hg$AUROC_percentile_observed_unibind)
+plot(rev_coexpr_mm$AUROC_percentile_observed_reverse_coexpr, rev_coexpr_mm$AUROC_percentile_observed_unibind)
+
+plot(rev_coexpr_hg$AUROC_reverse_coexpr, rev_coexpr_hg$AUROC_unibind)
+plot(rev_coexpr_mm$AUROC_reverse_coexpr, rev_coexpr_mm$AUROC_unibind)
+
+
+# Distribution of performances for coexpr, reverse coexpr, and binding
+
+plot_df <- data.frame(
+  AUROC = c(
+    rev_coexpr_hg$AUROC_reverse_coexpr,
+    rev_coexpr_hg$AUROC_coexpr,
+    rev_coexpr_hg$AUROC_unibind
+  ),
+  Group = c(
+    rep("Coexpr_reverse", length(rev_coexpr_hg$AUROC_reverse_coexpr)),
+    rep("Coexpr", length(rev_coexpr_hg$AUROC_coexpr)),
+    rep("Binding", length(rev_coexpr_hg$AUROC_unibind))
+  )
+)
+
+plot_df <- filter(plot_df, !is.na(AUROC))
+
+boxplot(plot_df$AUROC ~ plot_df$Group)
+
+
+# plot_df <- data.frame(
+#   AUPRC = c(
+#     rev_coexpr_hg$AUPRC_reverse_coexpr,
+#     rev_coexpr_hg$AUPRC_coexpr,
+#     rev_coexpr_hg$AUPRC_unibind
+#   ),
+#   Group = c(
+#     rep("Coexpr_reverse", length(rev_coexpr_hg$AUPRC_reverse_coexpr)),
+#     rep("Coexpr", length(rev_coexpr_hg$AUPRC_coexpr)),
+#     rep("Binding", length(rev_coexpr_hg$AUPRC_unibind))
+#   )
+# )
+# 
+# plot_df <- filter(plot_df, !is.na(AUPRC))
+# 
+# boxplot(plot_df$AUPRC ~ plot_df$Group)
+
+
+
+plot_df <- data.frame(
+  AUPRC = c(
+    rev_coexpr_hg$AUPRC_percentile_observed_reverse_coexpr,
+    rev_coexpr_hg$AUPRC_percentile_observed_coexpr,
+    rev_coexpr_hg$AUPRC_percentile_observed_unibind
+  ),
+  Group = c(
+    rep("Coexpr_reverse", length(rev_coexpr_hg$AUPRC_percentile_observed_reverse_coexpr)),
+    rep("Coexpr", length(rev_coexpr_hg$AUPRC_percentile_observed_coexpr)),
+    rep("Binding", length(rev_coexpr_hg$AUPRC_percentile_observed_unibind))
+  )
+)
+
+plot_df <- filter(plot_df, !is.na(AUPRC))
+
+boxplot(plot_df$AUPRC ~ plot_df$Group)
 
 
 
