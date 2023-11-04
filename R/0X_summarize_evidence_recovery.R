@@ -189,9 +189,9 @@ ext_agg_common_mm <- extreme_proportions(agg_df_common_mm, agg_cols)
 # Relationship between the count of datasets, targets, and performance
 # TODO: this should also look at # of coexpr and binding datasets
 
-cor(select_if(agg_df_common_hg, is.numeric), method = "spearman")
-cor(select_if(agg_df_common_mm, is.numeric), method = "spearman")
-cor.test(agg_df_common_hg$AUPRC_percentile_observed_coexpr, agg_df_common_hg$N_targets, method = "spearman")
+# cor(select_if(agg_df_common_hg, is.numeric), method = "spearman")
+# cor(select_if(agg_df_common_mm, is.numeric), method = "spearman")
+# cor.test(agg_df_common_hg$AUPRC_percentile_observed_coexpr, agg_df_common_hg$N_targets, method = "spearman")
 
 
 
@@ -224,8 +224,8 @@ both_prop_mm <- length(both_ortho) / nrow(both_mm)
 
 
 # TODO: explain when percentile is high for one AUC but not the other
-filter(both_hg, sum())
-both_hg$AUPRC_percentile_observed_coexpr - both_hg$AUROC_percentile_observed_coexpr
+# filter(both_hg, sum())
+# both_hg$AUPRC_percentile_observed_coexpr - both_hg$AUROC_percentile_observed_coexpr
 
 
 
@@ -406,71 +406,85 @@ targets_rank <- rank_tf_hg[[check_tf]] %>% filter(Symbol %in% targets) %>% arran
 
 # Histograms of Average versus individual AUCs
 
-plot_grid(
-  plot_hist(avi_df_hg, stat_col = paste0("AUPRC", "_percentile")),
-  plot_hist(avi_df_hg, stat_col = paste0("AUROC", "_percentile")),
-  plot_hist(avi_df_mm, stat_col = paste0("AUPRC", "_percentile")),
-  plot_hist(avi_df_mm, stat_col = paste0("AUROC", "_percentile")),
-  nrow = 2)
+p1a <- plot_hist(avi_df_hg, stat_col = paste0("AUPRC", "_percentile"), xlab = "Percentile AUPRC")
+p1b <- plot_hist(avi_df_hg, stat_col = paste0("AUROC", "_percentile"), xlab = "Percentile AUROC")
+p1c <- plot_hist(avi_df_mm, stat_col = paste0("AUPRC", "_percentile"), xlab = "Percentile AUPRC")
+p1d <- plot_hist(avi_df_mm, stat_col = paste0("AUROC", "_percentile"), xlab = "Percentile AUROC")
+
+p1 <- plot_grid(p1a, p1b, p1c, p1d, nrow = 2)
+
+ggsave(p1, height = 9, width = 12, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "coexpr_average_vs_individual_hists.png")))
+
 
 
 # Density plot of a TF's individual AUCs overlaid with the average AUC
 
+
+plot_auc_density <- function(plot_df, stat, tf) {
+  
+  plot_df <- arrange(plot_df, !!sym(stat))
+  auc_no_avg <- filter(plot_df, ID != "Average")
+  auc_avg <- filter(plot_df, ID == "Average")[[stat]]
+  
+  ggplot(auc_no_avg, aes(x = !!sym(stat))) +
+    geom_density(fill = "lightgrey") +
+    geom_vline(xintercept = auc_avg, col = "firebrick", linewidth = 1.4) +
+    ylab("Density") +
+    ggtitle(tf) +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20),
+          plot.title = element_text(size = 20),
+          plot.margin = margin(c(10, 10, 10, 10)))
+}
+
+
+
 tf <- "ASCL1"
-auc_df <- arrange(avi_auc_hg[[tf]]$AUC_df, AUROC)
-auc_df_no_avg <- filter(auc_df, ID != "Average")
-auc_avg <- filter(auc_df, ID == "Average")
+plot_df2 <- avi_auc_hg[[tf]]$AUC_df
 
+p2 <- plot_auc_density(plot_df2, stat = "AUROC", tf = tf)
 
-ggplot(auc_df_no_avg, aes(x = AUROC)) +
-  geom_density(fill = "lightgrey") +
-  geom_vline(xintercept = auc_avg$AUROC, col = "firebrick") +
-  ylab("Density") +
-  ggtitle(tf) +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        plot.title = element_text(size = 20),
-        plot.margin = margin(c(10, 10, 10, 10)))
+ggsave(p2, height = 4, width = 6, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, tf, "_coexpr_average_vs_individual_density.png")))
 
 
 
-# Histogram of percentiles of observered AUCs versus null
+# Histogram of percentiles of aggregate AUCs versus null
 
 
-stat <- "AUPRC"
+stat <- "AUROC"
 
 # Using all TFs available for coexpression
-# plot_df_hg <- agg_df_hg 
-# plot_df_mm <- agg_df_mm
+plot_df3_hg <- agg_df_hg
+plot_df3_mm <- agg_df_mm
 
 # Using only TFs common to coexpression and unibind
-plot_df_hg <- agg_df_common_hg
-plot_df_mm <- agg_df_common_mm
+# plot_df3_hg <- agg_df_common_hg
+# plot_df3_mm <- agg_df_common_mm
 
 
-p_auprc_hist_hg <- list(
-  plot_hist(plot_df_hg, stat_col = paste0(stat, "_percentile_observed_coexpr")),
-  plot_hist(plot_df_hg, stat_col = paste0(stat, "_percentile_observed_unibind")))
+p3a <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_observed_coexpr"), xlab = "AUPRC coexpression")
+p3b <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_observed_coexpr"), xlab = "AUPRC coexpression")
+
+p3c <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_observed_coexpr"), xlab = "AUROC coexpression")
+p3d <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_observed_coexpr"), xlab = "AUROC coexpression")
+
+p3e <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_observed_unibind"), xlab = "AUPRC binding")
+p3f <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_observed_unibind"), xlab = "AUPRC binding")
+
+p3g <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_observed_unibind"), xlab = "AUROC binding")
+p3h <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_observed_unibind"), xlab = "AUROC binding")
 
 
-p_auprc_hist_mm <- list(
-  plot_hist(plot_df_mm, stat_col = paste0(stat, "_percentile_observed_coexpr")),
-  plot_hist(plot_df_mm, stat_col = paste0(stat, "_percentile_observed_unibind")))
+# Focus on AUPRC, showing both species and both aggregations
+p3 <- plot_grid(p3a, p3b, p3e, p3f)
 
 
-plot_grid(
-  plot_grid(plotlist = p_auprc_hist_hg), 
-  plot_grid(plotlist = p_auprc_hist_mm),
-  nrow = 2)
+ggsave(p3, height = 9, width = 12, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "aggregate_vs_null_hists.png")))
 
-
-plot_grid(
-  plot_hist(plot_df_hg, stat_col = paste0("AUPRC", "_percentile_observed_coexpr")),
-  plot_hist(plot_df_hg, stat_col = paste0("AUROC", "_percentile_observed_coexpr")),
-  plot_hist(plot_df_mm, stat_col = paste0("AUPRC", "_percentile_observed_coexpr")),
-  plot_hist(plot_df_mm, stat_col = paste0("AUROC", "_percentile_observed_coexpr")),
-  nrow = 4)
 
 
 
