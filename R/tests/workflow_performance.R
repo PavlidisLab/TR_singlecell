@@ -53,40 +53,180 @@ targets_curated_mm <- intersect(pc_mm$Symbol, str_to_title(curated$Target_Symbol
 # Rankings from Morin 2023
 evidence_l <- readRDS(evidence_path)
 
-
-# TODO: formalize unibind loading
-# Processed list of meta and matrices
-# bind_dat_path <- "/space/scratch/amorin/R_objects/processed_unibind_data.RDS"
-# bind_dat <- readRDS(bind_dat_path)
-
-# Average bind scores and output of binding specificity model
-# bind_summary_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_summary.RDS"
-# bind_model_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_modelfit.RDS"
-# bind_summary <- readRDS(bind_summary_path)
-# bind_model <- readRDS(bind_model_path)
+# List of AUROC/AUPRC for TF lists ability to recover curated targets
+unibind_auc_hg <- readRDS(unibind_auc_hg_path)
+unibind_auc_mm <- readRDS(unibind_auc_mm_path)
+coexpr_auc_hg <- readRDS(coexpr_auc_hg_path)
+coexpr_auc_mm <- readRDS(coexpr_auc_mm_path)
+avi_auc_hg <- readRDS(avg_vs_ind_auc_hg_path)
+avi_auc_mm <- readRDS(avg_vs_ind_auc_mm_path)
+rev_coexpr_auc_hg <- readRDS("/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_hg.RDS")
+rev_coexpr_auc_mm <- readRDS("/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_mm.RDS")
 
 
 
+# Demo a single TF
+# ------------------------------------------------------------------------------
 
-# Inspecting retrieved ranks for a given TF
 
+tf <- "MECP2"
 
 agg_l <- agg_tf_hg
 msr_mat <- msr_hg
+
+labels_curated <- get_curated_labels(tf = tf, 
+                                     curated_df = curated, 
+                                     pc_df = pc_hg, 
+                                     species = "Human", 
+                                     remove_self = TRUE)
+
+
 score_mat <- gene_vec_to_mat(agg_l, tf)
 score_mat <- subset_to_measured(score_mat, msr_mat = msr_mat, gene = tf)
 score_mat <- cbind(score_mat, Average = rowMeans(score_mat))
-labels_curated <- get_curated_labels(tf = tf, curated_df = curated, pc_df = pc_hg, species = "Human", remove_self = TRUE)
 
+# No ties version: used for smoother plotting
+score_mat_noties <- colrank_mat(-score_mat, ties_arg = "random")
+
+
+# Inspecting retrieved coexpression ranks for the given TF for all networks
 
 rank_l <- lapply(1:ncol(score_mat), function(x) {
   score_rank <- rank(-score_mat[, x], ties.method = "min")
-  # score_rank[labels_curated]
-  # median(score_rank[labels_curated])
-  # mean(score_rank[labels_curated])
-  # sort(score_rank[labels_curated])[1:10]
-  median(sort(score_rank[labels_curated])[1:10])
+  sort(score_rank[labels_curated])
 })
 names(rank_l) <- colnames(score_mat)
 
-rank_l[auc_df$ID]
+
+
+# Inspect performance of a single dataset
+# ------------------------------------------------------------------------------
+
+
+id <- "TabulaSapiens"
+
+score_vec <- sort(score_mat[, id], decreasing = TRUE)
+score_rank <- rank(-score_mat[, id], ties.method = "min")
+score_vec_noties <- sort(score_mat_noties[, id], decreasing = TRUE)
+stopifnot(identical(names(score_vec)[1:100], names(score_vec_noties)[1:100]))
+
+label_vec <- names(score_vec) %in% labels_curated
+label_vec_noties <- names(score_vec_noties) %in% labels_curated
+
+# AUPRC and AUROC
+auc <- get_auc(score_vec, label_vec, measure = "both")
+auc_noties <- get_auc(score_vec_noties, label_vec_noties, measure = "both")
+
+# Performance at every step
+perf_df <- get_performance_df(score_vec, label_vec, measure = "both")
+perf_df_noties <- get_performance_df(score_vec_noties, label_vec_noties, measure = "both")
+
+# RSR and rank RSR of curated targets
+rank_df <- data.frame(
+  Symbol = labels_curated,
+  RSR = score_vec[labels_curated],
+  Rank_RSR = score_rank[labels_curated])
+
+
+# Directly accessing ROCR prediction/plots
+pred <- ROCR::prediction(predictions = score_vec, labels = label_vec)
+pred_noties <- ROCR::prediction(predictions = score_vec_noties, labels = label_vec_noties)
+roc <- ROCR::performance(pred, measure = "tpr", x.measure = "fpr")
+roc_noties <- ROCR::performance(pred_noties, measure = "tpr", x.measure = "fpr")
+plot(roc)
+plot(roc_noties)
+
+
+# Inspect performance of all datasets
+# ------------------------------------------------------------------------------
+
+
+auc_all <- get_colwise_auc(score_mat, labels = labels_curated, ncores = 8)
+auc_all_noties <- get_colwise_auc(score_mat_noties, labels = labels_curated, ncores = 8)
+
+# Saved copy
+auc_saved <- avi_auc_hg[[tf]]$AUC_df
+
+auc_df_all <- get_colwise_performance_df(score_mat, labels = labels_curated, ncores = 8)
+auc_df_all_noties <- get_colwise_performance_df(score_mat_noties, labels = labels_curated, ncores = 8)
+
+
+cols <- c("Average" = "black",
+          "Single_coexpression" = "lightgrey")
+
+
+plot_df <- auc_df_all
+plot_df$ID <- ifelse(plot_df$ID == "Average", plot_df$ID, "Single_coexpression")
+plot_df$ID <- factor(plot_df$ID, levels = rev(unique(names(cols))))
+
+
+plot_df_noties <- auc_df_all_noties
+plot_df_noties$ID <- ifelse(plot_df_noties$ID == "Average", plot_df_noties$ID, "Single_coexpression")
+plot_df_noties$ID <- factor(plot_df_noties$ID, levels = rev(unique(names(cols))))
+
+
+
+p_all <- plot_perf(df = plot_df, measure = "ROC", cols = cols, title = tf)
+p_all_noties <- plot_perf(df = plot_df_noties, measure = "ROC", cols = cols, title = tf)
+
+
+
+# Demonstrate coexpr agg + perturb + binding + integrated recovery of curated
+# ------------------------------------------------------------------------------
+
+
+rank_cols <- c("Rank_perturbation", "Rank_binding", "Rank_integrated")
+
+
+genomic_perf <- lapply(rank_cols, function(x) {
+  df <- arrange(evidence_l$Human[[tf]], !!sym(x))
+  score_vec <- 1 / (1:nrow(df))
+  label_vec <- df$Symbol %in% labels_curated
+  df <- get_performance_df(score_vec, label_vec, measure = "both")
+  df$ID <- x
+  return(df)
+})
+
+
+genomic_perf_df <- do.call(rbind, genomic_perf)
+
+plot_df_genomic <- rbind(plot_df_noties, genomic_perf_df)
+
+
+cols <- c("Average" = "black",
+          "Rank_binding" = "darkblue",
+          "Rank_perturbation" = "firebrick",
+          "Rank_integrated" = "darkgreen",
+          "Single_coexpression" = "lightgrey")
+
+
+p_genomic_roc <- plot_perf(df = plot_df_genomic, measure = "ROC", cols = cols, title = tf)
+p_genomic_pr <- plot_perf(df = plot_df_genomic, measure = "PR", cols = cols, title = tf)
+
+
+
+
+# Demonstrating retrieval of genomic evidence at topk as labels
+# ------------------------------------------------------------------------------
+
+
+topk_labels <- evidence_l$Human[[tf]] %>%
+  filter(Symbol != tf) %>%
+  slice_min(Rank_integrated, n = 500) %>%
+  pull(Symbol)
+
+
+genomic_auc <- get_colwise_auc(score_mat,
+                               topk_labels,
+                               ncores = 8)
+
+
+genomic_auc <- arrange(genomic_auc, AUROC)
+genomic_auc_no_avg <- filter(genomic_auc, ID != "Average")
+genomic_auc_avg <- filter(genomic_auc, ID == "Average")
+
+hist(genomic_auc_no_avg$AUPRC, breaks = 100, xlim = c(0, 0.07))
+abline(v = genomic_auc_avg$AUPRC, col = "red")
+
+hist(genomic_auc_no_avg$AUROC, breaks = 100, xlim = c(0.3, 0.8))
+abline(v = genomic_auc_avg$AUROC, col = "red")
