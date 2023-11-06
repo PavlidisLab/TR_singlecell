@@ -51,7 +51,7 @@ targets_curated_mm <- intersect(pc_mm$Symbol, str_to_title(curated$Target_Symbol
 
 
 
-# TODO:
+# Run and save
 # ------------------------------------------------------------------------------
 
 
