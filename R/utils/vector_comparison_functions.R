@@ -377,6 +377,7 @@ get_similarity_pair_df <- function(cor_mat, topk_mat, bottomk_mat, jacc_mat) {
 
 
 # Functions using ROCR:: for measuring ranked performance
+# TODO: consider just returning both; null as df instead of nested list
 # ------------------------------------------------------------------------------
 
 
@@ -552,13 +553,13 @@ summarize_obs_and_null_auc <- function(tf,
     Symbol = tf,
     N_targets = n_target,
     AUPRC = auc$AUPRC,
-    AUPRC_percentile_observed = ecdf(null_auprc)(auc$AUPRC),
-    AUPRC_ratio_observed = auc$AUPRC / median(null_auprc),
-    AUPRC_diff_observed = auc$AUPRC - median(null_auprc),
+    AUPRC_percentile = ecdf(null_auprc)(auc$AUPRC),
+    AUPRC_ratio = auc$AUPRC / median(null_auprc),
+    AUPRC_diff = auc$AUPRC - median(null_auprc),
     AUROC = auc$AUROC,
-    AUROC_percentile_observed = ecdf(null_auroc)(auc$AUROC),
-    AUROC_ratio_observed = auc$AUROC / median(null_auroc),
-    AUROC_diff_observed = auc$AUROC - median(null_auroc)
+    AUROC_percentile = ecdf(null_auroc)(auc$AUROC),
+    AUROC_ratio = auc$AUROC / median(null_auroc),
+    AUROC_diff = auc$AUROC - median(null_auroc)
   )
   
   return(list(Perf_df = df, Null = null)) 
