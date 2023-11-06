@@ -33,7 +33,7 @@ plot_hist <- function(df, stat_col, title = NULL, xlab = NULL) {
   if (is.null(xlab)) xlab <- stat_col
   
   ggplot(df, aes(x = !!sym(stat_col))) +
-    geom_histogram(bins = 100) +
+    geom_histogram(bins = 100, colour = "slategrey", fill = "slategrey") +
     ggtitle(title) +
     xlab(xlab) +
     ylab("Frequency") +
