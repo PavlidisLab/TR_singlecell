@@ -253,6 +253,9 @@ ggsave(px, height = 5, width = 7, device = "png", dpi = 300,
 # NOTE: this is taking the top k AFTER filtering for ortho, so not necessarily
 # within the top k ranks of the unfiltered (non-ortho) data
 # TODO: no reason to do so many joins, just use once and reference main
+# TODO: just get list of top 100 for each species and perform overlap after.
+# TODO: also want to comment on generic overlaps
+
 
 topk_relative <- function(gene_query, 
                           tfs_ortho, 
@@ -362,6 +365,11 @@ ortho_perc <- lapply(tfs_ortho$Symbol_hg, function(x) {
 
 
 ortho_perc_df <- do.call(rbind, ortho_perc)
+
+
+summary(Filter(is.numeric, ortho_perc_df))
+sum(ortho_perc_df$Perc_mm_in_hg == 1)
+sum(ortho_perc_df$Perc_hg_in_mm == 1)
 
 
 
@@ -579,34 +587,34 @@ plot_hist(top_mm, stat_col = "Topk_proportion")
 
 
 # TODO: remove when finalized
-agg_tf_cpm <- agg_tf_hg
-agg_tf_ln <- readRDS("/space/scratch/amorin/R_objects/agg_mat_TF_list_hg_lognorm.RDS")
-rank_cpm <- rank_tf_hg
-rank_ln <- readRDS("/space/scratch/amorin/R_objects/ranking_agg_TF_hg_lognorm.RDS")
-msr_cpm <- msr_hg
-msr_ln <- readRDS("~/Robj/binary_measurement_matrix_hg_lognorm.RDS")
+
+# agg_tf_cpm <- agg_tf_hg
+# rank_cpm <- rank_tf_hg
+# msr_cpm <- msr_hg
+
+# agg_tf_ln <- readRDS("/space/scratch/amorin/R_objects/agg_mat_TF_list_hg_lognorm.RDS")
+# rank_ln <- readRDS("/space/scratch/amorin/R_objects/ranking_agg_TF_hg_lognorm.RDS")
+# msr_ln <- readRDS("~/Robj/binary_measurement_matrix_hg_lognorm.RDS")
+
+# msr_mat <- msr_cpm
+# agg_l <- agg_tf_cpm
+# rank_l <- rank_cpm
+
+# msr_mat <- msr_ln
+# agg_l <- agg_tf_ln
+# rank_l <- rank_ln
 
 
 gene <- "ASCL1"
 
-# msr_mat <- msr_hg
-# msr_mat <- msr_cpm
-msr_mat <- msr_ln
-
-# agg_l <- agg_ribo_hg
-# agg_l <- agg_tf_hg
-# agg_l <- agg_tf_cpm
-agg_l <- agg_tf_ln
-
-# rank_l <- rank_tf_hg
-# rank_l <- rank_ribo_hg
-# rank_l <- rank_cpm
-rank_l <- rank_ln
+msr_mat <- msr_hg
+agg_l <- agg_tf_hg  # agg_ribo_hg
+rank_l <- rank_tf_hg
 
 
 rank_df <- filter(rank_l[[gene]], Symbol != gene) %>% arrange(Rank_RSR)
 
-# 
+#
 gene_mat <- subset_to_measured(gene_vec_to_mat(agg_l, gene), msr_mat, gene)
 gene_mat <- gene_mat[setdiff(rownames(gene_mat), gene), ]
 
@@ -619,11 +627,30 @@ comsr <- do.call(rbind, comsr)
 rownames(comsr) <- rownames(gene_mat)
 
 
-#
-med <- median(gene_mat, na.rm = TRUE)
-gene_mat_med <- gene_mat_na <- gene_mat
-gene_mat_med[comsr == FALSE] <- med
+# Replace non-measured ties with NAs
+gene_mat_na <- gene_mat
 gene_mat_na[comsr == FALSE] <- NA
+
+# Replace non-measured ties with median of the entire matrix
+med <- median(gene_mat, na.rm = TRUE)
+gene_mat_med <- gene_mat
+gene_mat_med[comsr == FALSE] <- med
+
+# Replace non-measured ties with 0.5
+gene_mat_05 <- gene_mat
+gene_mat_05[comsr == FALSE] <- 0.5
+
+# Replace non-measured ties with row means of measured observations
+# NOTE: scrap - all NA genes will still be NA and so need a second imputation
+
+gene_mat_rowmean <- gene_mat_na
+row_means <- rowMeans(gene_mat_na, na.rm = TRUE)
+
+for (i in 1:nrow(gene_mat_rowmean)) {
+  ix <- is.na(gene_mat_rowmean[i, ])
+  gene_mat_rowmean[i, ix] <- row_means[i]
+}
+
 
 
 # Organizing rank dataframe for different ways of handling NAs and aggregating.
@@ -635,26 +662,38 @@ gene_mat_na[comsr == FALSE] <- NA
 # TODO: Avg/Medrank_wo_imp/w_NA selects for all NAs
 # TODO: rank product with NAs select for all non-NAs
 
+
+
 rsr_avg_wo_imp <- rowMeans(gene_mat)
-rsr_avg_w_imp <- rowMeans(gene_mat_med)
+rsr_avg_w_med <- rowMeans(gene_mat_med)
+rsr_avg_w_05 <- rowMeans(gene_mat_05)
 rsr_avg_w_na <- rowMeans(gene_mat_na, na.rm = TRUE)
 
-rsr_med_wo_imp <- rowMeans(gene_mat)
-rsr_med_w_imp <- apply(gene_mat_med, 1, median)
+rsr_med_wo_imp <- apply(gene_mat, 1, median)
+rsr_med_w_med <- apply(gene_mat_med, 1, median)
+rsr_med_w_05 <- apply(gene_mat_05, 1, median)
 rsr_med_w_na <- apply(gene_mat_na, 1, function(x) median(na.omit(x)))
 
 rsr_avgrank_wo_imp <- rowMeans(colrank_mat(gene_mat))
-rsr_avgrank_w_imp <- rowMeans(colrank_mat(gene_mat_med))
+rsr_avgrank_w_med <- rowMeans(colrank_mat(gene_mat_med))
+rsr_avgrank_w_05 <- rowMeans(colrank_mat(gene_mat_05))
 rsr_avgrank_w_na <- rowMeans(colrank_mat(gene_mat_na), na.rm = TRUE)
 
 rsr_medrank_wo_imp <- apply(colrank_mat(gene_mat), 1, median)
-rsr_medrank_w_imp <- apply(colrank_mat(gene_mat_med), 1, median)
+rsr_medrank_w_med <- apply(colrank_mat(gene_mat_med), 1, median)
+rsr_medrank_w_05 <- apply(colrank_mat(gene_mat_05), 1, median)
 rsr_medrank_w_na <- apply(colrank_mat(gene_mat_na), 1, function(x) median(na.omit(x)))
 
-# NOTE: Often run into integer overflow issue with rank product
-rsr_rankprod_wo_imp <- rank(matrixStats::rowProds(colrank_mat(gene_mat)))
-rsr_rankprod_w_imp <- rank(matrixStats::rowProds(colrank_mat(gene_mat_med)))
-rsr_rankprod_w_na <- rank(matrixStats::rowProds(colrank_mat(gene_mat_na)))
+# NOTE: Often run into integer overflow issue with rank product, use sum of logs
+# rsr_rankprod_wo_imp <- rank(matrixStats::rowProds(colrank_mat(gene_mat)))
+# rsr_rankprod_w_med <- rank(matrixStats::rowProds(colrank_mat(gene_mat_med)))
+# rsr_rankprod_w_05 <- rank(matrixStats::rowProds(colrank_mat(gene_mat_05)))
+# rsr_rankprod_w_na <- rank(matrixStats::rowProds(colrank_mat(gene_mat_na)))
+
+rsr_rankprod_wo_imp <- rank(rowSums(log(colrank_mat(gene_mat))))
+rsr_rankprod_w_med <- rank(rowSums(log(colrank_mat(gene_mat_med))))
+rsr_rankprod_w_05 <- rank(rowSums(log(colrank_mat(gene_mat_05))))
+rsr_rankprod_w_na <- rank(rowSums(log(colrank_mat(gene_mat_na))))
 
 
 df <- data.frame(
@@ -662,24 +701,30 @@ df <- data.frame(
   Symbol = names(rsr_avg_wo_imp),
   
   Avg_wo_imp = rsr_avg_wo_imp,
-  Avg_w_imp = rsr_avg_w_imp,
+  Avg_w_med = rsr_avg_w_med,
+  Avg_w_05 = rsr_avg_w_05,
   Avg_w_na = rsr_avg_w_na,
   
   Med_wo_imp = rsr_med_wo_imp,
-  Med_w_imp = rsr_med_w_imp,
+  Med_w_med = rsr_med_w_med,
+  Med_w_05 = rsr_med_w_05,
   Med_w_na = rsr_med_w_na,
   
   Avgrank_wo_imp = rsr_avgrank_wo_imp,
-  Avgrank_w_imp = rsr_avgrank_w_imp,
+  Avgrank_w_med = rsr_avgrank_w_med,
+  Avgrank_w_05 = rsr_avgrank_w_05,
   Avgrank_w_na = rsr_avgrank_w_na,
   
   Medrank_wo_imp = rsr_medrank_wo_imp,
-  Medrank_w_imp = rsr_medrank_w_imp,
+  Medrank_w_med = rsr_medrank_w_med,
+  Medrank_w_05 = rsr_medrank_w_05,
   Medrank_w_na = rsr_medrank_w_na,
   
   Rankprod_wo_imp = rsr_rankprod_wo_imp,
-  Rankprod_w_imp = rsr_rankprod_w_imp,
+  Rankprod_w_med = rsr_rankprod_w_med,
+  Rankprod_w_05 = rsr_rankprod_w_05,
   Rankprod_w_na = rsr_rankprod_w_na
+  
 )
 
 
@@ -700,7 +745,7 @@ breaks <- seq(0, 1, length.out = length(pal))
 # Look at top ranked genes
 
 n <- 100
-rank_order <- arrange(df, desc(Avg_w_imp))$Symbol
+rank_order <- arrange(df, desc(Avg_w_med))$Symbol
 
 # plot_mat <- gene_mat
 # plot_mat <- gene_mat_med
@@ -756,7 +801,7 @@ pheatmap(gene_mat_na[, names(na_order)],
 
 
 # Order by average RSR with median imputation
-pheatmap(gene_mat_na[arrange(df, desc(Avg_w_imp))$Symbol, names(na_order)],
+pheatmap(gene_mat_na[arrange(df, desc(Avg_w_med))$Symbol, names(na_order)],
          color = pal,
          cluster_rows = FALSE,
          cluster_cols = FALSE,
@@ -776,12 +821,12 @@ pheatmap(gene_mat_na[arrange(df, desc(Avg_wo_imp))$Symbol, na_order],
 # Relationship between measurement and ranking
 
 
-pqa <- qplot(df, yvar = "Avg_w_imp", xvar = "N_comeasured")
+pqa <- qplot(df, yvar = "Avg_w_med", xvar = "N_comeasured")
 
 
 pqb <- df %>%
   mutate(Bin = cut_width(N_comeasured, width = 10, boundary = 0)) %>%
-  ggplot(aes(x = Bin, y = Avg_w_imp)) +
+  ggplot(aes(x = Bin, y = Avg_w_med)) +
   geom_boxplot(width = 0.2, fill = "#69b3a2") +
   xlab("N comeasured") +
   ylab("Average RSR (+imputation)") +
