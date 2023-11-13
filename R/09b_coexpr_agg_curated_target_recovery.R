@@ -32,10 +32,6 @@ tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% 
 tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
 tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
 
-# Measurement matrices used for filtering when a gene was never expressed
-msr_hg <- readRDS(msr_mat_hg_path)
-msr_mm <- readRDS(msr_mat_mm_path)
-
 # Saved list RDS of the summaries
 rank_tf_hg <- readRDS(rank_tf_hg_path)
 rank_tf_mm <- readRDS(rank_tf_mm_path)
