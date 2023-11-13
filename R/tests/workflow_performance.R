@@ -69,7 +69,7 @@ rev_coexpr_auc_mm <- readRDS("/space/scratch/amorin/R_objects/reverse_coexpr_rec
 # ------------------------------------------------------------------------------
 
 
-tf <- "MECP2"
+tf <- "ASCL1"
 
 agg_l <- agg_tf_hg
 msr_mat <- msr_hg
@@ -89,13 +89,83 @@ score_mat <- cbind(score_mat, Average = rowMeans(score_mat))
 score_mat_noties <- colrank_mat(-score_mat, ties_arg = "random")
 
 
+
+## TODO: Looking at effect of imputation
+
+score_mat_raw <- score_mat
+rm(score_mat)
+
+score_mat <- gene_vec_to_mat(agg_l, tf)
+score_mat[tf, ] <- NA
+score_mat <- subset_to_measured(score_mat, msr_mat = msr_mat, gene = tf)
+
+
+# Logical matrix of whether TF-genes were co-measured in an experiment
+comsr <- lapply(rownames(score_mat), function(y) {
+  msr_mat[tf, colnames(score_mat)] & msr_mat[y, colnames(score_mat)]
+})
+comsr <- do.call(rbind, comsr)
+rownames(comsr) <- rownames(score_mat)
+
+
+# When a TF-gene was not co-measured, impute to the median NA
+med <- median(score_mat, na.rm = TRUE)
+score_mat_med <- score_mat
+score_mat_med[comsr == FALSE] <- med
+
+# NA to 0.5
+score_mat05 <- score_mat
+score_mat05[comsr == FALSE] <- 0.5
+
+
+score_mat_med <- cbind(score_mat_med, Average = rowMeans(score_mat_med))
+score_mat05 <- cbind(score_mat05, Average = rowMeans(score_mat05))
+
+##
+
+
+
+
 # Inspecting retrieved coexpression ranks for the given TF for all networks
+
 
 rank_l <- lapply(1:ncol(score_mat), function(x) {
   score_rank <- rank(-score_mat[, x], ties.method = "min")
-  sort(score_rank[labels_curated])
+  score_rank[labels_curated]
 })
-names(rank_l) <- colnames(score_mat)
+
+rank_mat <- do.call(cbind, rank_l)
+colnames(rank_mat) <- colnames(score_mat)
+rank_mat <- rank_mat[names(sort(rowSums(rank_mat))), ]
+
+
+## TODO: different imputations
+
+
+rank_mat_l <- 
+  lapply(list(score_mat_raw, score_mat_med, score_mat05), function(mat) {
+  
+  rank_l <- lapply(1:ncol(mat), function(x) {
+    score_rank <- rank(-mat[, x], ties.method = "min")
+    score_rank[labels_curated]
+  })
+  
+  rank_mat <- do.call(cbind, rank_l)
+  colnames(rank_mat) <- colnames(mat)
+  rank_mat <- rank_mat[names(sort(rowSums(rank_mat))), ]
+  
+  return(rank_mat)
+})
+names(rank_mat_l) <- c("Raw", "Imp_median", "Imp_0.5")
+
+
+
+# view(do.call(cbind, lapply(rank_mat_l, function(x) x[, "Salcher2022"])))
+
+
+
+##
+
 
 
 
@@ -103,12 +173,12 @@ names(rank_l) <- colnames(score_mat)
 # ------------------------------------------------------------------------------
 
 
-id <- "TabulaSapiens"
+id <- "Average"
 
 score_vec <- sort(score_mat[, id], decreasing = TRUE)
 score_rank <- rank(-score_mat[, id], ties.method = "min")
 score_vec_noties <- sort(score_mat_noties[, id], decreasing = TRUE)
-stopifnot(identical(names(score_vec)[1:100], names(score_vec_noties)[1:100]))
+# stopifnot(identical(names(score_vec)[1:100], names(score_vec_noties)[1:100]))
 
 label_vec <- names(score_vec) %in% labels_curated
 label_vec_noties <- names(score_vec_noties) %in% labels_curated
@@ -166,8 +236,11 @@ plot_df_noties$ID <- factor(plot_df_noties$ID, levels = rev(unique(names(cols)))
 
 
 
-p_all <- plot_perf(df = plot_df, measure = "ROC", cols = cols, title = tf)
-p_all_noties <- plot_perf(df = plot_df_noties, measure = "ROC", cols = cols, title = tf)
+p_avi_roc <- plot_perf(df = plot_df, measure = "ROC", cols = cols, title = tf)
+p_avi_noties_roc <- plot_perf(df = plot_df_noties, measure = "ROC", cols = cols, title = tf)
+
+p_avi_roc <- plot_perf(df = plot_df, measure = "PR", cols = cols, title = tf)
+p_avi_noties_roc <- plot_perf(df = plot_df_noties, measure = "PR", cols = cols, title = tf)
 
 
 
