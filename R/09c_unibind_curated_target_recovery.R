@@ -14,6 +14,7 @@ source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
 n_samps <- 1000
+collection <- "Permissive"
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -32,29 +33,23 @@ tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% 
 tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
 tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
 
-# Measurement matrices used for filtering when a gene was never expressed
-msr_hg <- readRDS(msr_mat_hg_path)
-msr_mm <- readRDS(msr_mat_mm_path)
-
 # Curated low throughput targets
 curated <- read.delim(curated_all_path, stringsAsFactors = FALSE)
 
-# TODO: formalize unibind loading
-# Processed list of meta and matrices
-bind_dat_path <- "/space/scratch/amorin/R_objects/processed_unibind_data.RDS"
-bind_dat <- readRDS(bind_dat_path)
-
-# Average bind scores and output of binding specificity model
-bind_summary_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_summary.RDS"
-bind_model_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_modelfit.RDS"
+# Average bind scores
+stopifnot(collection %in% c("Robust", "Permissive"))
+bind_summary_path <- paste0("/space/scratch/amorin/R_objects/unibind_", collection, "_bindscore_summary.RDS")
 bind_summary <- readRDS(bind_summary_path)
-bind_model <- readRDS(bind_model_path)
 
 # Curated TFs with ChIP-seq and all targets for null
 tfs_curated_hg <- intersect(colnames(bind_summary$Human_TF), str_to_upper(curated$TF_Symbol))
 tfs_curated_mm <- intersect(colnames(bind_summary$Mouse_TF), str_to_upper(curated$TF_Symbol))
 targets_curated_hg <- intersect(pc_hg$Symbol, str_to_upper(curated$Target_Symbol))
 targets_curated_mm <- intersect(pc_mm$Symbol, str_to_title(curated$Target_Symbol))
+
+# TODO: finalize
+unibind_auc_hg_path <- paste0("/space/scratch/amorin/R_objects/unibind_", collection, "_recover_curated_hg.RDS")
+unibind_auc_mm_path <- paste0("/space/scratch/amorin/R_objects/unibind_", collection, "_recover_curated_mm.RDS")
 
 
 # TODO:
