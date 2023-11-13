@@ -14,7 +14,8 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-n_samps <- 1000
+# The minimum count of curated targets for a TF for reporting
+min_targets <- 5
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -45,17 +46,21 @@ rank_tf_mm <- readRDS(rank_tf_mm_path)
 curated <- read.delim(curated_all_path, stringsAsFactors = FALSE)
 
 # List of AUROC/AUPRC for TF lists ability to recover curated targets
-unibind_auc_hg <- readRDS(unibind_auc_hg_path)
-unibind_auc_mm <- readRDS(unibind_auc_mm_path)
+# TODO: finalize pathing
+collection <- "Permissive"
+unibind_auc_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/unibind_", collection, "_recover_curated_hg.RDS"))
+unibind_auc_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/unibind_", collection, "_recover_curated_mm.RDS"))
+
 coexpr_auc_hg <- readRDS(coexpr_auc_hg_path)
 coexpr_auc_mm <- readRDS(coexpr_auc_mm_path)
+
 avi_auc_hg <- readRDS(avg_vs_ind_auc_hg_path)
 avi_auc_mm <- readRDS(avg_vs_ind_auc_mm_path)
+
 rev_coexpr_auc_hg <- readRDS("/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_hg.RDS")
 rev_coexpr_auc_mm <- readRDS("/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_mm.RDS")
 
-# The minimum count of curated targets for a TF for reporting
-min_targets <- 5
+
 
 
 # Functions
@@ -135,10 +140,14 @@ ext_avi_mm <- extreme_proportions(avi_df_mm, avi_cols)
 
 
 # Inspect TFs where the average was outperformed by most individual
-# TODO: Why are LYL1 and NRF1 poor in both species? 
 
-# view(filter(avi_df_hg, AUROC_percentile < 0.1 | AUPRC_percentile < 0.1))
-# view(filter(avi_df_mm, AUROC_percentile < 0.1 | AUPRC_percentile < 0.1))
+avi_underperf_hg <- filter(avi_df_hg, AUROC_percentile < 0.1 | AUPRC_percentile < 0.1)
+avi_underperf_mm <- filter(avi_df_mm, AUROC_percentile < 0.1 | AUPRC_percentile < 0.1)
+
+avi_underperf_ortho <- pc_ortho %>% 
+  filter(Symbol_hg %in% avi_underperf_hg$Symbol & Symbol_mm %in% avi_underperf_mm$Symbol) %>% 
+  pull(Symbol_hg)
+
 
 
 # Join and summarize the aggregated coexpression and binding AUCs
@@ -187,12 +196,22 @@ ext_agg_common_mm <- extreme_proportions(agg_df_common_mm, agg_cols)
 
 # Difference of coexpression aggregate AUCs to binding AUCs
 
+# agg_auc_delta <- list(
+#   AUPRC_human = agg_df_common_hg$AUPRC_coexpr - agg_df_common_hg$AUPRC_unibind,
+#   AUPRC_mouse = agg_df_common_mm$AUPRC_coexpr - agg_df_common_mm$AUPRC_unibind,
+#   AUROC_human = agg_df_common_hg$AUROC_coexpr - agg_df_common_hg$AUROC_unibind,
+#   AUROC_mouse = agg_df_common_mm$AUROC_coexpr - agg_df_common_mm$AUROC_unibind
+# )
+
+
+
 agg_auc_delta <- list(
-  AUPRC_human = agg_df_common_hg$AUPRC_coexpr - agg_df_common_hg$AUPRC_unibind,
-  AUPRC_mouse = agg_df_common_mm$AUPRC_coexpr - agg_df_common_mm$AUPRC_unibind,
-  AUROC_human = agg_df_common_hg$AUROC_coexpr - agg_df_common_hg$AUROC_unibind,
-  AUROC_mouse = agg_df_common_mm$AUROC_coexpr - agg_df_common_mm$AUROC_unibind
+  AUPRC_human = agg_df_common_hg$AUPRC_diff_coexpr - agg_df_common_hg$AUPRC_diff_unibind,
+  AUPRC_mouse = agg_df_common_mm$AUPRC_diff_coexpr - agg_df_common_mm$AUPRC_diff_unibind,
+  AUROC_human = agg_df_common_hg$AUROC_diff_coexpr - agg_df_common_hg$AUROC_diff_unibind,
+  AUROC_mouse = agg_df_common_mm$AUROC_diff_coexpr - agg_df_common_mm$AUROC_diff_unibind
 )
+
 
 
 delta_auc_summ <- lapply(agg_auc_delta, summary)
@@ -705,31 +724,27 @@ p_null_binding_auroc_scatter <-
 
 
 # Scatter of coexpr versus reverse coexpr
-plot(rev_coexpr_hg$AUPRC_percentile_coexpr, rev_coexpr_hg$AUPRC_percentile_reverse_coexpr)
-plot(rev_coexpr_mm$AUPRC_percentile_coexpr, rev_coexpr_mm$AUPRC_percentile_reverse_coexpr)
+qplot(rev_coexpr_hg, xvar = "AUPRC_percentile_coexpr", yvar = "AUPRC_percentile_reverse_coexpr")
+qplot(rev_coexpr_mm, xvar = "AUPRC_percentile_coexpr", yvar = "AUPRC_percentile_reverse_coexpr")
+qplot(rev_coexpr_hg, xvar = "AUPRC_coexpr", yvar = "AUPRC_reverse_coexpr")
+qplot(rev_coexpr_mm, xvar = "AUPRC_coexpr", yvar = "AUPRC_reverse_coexpr")
 
-plot(rev_coexpr_hg$AUPRC_coexpr, rev_coexpr_hg$AUPRC_reverse_coexpr)
-plot(rev_coexpr_mm$AUPRC_coexpr, rev_coexpr_mm$AUPRC_reverse_coexpr)
-
-plot(rev_coexpr_hg$AUROC_percentile_coexpr, rev_coexpr_hg$AUROC_percentile_reverse_coexpr)
-plot(rev_coexpr_mm$AUROC_percentile_coexpr, rev_coexpr_mm$AUROC_percentile_reverse_coexpr)
-
-plot(rev_coexpr_hg$AUROC_coexpr, rev_coexpr_hg$AUROC_reverse_coexpr)
-plot(rev_coexpr_mm$AUROC_coexpr, rev_coexpr_mm$AUROC_reverse_coexpr)
+qplot(rev_coexpr_hg, xvar = "AUROC_percentile_coexpr", yvar = "AUROC_percentile_reverse_coexpr")
+qplot(rev_coexpr_mm, xvar = "AUROC_percentile_coexpr", yvar = "AUROC_percentile_reverse_coexpr")
+qplot(rev_coexpr_hg, xvar = "AUROC_coexpr", yvar = "AUROC_reverse_coexpr")
+qplot(rev_coexpr_mm, xvar = "AUROC_coexpr", yvar = "AUROC_reverse_coexpr")
 
 
 # Scatter of reverse coexpr versus binding
-plot(rev_coexpr_hg$AUPRC_percentile_reverse_coexpr, rev_coexpr_hg$AUPRC_percentile_unibind)
-plot(rev_coexpr_mm$AUPRC_percentile_reverse_coexpr, rev_coexpr_mm$AUPRC_percentile_unibind)
+qplot(rev_coexpr_hg, xvar = "AUPRC_percentile_unibind", yvar = "AUPRC_percentile_reverse_coexpr")
+qplot(rev_coexpr_mm, xvar = "AUPRC_percentile_unibind", yvar = "AUPRC_percentile_reverse_coexpr")
+qplot(rev_coexpr_hg, xvar = "AUPRC_unibind", yvar = "AUPRC_reverse_coexpr")
+qplot(rev_coexpr_mm, xvar = "AUPRC_unibind", yvar = "AUPRC_reverse_coexpr")
 
-plot(rev_coexpr_hg$AUPRC_reverse_coexpr, rev_coexpr_hg$AUPRC_unibind)
-plot(rev_coexpr_mm$AUPRC_reverse_coexpr, rev_coexpr_mm$AUPRC_unibind)
-
-plot(rev_coexpr_hg$AUROC_percentile_reverse_coexpr, rev_coexpr_hg$AUROC_percentile_unibind)
-plot(rev_coexpr_mm$AUROC_percentile_reverse_coexpr, rev_coexpr_mm$AUROC_percentile_unibind)
-
-plot(rev_coexpr_hg$AUROC_reverse_coexpr, rev_coexpr_hg$AUROC_unibind)
-plot(rev_coexpr_mm$AUROC_reverse_coexpr, rev_coexpr_mm$AUROC_unibind)
+qplot(rev_coexpr_hg, xvar = "AUROC_percentile_unibind", yvar = "AUROC_percentile_reverse_coexpr")
+qplot(rev_coexpr_mm, xvar = "AUROC_percentile_unibind", yvar = "AUROC_percentile_reverse_coexpr")
+qplot(rev_coexpr_hg, xvar = "AUROC_unibind", yvar = "AUROC_reverse_coexpr")
+qplot(rev_coexpr_mm, xvar = "AUROC_unibind", yvar = "AUROC_reverse_coexpr")
 
 
 # Distribution of performances for coexpr, reverse coexpr, and binding
@@ -752,22 +767,22 @@ plot_df <- filter(plot_df, !is.na(AUROC))
 boxplot(plot_df$AUROC ~ plot_df$Group)
 
 
-# plot_df <- data.frame(
-#   AUPRC = c(
-#     rev_coexpr_hg$AUPRC_reverse_coexpr,
-#     rev_coexpr_hg$AUPRC_coexpr,
-#     rev_coexpr_hg$AUPRC_unibind
-#   ),
-#   Group = c(
-#     rep("Coexpr_reverse", length(rev_coexpr_hg$AUPRC_reverse_coexpr)),
-#     rep("Coexpr", length(rev_coexpr_hg$AUPRC_coexpr)),
-#     rep("Binding", length(rev_coexpr_hg$AUPRC_unibind))
-#   )
-# )
-# 
-# plot_df <- filter(plot_df, !is.na(AUPRC))
-# 
-# boxplot(plot_df$AUPRC ~ plot_df$Group)
+plot_df <- data.frame(
+  AUPRC = c(
+    rev_coexpr_hg$AUPRC_reverse_coexpr,
+    rev_coexpr_hg$AUPRC_coexpr,
+    rev_coexpr_hg$AUPRC_unibind
+  ),
+  Group = c(
+    rep("Coexpr_reverse", length(rev_coexpr_hg$AUPRC_reverse_coexpr)),
+    rep("Coexpr", length(rev_coexpr_hg$AUPRC_coexpr)),
+    rep("Binding", length(rev_coexpr_hg$AUPRC_unibind))
+  )
+)
+
+plot_df <- filter(plot_df, !is.na(AUPRC))
+
+boxplot(plot_df$AUPRC ~ plot_df$Group)
 
 
 
