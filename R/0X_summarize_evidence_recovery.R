@@ -60,7 +60,8 @@ avi_auc_mm <- readRDS(avg_vs_ind_auc_mm_path)
 rev_coexpr_auc_hg <- readRDS("/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_hg.RDS")
 rev_coexpr_auc_mm <- readRDS("/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_mm.RDS")
 
-
+bind_dat <- readRDS(bind_dat_path)
+bind_summary <- readRDS(bind_summary_path)
 
 
 # Functions
@@ -244,10 +245,10 @@ n_model_hg2 <- lm(AUPRC_percentile_coexpr ~ N_targets + N_coexpr_msr, data = agg
 n_model_hg3 <- lm(AUROC_coexpr ~ N_targets + N_coexpr_msr, data = agg_df_hg)
 n_model_hg4 <- lm(AUROC_percentile_coexpr ~ N_targets + N_coexpr_msr, data = agg_df_hg)
 
-summary(n_model_hg1)
-summary(n_model_hg2)
-summary(n_model_hg3)
-summary(n_model_hg4)
+# summary(n_model_hg1)
+# summary(n_model_hg2)
+# summary(n_model_hg3)
+# summary(n_model_hg4)
 
 
 # Isolating TFs that performed well for for both aggregations
@@ -426,7 +427,13 @@ only_rev_ortho <- pc_ortho %>%
 # Elevated performance in reverse coexpression and binding: repression?
 
 rev_binding_hg <- filter(only_rev_hg, Symbol %in% only_binding_hg$Symbol)
+
 rev_binding_mm <- filter(only_rev_mm, Symbol %in% only_binding_mm$Symbol)
+
+rev_binding_ortho <- pc_ortho %>% 
+  filter(Symbol_hg %in% rev_binding_hg$Symbol & Symbol_mm %in% rev_binding_mm$Symbol) %>% 
+  pull(Symbol_hg)
+
 
 
 # Performant in coexpression and reverse coexpression... suggests targets are
@@ -448,9 +455,34 @@ both_coexpr_mm <- filter(
 
 
 
-check_tf <- "PAX7"
-targets <- filter(curated, TF_Symbol == check_tf)$Target_Symbol
-targets_rank <- rank_tf_hg[[check_tf]] %>% filter(Symbol %in% targets) %>% arrange(Rank_RSR)
+# Curated target ranks
+# ------------------------------------------------------------------------------
+
+check_tf <- "LEF1"
+
+# filter(bind_dat$Permissive_hg$Meta, Symbol == check_tf)
+
+targets <- get_curated_labels(tf = check_tf,
+                              curated_df = curated,
+                              pc_df = pc_hg,
+                              species = "Human",
+                              remove_self = TRUE)
+
+
+filter(agg_df_common_hg, Symbol == check_tf)
+
+
+targets_rank_coexpr <- rank_tf_hg[[check_tf]] %>% 
+  filter(Symbol %in% targets) %>% 
+  arrange(Rank_RSR)
+
+
+targets_rank_binding <- 
+  data.frame(Bind = bind_summary$Human_TF[, check_tf]) %>% 
+  rownames_to_column(var = "Symbol") %>% 
+  mutate(Rank_bind = rank(-Bind, ties.method = "min")) %>% 
+  filter(Symbol %in% targets) %>% 
+  arrange(Rank_bind)
 
 
 
@@ -534,10 +566,10 @@ p3h <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_unibind"), xla
 
 
 # Focus on AUPRC, showing both species and both aggregations
-p3 <- plot_grid(p3a, p3b, p3e, p3f)
+p3 <- plot_grid(p3a, p3b, p3e, p3f, ncol = 1)
 
 
-ggsave(p3, height = 9, width = 12, device = "png", dpi = 300,
+ggsave(p3, height = 12, width = 6, device = "png", dpi = 300,
        filename = file.path(paste0(plot_dir, "aggregate_vs_null_hists.png")))
 
 
@@ -549,11 +581,11 @@ plot_stat4 <- "AUROC"
 plot_l4 <- coexpr_auc_hg
 plot_df4 <- data.frame(AUC = unlist(lapply(plot_l4[[plot_tf4]]$Null, `[[`, plot_stat4)))
 colnames(plot_df4) <- plot_stat4
-vline4 <- plot_l4[[tf_hg]]$Perf_df[[plot_stat4]]
+vline4 <- plot_l4[[plot_tf4]]$Perf_df[[plot_stat4]]
 
 p4 <- plot_auc_density(plot_df4, vline = vline4, stat = plot_stat4, tf = plot_tf4)
 
-ggsave(p4, height = 4, width = 6, device = "png", dpi = 300,
+ggsave(p4, height = 5, width = 6, device = "png", dpi = 300,
        filename = file.path(paste0(plot_dir, plot_tf4, "_coexpr_aggregate_vs_null_density.png")))
 
 
@@ -802,6 +834,57 @@ plot_df <- data.frame(
 plot_df <- filter(plot_df, !is.na(AUPRC))
 
 boxplot(plot_df$AUPRC ~ plot_df$Group)
+
+
+
+
+# Sketching heatmap of percentiles
+
+a1 <- left_join(agg_df_common_hg, pc_ortho, by = c("Symbol" = "Symbol_hg"))
+a2 <- left_join(agg_df_common_mm, pc_ortho, by = c("Symbol" = "Symbol_mm"))
+a3 <- left_join(a1, a2, by = "ID", suffix = c("_human", "_mouse"))
+
+keep_cols <- c("AUROC_percentile_coexpr_human",
+               "AUROC_percentile_unibind_human",
+               "AUROC_percentile_coexpr_mouse",
+               "AUROC_percentile_unibind_mouse")
+
+
+# keep_cols <- c("AUROC_diff_coexpr_human", 
+#                "AUROC_diff_unibind_human", 
+#                "AUROC_diff_coexpr_mouse", 
+#                "AUROC_diff_unibind_mouse")
+
+  
+a4 <- a3[,keep_cols]
+rownames(a4) <- a3$Symbol_human
+a5 <- a4[complete.cases(a4), ]
+a6 <- a5[order(rowMeans(a5), decreasing = TRUE), ]
+colnames(a6) <- c("Coexpression_human", "Binding_human", "Coexpression_mouse", "Binding_mouse")
+
+
+# pheatmap(t(a6), 
+#          cluster_rows = FALSE,
+#          cluster_cols = FALSE,
+#          gaps_row = c(2),
+#          border_col = "black",
+#          color = colorRampPalette(c("#0571b0", "white", "#ca0020"))(100),
+#          cellwidth = 8,
+#          cellheight = 8,
+#          filename = paste0(plot_dir, "ortho_performance_heatmap.png")
+# )
+
+
+pheatmap(a6, 
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         gaps_col = c(2),
+         border_col = "black",
+         color = colorRampPalette(c("#0571b0", "white", "#ca0020"))(100),
+         cellwidth = 10,
+         cellheight = 10,
+         filename = paste0(plot_dir, "ortho_performance_heatmap.png")
+)
 
 
 
