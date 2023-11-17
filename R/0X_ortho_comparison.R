@@ -8,51 +8,304 @@
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
+library(data.table)
+library(WGCNA)
+library(parallel)
+library(pheatmap)
+library(RColorBrewer)
 library(cowplot)
-library(randomForest)
-library(caret)
-source("R/00_config.R")
+library(ggrepel)
 source("R/utils/functions.R")
+source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
+source("R/00_config.R")
 
-# Protein coding tables
-pc_ortho <- read.delim(pc_ortho_path, stringsAsFactors = FALSE)
-pc_hg <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
-pc_mm <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
+# Table of assembled scRNA-seq datasets
+sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 
-# Ribo genes for comparison
+# IDs for scRNA-seq datasets
+ids_hg <- filter(sc_meta, Species == "Human")$ID
+ids_mm <- filter(sc_meta, Species == "Mouse")$ID
+
+# Protein coding genes 
+pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
+pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
+pc_ortho <- read.delim(pc_ortho_path)
+
+# Ribosomal genes
 sribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
 lribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
 ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
 
+# Saved list RDS of the ranks
+rank_tf_hg <- readRDS(rank_tf_hg_path)
+rank_tf_mm <- readRDS(rank_tf_mm_path)
+rank_ribo_hg <- readRDS(rank_ribo_hg_path)
+rank_ribo_mm <- readRDS(rank_ribo_mm_path)
 
-# Metadata and IDs
-sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
+# Genomic evidence from Morin 2023 
+evidence_l <- readRDS(evidence_path)
 
-# Hacky merge until I get the IDs better sorted. "_" delim in ID names problematic
-sc_meta <- mutate(sc_meta, ID = str_replace(ID, "_", ""))
+# Measurement matrices used for filtering when a gene was never expressed
+# msr_hg <- readRDS(msr_mat_hg_path)
+# msr_mm <- readRDS(msr_mat_mm_path)
 
-meta_hg <- filter(sc_meta, Species == "Human")
-meta_mm <- filter(sc_meta, Species == "Mouse")
-
-
-
-# Loading aggregate coexpression matrices
-# agg_hg <- load_agg_mat_list(ids_hg[1:2])
-# agg_mm <- load_agg_mat_list(ids_mm[1:2])
-# agg_hg <- load_agg_mat_list(ids = meta_hg$ID, paths = meta_hg$Path)
-# agg_mm <- load_agg_mat_list(ids = meta_mm$ID, paths = meta_mm$Path)
-
-
-# Only keep ortho genes
-pc_df <- filter(pc_ortho, 
-                 Symbol_hg %in% pc_hg$Symbol, 
-                 Symbol_mm %in% pc_mm$Symbol)
+# Loading the TF aggregate matrices
+agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
+# agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
+# agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
 
 
-# agg_hg <- lapply(agg_hg, function(x) x[pc_df$Symbol_hg, pc_df$Symbol_hg])
-# agg_mm <- lapply(agg_mm, function(x) x[pc_df$Symbol_mm, pc_df$Symbol_mm])
+# Only keep ortho genes measured in both species
 
+pc_ortho <- filter(pc_ortho,
+                   Symbol_hg %in% pc_hg$Symbol &
+                   Symbol_mm %in% pc_mm$Symbol)
+
+tfs_ortho <- filter(pc_ortho, 
+                    Symbol_hg %in% names(rank_tf_hg) & 
+                      Symbol_mm %in% names(rank_tf_mm))
+
+
+
+
+# 
+# ------------------------------------------------------------------------------
+
+
+
+
+gene_hg <- "ASCL1"
+gene_mm <- "Ascl1"
+
+
+df_hg <- left_join(rank_tf_hg[[gene_hg]], pc_ortho,
+                   by = c("Symbol" = "Symbol_hg")) %>%
+  filter(!is.na(ID))
+
+
+df_mm <- left_join(rank_tf_mm[[gene_mm]], pc_ortho, 
+                   by = c("Symbol" = "Symbol_mm")) %>% 
+  filter(!is.na(ID))
+
+
+ortho_df <- left_join(df_hg, df_mm, 
+                      by = "ID", 
+                      suffix = c("_Human", "_Mouse")) %>% 
+  filter(!is.na(Avg_RSR_Human) & !is.na(Avg_RSR_Mouse))
+
+
+plot(ortho_df$Avg_RSR_Human, ortho_df$Avg_RSR_Mouse)
+cor(ortho_df$Avg_RSR_Human, ortho_df$Avg_RSR_Mouse, method = "spearman")
+filter(ortho_df, Rank_RSR_Human <= 100 & Rank_RSR_Mouse <= 100)
+
+
+
+ortho_cor <- mclapply(1:nrow(tfs_ortho), function(x) {
+  
+  df_hg <- left_join(rank_tf_hg[[tfs_ortho$Symbol_hg[x]]], pc_ortho, by = c("Symbol" = "Symbol_hg")) %>% filter(!is.na(ID))
+  df_mm <- left_join(rank_tf_mm[[tfs_ortho$Symbol_mm[x]]], pc_ortho, by = c("Symbol" = "Symbol_mm")) %>% filter(!is.na(ID))
+  ortho_df <- left_join(df_hg, df_mm, by = "ID", suffix = c("_Human", "_Mouse")) %>% filter(!is.na(Avg_RSR_Human) & !is.na(Avg_RSR_Mouse))
+  cor(ortho_df$Avg_RSR_Human, ortho_df$Avg_RSR_Mouse, method = "spearman")
+  
+}, mc.cores = ncore)
+
+
+ortho_cor <- data.frame(Cor = unlist(ortho_cor), Symbol = tfs_ortho$Symbol_hg)
+summary(ortho_cor$Cor)
+
+
+px <- plot_hist(ortho_cor, 
+                stat_col = "Cor", 
+                xlab = "Spearman's correlation", 
+                title = "n=1241 orthologous TFs") + 
+  xlim(c(-0.4, 1))
+
+
+
+ggsave(px, height = 5, width = 7, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "ortho_rank_similarity.png"))
+
+
+
+# Topk overlap of targets and relative to other TFs
+
+
+
+# For each ortho TF, gets its top k overlap between species
+# NOTE: this is taking the top k AFTER filtering for ortho, so not necessarily
+# within the top k ranks of the unfiltered (non-ortho) data
+# TODO: no reason to do so many joins, just use once and reference main
+# TODO: just get list of top 100 for each species and perform overlap after.
+# TODO: also want to comment on generic overlaps
+
+
+topk_relative <- function(gene_query, 
+                          tfs_ortho, 
+                          pc_ortho, 
+                          rank_tf_hg, 
+                          rank_tf_mm, 
+                          k = 100) {
+  
+  gene_ortho <- filter(pc_ortho, 
+                       Symbol_hg == gene_query | Symbol_mm == gene_query)
+  
+  
+  topk_query_hg <- left_join(rank_tf_hg[[gene_ortho$Symbol_hg]], pc_ortho,
+                             by = c("Symbol" = "Symbol_hg")) %>%
+    filter(!is.na(ID)) %>% 
+    slice_min(Rank_RSR, n = k) 
+  
+  
+  topk_query_mm <- left_join(rank_tf_mm[[gene_ortho$Symbol_mm]], pc_ortho,
+                             by = c("Symbol" = "Symbol_mm")) %>%
+    filter(!is.na(ID)) %>% 
+    slice_min(Rank_RSR, n = k) 
+  
+  
+  # length(intersect(topk_query_hg$ID, topk_query_mm$ID))
+  
+  
+  topk_hg_in_mm <- lapply(tfs_ortho$Symbol_mm, function(x) {
+    
+    topk <- filter(rank_tf_mm[[x]], Symbol %in% pc_ortho$Symbol_mm) %>%
+      slice_min(Rank_RSR, n = k) %>% 
+      pull(Symbol)
+    
+    length(intersect(topk_query_hg$Symbol_mm, topk))
+    
+  })
+  
+  names(topk_hg_in_mm) <- tfs_ortho$Symbol_mm
+  topk_hg_in_mm <- unlist(topk_hg_in_mm)
+  
+  
+  
+  topk_mm_in_hg <- lapply(tfs_ortho$Symbol_hg, function(x) {
+    
+    topk <- filter(rank_tf_hg[[x]], Symbol %in% pc_ortho$Symbol_hg) %>%
+      slice_min(Rank_RSR, n = k) %>% 
+      pull(Symbol)
+    
+    length(intersect(topk_query_mm$Symbol_hg, topk))
+    
+  })
+  
+  names(topk_mm_in_hg) <- tfs_ortho$Symbol_hg
+  topk_mm_in_hg <- unlist(topk_mm_in_hg)
+  
+  
+  topk_df <- data.frame(
+    Symbol = tfs_ortho$Symbol_hg, 
+    Topk_hg_in_mm = topk_hg_in_mm, 
+    Topk_mm_in_hg = topk_mm_in_hg
+  )
+  
+  return(topk_df)
+  
+}
+
+
+
+topk_all <- mclapply(tfs_ortho$Symbol_hg, function(x) {
+  
+  
+  topk_relative(gene_query = x,
+                tfs_ortho,
+                pc_ortho,
+                rank_tf_hg,
+                rank_tf_mm,
+                k = 100)
+  
+}, mc.cores = 8)
+names(topk_all) <- tfs_ortho$Symbol_hg
+# saveRDS(topk_all, "/space/scratch/amorin/R_objects/ortho_tf_topk=100.RDS")
+topk_all <- readRDS("/space/scratch/amorin/R_objects/ortho_tf_topk=100.RDS")
+
+
+x <- "ASCL1"
+
+
+
+# For each species, calculate the percentile of the matched ortho TF relative to
+# all others
+
+
+ortho_perc <- lapply(tfs_ortho$Symbol_hg, function(x) {
+  
+  df <- topk_all[[x]]
+  tf_in <- filter(df, Symbol == x)
+  tf_out <- filter(df, Symbol != x)
+  
+  data.frame(
+    Symbol = x,
+    Count_mm_in_hg = tf_in$Topk_mm_in_hg,
+    Perc_mm_in_hg = ecdf(tf_out$Topk_mm_in_hg)(tf_in$Topk_mm_in_hg),
+    Count_hg_in_mm = tf_in$Topk_hg_in_mm,
+    Perc_hg_in_mm = ecdf(tf_out$Topk_hg_in_mm)(tf_in$Topk_hg_in_mm)
+  )
+})
+
+
+ortho_perc_df <- do.call(rbind, ortho_perc)
+
+
+summary(Filter(is.numeric, ortho_perc_df))
+sum(ortho_perc_df$Perc_mm_in_hg == 1)
+sum(ortho_perc_df$Perc_hg_in_mm == 1)
+
+
+
+qplot(ortho_perc_df, xvar = "Perc_mm_in_hg", yvar = "Perc_hg_in_mm") +
+  xlab("Percentile mouse in human") +
+  ylab("Percentile human in mouse")
+
+
+gene <- "ASCL1"
+
+plot_df <- mutate(topk_all[[gene]], Label = Symbol == gene)
+
+
+ggplot(plot_df, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
+  geom_jitter(shape = 21, size = 2.4, width = 0.5, height = 0.5) +
+  geom_text_repel(
+    data = filter(plot_df, Label),
+    aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg, label = Symbol, fontface = "italic"),
+    size = 5,
+    segment.size = 0.1,
+    segment.color = "grey50") +
+  xlab("Human in mouse") +
+  ylab("Mouse in human") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+plot_grid(
+  
+  plot_hist(plot_df, stat_col = "Topk_hg_in_mm") + 
+    geom_vline(xintercept = filter(plot_df, Symbol == gene)$Topk_hg_in_mm,
+               linewidth = 1.6,
+               col = "royalblue") +
+    xlab("Human in mouse"),
+  
+  plot_hist(plot_df, stat_col = "Topk_mm_in_hg") + 
+    geom_vline(xintercept = filter(plot_df, Symbol == gene)$Topk_mm_in_hg, 
+               linewidth = 1.6,
+               col = "goldenrod") +
+    xlab("Mouse in human"),
+  
+  nrow = 1)
+
+
+
+
+
+### TODO: OLD below, to be removed/updated
 
 
 
