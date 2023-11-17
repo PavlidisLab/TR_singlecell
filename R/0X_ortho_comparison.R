@@ -47,8 +47,8 @@ rank_ribo_mm <- readRDS(rank_ribo_mm_path)
 evidence_l <- readRDS(evidence_path)
 
 # Measurement matrices used for filtering when a gene was never expressed
-# msr_hg <- readRDS(msr_mat_hg_path)
-# msr_mm <- readRDS(msr_mat_mm_path)
+msr_hg <- readRDS(msr_mat_hg_path)
+msr_mm <- readRDS(msr_mat_mm_path)
 
 # Loading the TF aggregate matrices
 agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
@@ -70,66 +70,100 @@ tfs_ortho <- filter(pc_ortho,
 
 
 
-# 
+# Functions
 # ------------------------------------------------------------------------------
 
 
+# Given a gene character, return a df of the gene rank information for human and
+# mouse for only ortho genes
 
-
-gene_hg <- "ASCL1"
-gene_mm <- "Ascl1"
-
-
-df_hg <- left_join(rank_tf_hg[[gene_hg]], pc_ortho,
-                   by = c("Symbol" = "Symbol_hg")) %>%
-  filter(!is.na(ID))
-
-
-df_mm <- left_join(rank_tf_mm[[gene_mm]], pc_ortho, 
-                   by = c("Symbol" = "Symbol_mm")) %>% 
-  filter(!is.na(ID))
-
-
-ortho_df <- left_join(df_hg, df_mm, 
-                      by = "ID", 
-                      suffix = c("_Human", "_Mouse")) %>% 
-  filter(!is.na(Avg_RSR_Human) & !is.na(Avg_RSR_Mouse))
-
-
-plot(ortho_df$Avg_RSR_Human, ortho_df$Avg_RSR_Mouse)
-cor(ortho_df$Avg_RSR_Human, ortho_df$Avg_RSR_Mouse, method = "spearman")
-filter(ortho_df, Rank_RSR_Human <= 100 & Rank_RSR_Mouse <= 100)
-
-
-
-ortho_cor <- mclapply(1:nrow(tfs_ortho), function(x) {
+subset_ortho_data <- function(gene, 
+                              pc_df = pc_ortho, 
+                              rank_hg = rank_tf_hg,
+                              rank_mm = rank_tf_mm) {
   
-  df_hg <- left_join(rank_tf_hg[[tfs_ortho$Symbol_hg[x]]], pc_ortho, by = c("Symbol" = "Symbol_hg")) %>% filter(!is.na(ID))
-  df_mm <- left_join(rank_tf_mm[[tfs_ortho$Symbol_mm[x]]], pc_ortho, by = c("Symbol" = "Symbol_mm")) %>% filter(!is.na(ID))
-  ortho_df <- left_join(df_hg, df_mm, by = "ID", suffix = c("_Human", "_Mouse")) %>% filter(!is.na(Avg_RSR_Human) & !is.na(Avg_RSR_Mouse))
-  cor(ortho_df$Avg_RSR_Human, ortho_df$Avg_RSR_Mouse, method = "spearman")
+  gene_ortho <- filter(pc_ortho, Symbol_hg == gene | Symbol_mm == gene)
   
-}, mc.cores = ncore)
+  if (nrow(gene_ortho) != 1) stop("A one to one match was not found")
+  
+  df_hg <- left_join(rank_hg[[gene_ortho$Symbol_hg]], 
+                     pc_ortho[, c("Symbol_hg", "ID")],
+                     by = c("Symbol" = "Symbol_hg")) %>% 
+    filter(!is.na(ID))
+  
+  
+  df_mm <- left_join(rank_mm[[gene_ortho$Symbol_mm]], 
+                     pc_ortho[, c("Symbol_mm", "ID")], 
+                     by = c("Symbol" = "Symbol_mm")) %>% 
+    filter(!is.na(ID))
+  
+  ortho_df <- left_join(df_hg, df_mm, 
+                        by = "ID", 
+                        suffix = c("_Human", "_Mouse")) %>% 
+    filter(!is.na(Avg_RSR_Human) & !is.na(Avg_RSR_Mouse))
+  
+  return(ortho_df)
+}
 
 
-ortho_cor <- data.frame(Cor = unlist(ortho_cor), Symbol = tfs_ortho$Symbol_hg)
-summary(ortho_cor$Cor)
+
+# Return a df of the spearman cor between human and mouse RSR rankings
+
+calc_ortho_cor <- function(ortho_rank_l, ncores = 1) {
+  
+  symbols <- names(ortho_rank_l)
+  
+  cor_l <- mclapply(ortho_rank_l, function(x) {
+    cor(x$Avg_RSR_Human, x$Avg_RSR_Mouse, method = "spearman")
+  }, mc.cores = ncores)
+  
+  cor_df <- data.frame(Cor = unlist(cor_l), Symbol = symbols)
+  
+  return(cor_df)
+}
 
 
-px <- plot_hist(ortho_cor, 
-                stat_col = "Cor", 
-                xlab = "Spearman's correlation", 
-                title = "n=1241 orthologous TFs") + 
-  xlim(c(-0.4, 1))
+
+# Create a unified ranking for each ortho TF and explore mouse/human correlation
+# -------------------------------------------------------------------------------
+
+
+# List of joined human and mouse TF rankings
+
+rank_tf_ortho <- mclapply(tfs_ortho$Symbol_hg, subset_ortho_data, mc.cores = ncore)
+names(rank_tf_ortho) <- tfs_ortho$Symbol_hg
+
+
+# Get the Spearman correlation of rankings between every ortho TF
+
+ortho_cor <- calc_ortho_cor(rank_tf_ortho, ncores = ncore)
+
+
+# Exploring correlations
+
+cor_summ <- summary(ortho_cor$Cor)
+
+cor_low <- filter(ortho_cor, Cor < -0.2) %>% arrange(Cor)
+cor_high <- filter(ortho_cor, Cor > 0.8) %>% arrange(-Cor)
+
+
+check_tf <- "ASCL1"
+qplot(rank_tf_ortho[[check_tf]], xvar = "Avg_RSR_Human", yvar = "Avg_RSR_Mouse", title = check_tf)
+rank_tf_ortho[[check_tf]] %>% view
+
+
+# Check data coverage of extreme TFs, find they are generally well-measured
+
+ext_counts_hg <- rowSums(msr_hg[c(cor_low$Symbol, cor_high$Symbol), ])
+ext_mm <- filter(pc_ortho, Symbol_hg %in% c(cor_low$Symbol, cor_high$Symbol))$Symbol_mm
+ext_counts_mm <- rowSums(msr_mm[ext_mm, ])
 
 
 
-ggsave(px, height = 5, width = 7, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "ortho_rank_similarity.png"))
 
 
-
-# Topk overlap of targets and relative to other TFs
+# Topk overlap of matched ortho TFs
+# ------------------------------------------------------------------------------
 
 
 
@@ -139,6 +173,23 @@ ggsave(px, height = 5, width = 7, device = "png", dpi = 300,
 # TODO: no reason to do so many joins, just use once and reference main
 # TODO: just get list of top 100 for each species and perform overlap after.
 # TODO: also want to comment on generic overlaps
+
+
+
+k <- 100
+
+
+topk_l <- mclapply(rank_tf_ortho, function(x) {
+  list(
+    Human = slice_max(x, Avg_RSR_Human, n = k)$Symbol_Human,
+    Mouse = slice_max(x, Avg_RSR_Mouse, n = k)$Symbol_Human
+  )
+}, mc.cores = ncore)
+
+
+
+
+
 
 
 topk_relative <- function(gene_query, 
@@ -303,6 +354,23 @@ plot_grid(
 
 
 
+# Plots
+# ------------------------------------------------------------------------------
+
+
+# Histogram of ortho TF spearman cors
+
+px <- plot_hist(ortho_cor, 
+                stat_col = "Cor", 
+                xlab = "Spearman's correlation", 
+                title = "n=1241 orthologous TFs") + 
+  xlim(c(-0.4, 1))
+
+
+
+ggsave(px, height = 5, width = 7, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "ortho_rank_similarity.png"))
+
 
 
 ### TODO: OLD below, to be removed/updated
@@ -313,6 +381,7 @@ plot_grid(
 # ------------------------------------------------------------------------------
 
 
+# TODO: replace - get a matrix of aggregate vectors for one gene both species
 
 get_ortho_mat <- function(genes, ids, meta, pc_df, ncores = 1) {
   
@@ -352,6 +421,8 @@ get_ortho_mat <- function(genes, ids, meta, pc_df, ncores = 1) {
 }
 
 
+
+# TODO: check overlap with similarity functions
 
 # Binarize matrix such that top k and bottom k is 1, mid is 0
 
