@@ -275,6 +275,15 @@ sum(ortho_perc_df$Perc_hg_in_mm == 1)
 sum(ortho_perc_df$Perc_ortho == 1)
 
 
+# NEUROG3 example of no overlap but elevated percentiles
+
+inspect_df <- data.frame(
+  Symbol = rownames(overlap_mat),
+  Hg_in_mm = overlap_mat["NEUROG3", ],
+  Mm_in_hg = overlap_mat[, "NEUROG3"]
+)
+
+
 
 # Inspect bottom k
 # ------------------------------------------------------------------------------
@@ -324,46 +333,6 @@ bottomk_perc_df$Perc_ortho <- rowMeans(bottomk_perc_df[, c("Perc_hg_in_mm", "Per
 ###
 
 
-gene <- "ASCL1"
-
-plot_df <- mutate(topk_all[[gene]], Label = Symbol == gene)
-
-
-ggplot(plot_df, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
-  geom_jitter(shape = 21, size = 2.4, width = 0.5, height = 0.5) +
-  geom_text_repel(
-    data = filter(plot_df, Label),
-    aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg, label = Symbol, fontface = "italic"),
-    size = 5,
-    segment.size = 0.1,
-    segment.color = "grey50") +
-  xlab("Human in mouse") +
-  ylab("Mouse in human") +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        plot.title = element_text(size = 20),
-        plot.margin = margin(c(10, 20, 10, 10)))
-
-
-
-plot_grid(
-  
-  plot_hist(plot_df, stat_col = "Topk_hg_in_mm") + 
-    geom_vline(xintercept = filter(plot_df, Symbol == gene)$Topk_hg_in_mm,
-               linewidth = 1.6,
-               col = "royalblue") +
-    xlab("Human in mouse"),
-  
-  plot_hist(plot_df, stat_col = "Topk_mm_in_hg") + 
-    geom_vline(xintercept = filter(plot_df, Symbol == gene)$Topk_mm_in_hg, 
-               linewidth = 1.6,
-               col = "goldenrod") +
-    xlab("Mouse in human"),
-  
-  nrow = 1)
-
-
 
 # Plots
 # ------------------------------------------------------------------------------
@@ -398,7 +367,7 @@ qplot(ortho_perc_df, xvar = "Perc_mm_in_hg", yvar = "Perc_hg_in_mm") +
 
 # Hist of actual Top K counts
 
-plot_hist(ortho_perc_df, stat_col = "Topk_count")
+plot_hist(ortho_perc_df, nbins = 50, stat_col = "Topk_count")
 
 
 # Scatter of perc ortho versus top k
@@ -406,6 +375,57 @@ plot_hist(ortho_perc_df, stat_col = "Topk_count")
 qplot(ortho_perc_df, xvar = "Topk_count", yvar = "Perc_ortho") +
   xlab("Top K count") +
   ylab("Percentile ortho")
+
+
+
+# Scatter plot of topk counts between species
+
+plot_gene <- "NEUROG3"
+
+plot_dfx <- data.frame(
+  Symbol = rownames(overlap_mat),
+  Topk_hg_in_mm = overlap_mat[plot_gene, ],
+  Topk_mm_in_hg = overlap_mat[, plot_gene],
+  Label = rownames(overlap_mat) == plot_gene)
+
+
+ggplot(plot_dfx, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
+  geom_jitter(shape = 21, size = 2.4, width = 0.5, height = 0.5) +
+  geom_text_repel(
+    data = filter(plot_dfx, Label),
+    aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg, label = Symbol, fontface = "italic"),
+    size = 5,
+    segment.size = 0.1,
+    segment.color = "grey50") +
+  xlab("Human in mouse") +
+  ylab("Mouse in human") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+# Hist of topk counts for each species
+
+
+plot_grid(
+  
+  plot_hist(plot_dfx, stat_col = "Topk_hg_in_mm") + 
+    geom_vline(xintercept = filter(plot_dfx, Symbol == plot_gene)$Topk_hg_in_mm,
+               # width = 1.6,
+               col = "royalblue") +
+    xlab("Human in mouse"),
+  
+  plot_hist(plot_dfx, stat_col = "Topk_mm_in_hg") + 
+    geom_vline(xintercept = filter(plot_dfx, Symbol == plot_gene)$Topk_mm_in_hg, 
+               # width = 1.6,
+               col = "goldenrod") +
+    xlab("Mouse in human"),
+  
+  nrow = 2)
+
 
 
 
