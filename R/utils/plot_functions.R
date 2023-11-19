@@ -13,10 +13,11 @@ library(cowplot)
 
 # TODO:
 
-qplot <- function(df, xvar, yvar) {
+qplot <- function(df, xvar, yvar, title = NULL) {
   
   ggplot(df, aes(x = !!sym(xvar), y = !!sym(yvar))) +
     geom_point(shape = 21, size = 2.1) +
+    ggtitle(title) +
     theme_classic() +
     theme(axis.text = element_text(size = 20),
           axis.title = element_text(size = 20),
