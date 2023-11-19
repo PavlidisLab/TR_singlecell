@@ -534,13 +534,13 @@ all_celltype_cor <- function(mat,
 # Get a list of correlations of gene1 and gene2 across cell types for every
 # experiment in ids.
 
-get_all_cor_l <- function(ids, gene1, gene2) {
+get_all_cor_l <- function(ids, gene1, gene2, cor_method = "pearson") {
   
   cor_l <- lapply(ids, function(x) {
     dat <- load_dat_list(x)[[1]]
     mat <- dat$Mat
     meta <- dat$Meta
-    all_celltype_cor(mat, meta, gene1, gene2)
+    all_celltype_cor(mat, meta, gene1, gene2, cor_method = cor_method)
   })
   
   names(cor_l) <- ids
