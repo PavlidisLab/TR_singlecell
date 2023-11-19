@@ -51,8 +51,8 @@ msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
 # Loading the TF aggregate matrices
-agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
-agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
+# agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+# agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
 # agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
 # agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
 
@@ -99,8 +99,8 @@ subset_ortho_data <- function(gene,
   
   ortho_df <- left_join(df_hg, df_mm, 
                         by = "ID", 
-                        suffix = c("_Human", "_Mouse")) %>% 
-    filter(!is.na(Avg_RSR_Human) & !is.na(Avg_RSR_Mouse))
+                        suffix = c("_hg", "_mm")) %>% 
+    filter(!is.na(Avg_RSR_hg) & !is.na(Avg_RSR_mm))
   
   return(ortho_df)
 }
@@ -114,7 +114,7 @@ calc_ortho_cor <- function(ortho_rank_l, ncores = 1) {
   symbols <- names(ortho_rank_l)
   
   cor_l <- mclapply(ortho_rank_l, function(x) {
-    cor(x$Avg_RSR_Human, x$Avg_RSR_Mouse, method = "spearman")
+    cor(x$Avg_RSR_hg, x$Avg_RSR_mm, method = "spearman")
   }, mc.cores = ncores)
   
   cor_df <- data.frame(Cor = unlist(cor_l), Symbol = symbols)
@@ -147,9 +147,15 @@ cor_low <- filter(ortho_cor, Cor < -0.2) %>% arrange(Cor)
 cor_high <- filter(ortho_cor, Cor > 0.8) %>% arrange(-Cor)
 
 
-check_tf <- "ASCL1"
-qplot(rank_tf_ortho[[check_tf]], xvar = "Avg_RSR_Human", yvar = "Avg_RSR_Mouse", title = check_tf)
-rank_tf_ortho[[check_tf]] %>% view
+check_tf <- "HNF4A"
+
+
+rank_common <- rank_tf_ortho[[check_tf]] %>% 
+  mutate(Diff = Avg_RSR_hg - Avg_RSR_mm,
+         Add = Avg_RSR_hg + Avg_RSR_mm,
+         RP = rank(Rank_RSR_hg * Rank_RSR_mm)) %>% 
+  relocate(Symbol_hg, RP, Rank_RSR_hg, Rank_RSR_mm, Add, Diff)
+
 
 
 # Check data coverage of extreme TFs, find they are generally well-measured
@@ -181,136 +187,141 @@ k <- 100
 
 topk_l <- mclapply(rank_tf_ortho, function(x) {
   list(
-    Human = slice_max(x, Avg_RSR_Human, n = k)$Symbol_Human,
-    Mouse = slice_max(x, Avg_RSR_Mouse, n = k)$Symbol_Human
+    Human = slice_max(x, Avg_RSR_hg, n = k)$Symbol_hg,
+    Mouse = slice_max(x, Avg_RSR_mm, n = k)$Symbol_hg
   )
 }, mc.cores = ncore)
+names(topk_l) <- tfs_ortho$Symbol_hg
 
 
 
+# Rows are human in mouse, cols are mouse in human
 
+overlap_mat <- matrix(0, nrow = length(topk_l), ncol = length(topk_l))
+rownames(overlap_mat) <- colnames(overlap_mat) <- tfs_ortho$Symbol_hg
 
-
-
-topk_relative <- function(gene_query, 
-                          tfs_ortho, 
-                          pc_ortho, 
-                          rank_tf_hg, 
-                          rank_tf_mm, 
-                          k = 100) {
-  
-  gene_ortho <- filter(pc_ortho, 
-                       Symbol_hg == gene_query | Symbol_mm == gene_query)
-  
-  
-  topk_query_hg <- left_join(rank_tf_hg[[gene_ortho$Symbol_hg]], pc_ortho,
-                             by = c("Symbol" = "Symbol_hg")) %>%
-    filter(!is.na(ID)) %>% 
-    slice_min(Rank_RSR, n = k) 
-  
-  
-  topk_query_mm <- left_join(rank_tf_mm[[gene_ortho$Symbol_mm]], pc_ortho,
-                             by = c("Symbol" = "Symbol_mm")) %>%
-    filter(!is.na(ID)) %>% 
-    slice_min(Rank_RSR, n = k) 
-  
-  
-  # length(intersect(topk_query_hg$ID, topk_query_mm$ID))
-  
-  
-  topk_hg_in_mm <- lapply(tfs_ortho$Symbol_mm, function(x) {
-    
-    topk <- filter(rank_tf_mm[[x]], Symbol %in% pc_ortho$Symbol_mm) %>%
-      slice_min(Rank_RSR, n = k) %>% 
-      pull(Symbol)
-    
-    length(intersect(topk_query_hg$Symbol_mm, topk))
-    
-  })
-  
-  names(topk_hg_in_mm) <- tfs_ortho$Symbol_mm
-  topk_hg_in_mm <- unlist(topk_hg_in_mm)
-  
-  
-  
-  topk_mm_in_hg <- lapply(tfs_ortho$Symbol_hg, function(x) {
-    
-    topk <- filter(rank_tf_hg[[x]], Symbol %in% pc_ortho$Symbol_hg) %>%
-      slice_min(Rank_RSR, n = k) %>% 
-      pull(Symbol)
-    
-    length(intersect(topk_query_mm$Symbol_hg, topk))
-    
-  })
-  
-  names(topk_mm_in_hg) <- tfs_ortho$Symbol_hg
-  topk_mm_in_hg <- unlist(topk_mm_in_hg)
-  
-  
-  topk_df <- data.frame(
-    Symbol = tfs_ortho$Symbol_hg, 
-    Topk_hg_in_mm = topk_hg_in_mm, 
-    Topk_mm_in_hg = topk_mm_in_hg
-  )
-  
-  return(topk_df)
-  
+for (i in 1:nrow(overlap_mat)) {
+  for (j in 1:ncol(overlap_mat)) {
+    overlap_mat[i, j] <- length(intersect(topk_l[[i]]$Human, topk_l[[j]]$Mouse))
+  }
 }
 
 
 
-topk_all <- mclapply(tfs_ortho$Symbol_hg, function(x) {
+# Sums across rows (human) and cols (mouse) to get most common/generic 
+
+overlap_row <- rowSums(overlap_mat)
+overlap_col <- colSums(overlap_mat)
+
+
+# Inspect the human in mouse with the highest overlap
+head(sort(-overlap_row))
+overlap_mat["MEF2C", "MEF2C"]
+head(sort(-overlap_mat["MEF2C", ]), 20)
+sum(msr_hg["MEF2C", ])
+intersect(topk_l$MEF2C$Human, topk_l$FLI1$Mouse)
+
+# Inspect the mouse in human with the highest overlap
+head(sort(-overlap_col))
+overlap_mat["RXRA", "RXRA"]
+head(sort(-overlap_mat[, "RXRA"]), 20)
+sum(msr_mm["Rxra", ])
+intersect(topk_l$MEF2C$Human, topk_l$RXRA$Mouse)
+
+# Inspect the human in mouse with lowest overlap
+head(sort(overlap_row))
+overlap_mat["ZSCAN5B", "ZSCAN5B"]
+head(sort(-overlap_mat["ZSCAN5B", ]), 20)
+sum(msr_hg["ZSCAN5B", ])
+intersect(topk_l$ZSCAN5B$Human, topk_l$ASCL2$Mouse)
+
+# Inspect mouse in human with lowest overlap
+head(sort(overlap_col))
+overlap_mat["DMRTC2", "DMRTC2"]
+head(sort(-overlap_mat[, "DMRTC2"]), 20)
+sum(msr_mm["Dmrtc2", ])
+intersect(topk_l$KLF17$Human, topk_l$DMRTC2$Mouse)
+
+
+# TODO: relative positioning of CENPA
+
+
+
+# Df of the counts and relative percentiles of the ortho top k overlap
+
+
+ortho_perc <- mclapply(tfs_ortho$Symbol_hg, function(x) {
   
-  
-  topk_relative(gene_query = x,
-                tfs_ortho,
-                pc_ortho,
-                rank_tf_hg,
-                rank_tf_mm,
-                k = 100)
-  
-}, mc.cores = 8)
-names(topk_all) <- tfs_ortho$Symbol_hg
-# saveRDS(topk_all, "/space/scratch/amorin/R_objects/ortho_tf_topk=100.RDS")
-topk_all <- readRDS("/space/scratch/amorin/R_objects/ortho_tf_topk=100.RDS")
-
-
-x <- "ASCL1"
-
-
-
-# For each species, calculate the percentile of the matched ortho TF relative to
-# all others
-
-
-ortho_perc <- lapply(tfs_ortho$Symbol_hg, function(x) {
-  
-  df <- topk_all[[x]]
-  tf_in <- filter(df, Symbol == x)
-  tf_out <- filter(df, Symbol != x)
+  count_overlap <- overlap_mat[x, x]
+  hg_in_mm <- overlap_mat[setdiff(tfs_ortho$Symbol_hg, x), x]
+  mm_in_hg <- overlap_mat[x, setdiff(tfs_ortho$Symbol_hg, x)]
   
   data.frame(
     Symbol = x,
-    Count_mm_in_hg = tf_in$Topk_mm_in_hg,
-    Perc_mm_in_hg = ecdf(tf_out$Topk_mm_in_hg)(tf_in$Topk_mm_in_hg),
-    Count_hg_in_mm = tf_in$Topk_hg_in_mm,
-    Perc_hg_in_mm = ecdf(tf_out$Topk_hg_in_mm)(tf_in$Topk_hg_in_mm)
-  )
-})
+    Topk_count = count_overlap,
+    Perc_hg_in_mm = ecdf(hg_in_mm)(count_overlap),
+    Perc_mm_in_hg = ecdf(mm_in_hg)(count_overlap))
+  
+}, mc.cores = ncore)
 
 
 ortho_perc_df <- do.call(rbind, ortho_perc)
+ortho_perc_df$Perc_ortho <- rowMeans(ortho_perc_df[, c("Perc_hg_in_mm", "Perc_mm_in_hg")])
 
 
 summary(Filter(is.numeric, ortho_perc_df))
 sum(ortho_perc_df$Perc_mm_in_hg == 1)
 sum(ortho_perc_df$Perc_hg_in_mm == 1)
+sum(ortho_perc_df$Perc_ortho == 1)
 
 
 
-qplot(ortho_perc_df, xvar = "Perc_mm_in_hg", yvar = "Perc_hg_in_mm") +
-  xlab("Percentile mouse in human") +
-  ylab("Percentile human in mouse")
+# Inspect bottom k
+# ------------------------------------------------------------------------------
+
+
+bottomk_l <- mclapply(rank_tf_ortho, function(x) {
+  list(
+    Human = slice_min(x, Avg_RSR_hg, n = k)$Symbol_hg,
+    Mouse = slice_min(x, Avg_RSR_mm, n = k)$Symbol_hg
+  )
+}, mc.cores = ncore)
+names(bottomk_l) <- tfs_ortho$Symbol_hg
+
+
+
+# Rows are human in mouse, cols are mouse in human
+
+bottomk_mat <- matrix(0, nrow = length(bottomk_l), ncol = length(bottomk_l))
+rownames(bottomk_mat) <- colnames(bottomk_mat) <- tfs_ortho$Symbol_hg
+
+for (i in 1:nrow(bottomk_mat)) {
+  for (j in 1:ncol(bottomk_mat)) {
+    bottomk_mat[i, j] <- length(intersect(bottomk_l[[i]]$Human, bottomk_l[[j]]$Mouse))
+  }
+}
+
+
+bottomk_perc <- mclapply(tfs_ortho$Symbol_hg, function(x) {
+  
+  count_overlap <- bottomk_mat[x, x]
+  hg_in_mm <- bottomk_mat[setdiff(tfs_ortho$Symbol_hg, x), x]
+  mm_in_hg <- bottomk_mat[x, setdiff(tfs_ortho$Symbol_hg, x)]
+  
+  data.frame(
+    Symbol = x,
+    Bottomk_count = count_overlap,
+    Perc_hg_in_mm = ecdf(hg_in_mm)(count_overlap),
+    Perc_mm_in_hg = ecdf(mm_in_hg)(count_overlap))
+  
+}, mc.cores = ncore)
+
+
+bottomk_perc_df <- do.call(rbind, bottomk_perc)
+bottomk_perc_df$Perc_ortho <- rowMeans(bottomk_perc_df[, c("Perc_hg_in_mm", "Perc_mm_in_hg")])
+
+
+###
 
 
 gene <- "ASCL1"
@@ -370,6 +381,31 @@ px <- plot_hist(ortho_cor,
 
 ggsave(px, height = 5, width = 7, device = "png", dpi = 300,
        filename = file.path(plot_dir, "ortho_rank_similarity.png"))
+
+
+# Scatter of mouse versus human RSR for a given TF
+
+qplot(rank_tf_ortho[[check_tf]], xvar = "Avg_RSR_hg", yvar = "Avg_RSR_mm", title = check_tf)
+
+
+
+# Scatterplot of percentile in mouse/human
+
+qplot(ortho_perc_df, xvar = "Perc_mm_in_hg", yvar = "Perc_hg_in_mm") +
+  xlab("Percentile mouse in human") +
+  ylab("Percentile human in mouse")
+
+
+# Hist of actual Top K counts
+
+plot_hist(ortho_perc_df, stat_col = "Topk_count")
+
+
+# Scatter of perc ortho versus top k
+
+qplot(ortho_perc_df, xvar = "Topk_count", yvar = "Perc_ortho") +
+  xlab("Top K count") +
+  ylab("Percentile ortho")
 
 
 
@@ -725,3 +761,45 @@ all_celltype_cor(mat = dat_l[[id1]]$Mat, meta = dat_l[[id1]]$Meta, gene1 = "RPL3
 
 
 
+### TODO: for loop vs mclapply vs outer
+
+
+# TODO: the existance of the nested list object is somehow greatly slowing
+# down R session... speeds back up when removed
+
+# a1 <- mclapply(1:length(topk_l), function(i) {
+#   lapply(1:length(topk_l), function(j) {
+#     topk_intersect(topk_l[[i]]$Human, topk_l[[j]]$Mouse)
+#   })
+# }, mc.cores = ncore)
+
+
+a1 <- lapply(1:length(topk_l), function(i) {
+  lapply(1:length(topk_l), function(j) {
+    topk_intersect(topk_l[[i]]$Human, topk_l[[j]]$Mouse)
+  })
+})
+
+
+a2 <- as.numeric(unlist(a1))
+a3 <- matrix(a2, byrow = TRUE, nrow = length(topk_l), ncol = length(topk_l))
+rownames(a3) <- colnames(a3) <- names(topk_l)
+identical(overlap_mat, a3)
+
+
+
+# https://stackoverflow.com/a/66594545 Jaccard faster than nested loop 
+
+binary_jaccard <- function(x, y) {
+  sum(x & y) / sum(x | y)  
+}
+
+
+get_jaccard_matrix <- function(mat) {
+  tmp <- asplit(mat, 2)
+  jacc_mat <- outer(tmp, tmp, Vectorize(binary_jaccard))
+  return(jacc_mat)
+}
+
+
+###
