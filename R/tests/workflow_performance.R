@@ -73,11 +73,13 @@ tf <- "ASCL1"
 
 agg_l <- agg_tf_hg
 msr_mat <- msr_hg
+pc_df <- pc_hg
+species <- "Human"
 
 labels_curated <- get_curated_labels(tf = tf, 
                                      curated_df = curated, 
-                                     pc_df = pc_hg, 
-                                     species = "Human", 
+                                     pc_df = pc_df, 
+                                     species = species, 
                                      remove_self = TRUE)
 
 
@@ -120,6 +122,42 @@ score_mat05[comsr == FALSE] <- 0.5
 
 score_mat_med <- cbind(score_mat_med, Average = rowMeans(score_mat_med))
 score_mat05 <- cbind(score_mat05, Average = rowMeans(score_mat05))
+
+##
+
+## TODO: binary heatmap
+
+a1 <- rank_tf_hg$ASCL1 %>% 
+  mutate(Curated = factor(Symbol %in% labels_curated)) %>% 
+  arrange(desc(Rank_RSR)) %>% 
+  mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
+
+
+pheatmap(a2, 
+         cluster_rows = FALSE, 
+         cluster_cols = FALSE, 
+         color = c("white", "forestgreen"), 
+         cellwidth = 70,
+         legend = FALSE,
+         filename = "ascl1_binary_curated_heatmap.png",
+         height = 30)
+
+
+px <- 
+  ggplot(a1, aes(y = Symbol, x = factor(1), fill = Curated)) +
+  geom_tile(width = 2) +
+  scale_fill_manual(values = c("white", "forestgreen")) +
+  theme_classic() +
+  theme(axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = margin(c(10, 20, 10, 10)))
+  
+
+ggsave(px, height = 9, width = 3, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "ascl1_binary_curated_heatmap.png")))
+
+
 
 ##
 
