@@ -1,5 +1,7 @@
 ## Testing speed of implementations for functions for comparing vector similarity
 
+## TODO: in ortho_comparison, nested loop found faster than outer for topk_intersect. Consistent?
+
 library(tidyverse)
 library(data.table)
 library(WGCNA)
@@ -258,3 +260,82 @@ res3 <- microbenchmark::microbenchmark(
 
 F1 = query_gene_rank_topk_all(agg_hg, gene, ncores = ncore) 
 F2 = query_gene_rank_cor_all(agg_hg, gene, ncores = ncore)
+
+
+
+## From ortho_comparison, outer versus nested for topk_intersect
+
+
+# Generate a gene x gene matrix whose elements represent the count of top K
+# elements shared between the ortho ranks.
+# Rows are human in mouse, cols are mouse in human
+# NOTE: This is taking the top k AFTER filtering for ortho, so not necessarily
+# within the top k ranks of the unfiltered (non-ortho) data
+
+calc_overlap_mat <- function(ortho_l, k, ncores = 1) {
+  
+  # First get list of the top K elements for human and mouse for each gene rank
+  
+  genes <- names(ortho_l)
+  
+  topk_l <- mclapply(ortho_l, function(x) {
+    list(
+      Human = slice_max(x, Avg_RSR_hg, n = k)$Symbol_hg,
+      Mouse = slice_max(x, Avg_RSR_mm, n = k)$Symbol_hg
+    )
+  }, mc.cores = ncores)
+  names(topk_l) <- genes
+  
+  # Generate overlap matrix
+  
+  overlap_mat <- matrix(0, nrow = length(topk_l), ncol = length(topk_l))
+  rownames(overlap_mat) <- colnames(overlap_mat) <- genes
+  
+  for (i in 1:nrow(overlap_mat)) {
+    for (j in 1:ncol(overlap_mat)) {
+      overlap_mat[i, j] <- topk_intersect(topk_l[[i]]$Human, topk_l[[j]]$Mouse)
+    }
+  }
+  
+  tt2 <- outer(lapply(topk_l, `[[`, "Human"),
+               lapply(topk_l, `[[`, "Mouse"),
+               Vectorize(topk_intersect))
+  
+  
+  return(overlap_mat)
+}
+
+
+
+F1 = function() {
+  
+  overlap_mat <- matrix(0, nrow = length(topk_l), ncol = length(topk_l))
+  rownames(overlap_mat) <- colnames(overlap_mat) <- genes
+  
+  for (i in 1:nrow(overlap_mat)) {
+    for (j in 1:ncol(overlap_mat)) {
+      overlap_mat[i, j] <- topk_intersect(topk_l[[i]]$Human, topk_l[[j]]$Mouse)
+    }
+  }
+  
+  return(overlap_mat)
+}
+
+
+F2 = function() {
+  
+  outer(lapply(topk_l, `[[`, "Human"),
+        lapply(topk_l, `[[`, "Mouse"),
+        Vectorize(topk_intersect))
+  
+}
+
+tt1 <- F1()
+tt2 <- F2()
+
+
+res <- microbenchmark::microbenchmark(
+  F1 = F1(),
+  F2 = F2(),
+  times = 5
+)
