@@ -1,18 +1,8 @@
-## Examining aggregate coexpression between mouse and human
-## Most analysis would focus on the 1:1 DIOPT orthologs.
-## But it would be interesting to look for gene family members presence
-
-## For each TR, get the ability of one species to recover the other species's TR.
-## AUPRC, ROC. Have to decide on a cut-off. Could show plot of recovery at different k
-## Null would be... sample of matched genes?
+## Examining aggregate coexpression profiles between mouse and human
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
-library(data.table)
-library(WGCNA)
 library(parallel)
-library(pheatmap)
-library(RColorBrewer)
 library(cowplot)
 library(ggrepel)
 source("R/utils/functions.R")
@@ -42,9 +32,6 @@ rank_tf_hg <- readRDS(rank_tf_hg_path)
 rank_tf_mm <- readRDS(rank_tf_mm_path)
 rank_ribo_hg <- readRDS(rank_ribo_hg_path)
 rank_ribo_mm <- readRDS(rank_ribo_mm_path)
-
-# Genomic evidence from Morin 2023 
-evidence_l <- readRDS(evidence_path)
 
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
@@ -82,7 +69,7 @@ subset_ortho_data <- function(gene,
                               rank_hg = rank_tf_hg,
                               rank_mm = rank_tf_mm) {
   
-  gene_ortho <- filter(pc_ortho, Symbol_hg == gene | Symbol_mm == gene)
+  gene_ortho <- filter(pc_df, Symbol_hg == gene | Symbol_mm == gene)
   
   if (nrow(gene_ortho) != 1) stop("A one to one match was not found")
   
@@ -147,14 +134,14 @@ cor_low <- filter(ortho_cor, Cor < -0.2) %>% arrange(Cor)
 cor_high <- filter(ortho_cor, Cor > 0.8) %>% arrange(-Cor)
 
 
-check_tf <- "HNF4A"
+check_tf <- "ASCL1"
 
 
 rank_common <- rank_tf_ortho[[check_tf]] %>% 
-  mutate(Diff = Avg_RSR_hg - Avg_RSR_mm,
+  mutate(Diff_rank = Rank_RSR_hg - Rank_RSR_mm,
          Add = Avg_RSR_hg + Avg_RSR_mm,
          RP = rank(Rank_RSR_hg * Rank_RSR_mm)) %>% 
-  relocate(Symbol_hg, RP, Rank_RSR_hg, Rank_RSR_mm, Add, Diff)
+  relocate(Symbol_hg, RP, Rank_RSR_hg, Rank_RSR_mm, Add, Diff_rank, Avg_RSR_hg, Avg_RSR_mm)
 
 
 
@@ -182,7 +169,7 @@ ext_counts_mm <- rowSums(msr_mm[ext_mm, ])
 
 
 
-k <- 100
+k <- 200
 
 
 topk_l <- mclapply(rank_tf_ortho, function(x) {
@@ -208,43 +195,47 @@ for (i in 1:nrow(overlap_mat)) {
 
 
 
-# Sums across rows (human) and cols (mouse) to get most common/generic 
+# Mean across rows (human) and cols (mouse) to get most common/generic 
 
-overlap_row <- rowSums(overlap_mat)
-overlap_col <- colSums(overlap_mat)
+common_overlap <- data.frame(
+  Symbol = rownames(overlap_mat),
+  Hg_in_mm = rowMeans(overlap_mat),
+  Mm_in_hg = colMeans(overlap_mat)
+)
+
 
 
 # Inspect the human in mouse with the highest overlap
-head(sort(-overlap_row))
+slice_max(common_overlap, Hg_in_mm)
 overlap_mat["MEF2C", "MEF2C"]
 head(sort(-overlap_mat["MEF2C", ]), 20)
 sum(msr_hg["MEF2C", ])
 intersect(topk_l$MEF2C$Human, topk_l$FLI1$Mouse)
 
 # Inspect the mouse in human with the highest overlap
-head(sort(-overlap_col))
+slice_max(common_overlap, Mm_in_hg)
 overlap_mat["RXRA", "RXRA"]
 head(sort(-overlap_mat[, "RXRA"]), 20)
 sum(msr_mm["Rxra", ])
 intersect(topk_l$MEF2C$Human, topk_l$RXRA$Mouse)
 
 # Inspect the human in mouse with lowest overlap
-head(sort(overlap_row))
+slice_min(common_overlap, Hg_in_mm)
 overlap_mat["ZSCAN5B", "ZSCAN5B"]
 head(sort(-overlap_mat["ZSCAN5B", ]), 20)
 sum(msr_hg["ZSCAN5B", ])
 intersect(topk_l$ZSCAN5B$Human, topk_l$ASCL2$Mouse)
 
 # Inspect mouse in human with lowest overlap
-head(sort(overlap_col))
+slice_min(common_overlap, Mm_in_hg)
 overlap_mat["DMRTC2", "DMRTC2"]
 head(sort(-overlap_mat[, "DMRTC2"]), 20)
 sum(msr_mm["Dmrtc2", ])
 intersect(topk_l$KLF17$Human, topk_l$DMRTC2$Mouse)
 
 
-# TODO: relative positioning of CENPA
-
+# Relative positioning of CENPA
+which(arrange(common_overlap, desc(Hg_in_mm))$Symbol == "CENPA")
 
 
 # Df of the counts and relative percentiles of the ortho top k overlap
@@ -270,9 +261,13 @@ ortho_perc_df$Perc_ortho <- rowMeans(ortho_perc_df[, c("Perc_hg_in_mm", "Perc_mm
 
 
 summary(Filter(is.numeric, ortho_perc_df))
+summary(Filter(is.numeric, filter(ortho_perc_df, Topk_count > 0)))
+
+sum(ortho_perc_df$Topk_count == 0)
 sum(ortho_perc_df$Perc_mm_in_hg == 1)
 sum(ortho_perc_df$Perc_hg_in_mm == 1)
 sum(ortho_perc_df$Perc_ortho == 1)
+
 
 
 # NEUROG3 example of no overlap but elevated percentiles
@@ -329,8 +324,229 @@ bottomk_perc <- mclapply(tfs_ortho$Symbol_hg, function(x) {
 bottomk_perc_df <- do.call(rbind, bottomk_perc)
 bottomk_perc_df$Perc_ortho <- rowMeans(bottomk_perc_df[, c("Perc_hg_in_mm", "Perc_mm_in_hg")])
 
+summary(Filter(is.numeric, bottomk_perc_df))
 
-###
+
+# Combining similarities
+
+a1 <- rename_with(ortho_perc_df, ~paste0("Topk_", .), -c("Symbol", "Topk_count"))
+a2 <- rename_with(bottomk_perc_df, ~paste0("Bottomk_", .), -c("Symbol", "Bottomk_count"))
+ortho_df <- left_join(ortho_cor, a1, by = "Symbol") %>% left_join(a2, by = "Symbol")
+
+
+cor(select_if(ortho_df, is.numeric), method = "spearman")
+
+qplot(ortho_df, xvar = "Bottomk_Perc_mm_in_hg", yvar = "Bottomk_Perc_hg_in_mm")
+
+qplot(ortho_df, xvar = "Bottomk_Perc_ortho", yvar = "Topk_Perc_ortho")
+
+qplot(ortho_df, xvar = "Topk_count", yvar = "Bottomk_count")
+
+qplot(ortho_df, xvar = "Bottomk_count", yvar = "Bottomk_Perc_ortho")
+
+
+qplot(ortho_df, xvar = "Bottomk_count", yvar = "Cor")
+qplot(ortho_df, xvar = "Topk_count", yvar = "Cor")
+
+
+
+filter(ortho_df, Topk_Perc_ortho == 1 & Bottomk_Perc_ortho == 1)
+filter(ortho_df, Topk_Perc_ortho > 0.99 & Bottomk_Perc_ortho > 0.99)
+
+
+# PCA
+# Looking at all experiments for a given set of TFs, and their aggregate profile
+# ------------------------------------------------------------------------------
+
+
+# TODO:
+
+bind_ortho_matrix <- function(gene, 
+                              agg_l_hg, 
+                              agg_l_mm,
+                              msr_mat_hg = msr_hg,
+                              msr_mat_mm = msr_mm,
+                              pc_df = pc_ortho) {
+  
+  gene_ortho <- filter(pc_df, Symbol_hg == gene | Symbol_mm == gene)
+  if (nrow(gene_ortho) != 1) stop("A one to one match was not found")
+  gene_hg <- gene_ortho$Symbol_hg
+  gene_mm <- gene_ortho$Symbol_mm
+  
+  mat_hg <- subset_to_measured(gene_vec_to_mat(agg_l_hg, gene_hg), msr_mat_hg, gene_hg)
+  mat_mm <- subset_to_measured(gene_vec_to_mat(agg_l_mm, gene_mm), msr_mat_mm, gene_mm)
+  
+  mat_hg <- mat_hg[pc_df$Symbol_hg, ]
+  mat_mm <- mat_mm[pc_df$Symbol_mm, ]
+  mat_ortho <- cbind(mat_hg, mat_mm)
+  rownames(mat_ortho) <- pc_df$Symbol_hg
+
+  return(mat_ortho)  
+}
+
+
+
+# Performs PCA with prcomp and returns list of the resulting 
+# object as well as the variance explained
+# TODO: expected shape of mat
+
+pca_and_var <- function(mat, scale_arg = TRUE) {
+  
+  # prcomp expects samples as rows, features (genes) as columns so transpose
+  pcmat <- prcomp(t(mat), scale = scale_arg)
+  
+  # variance explained by the PCs
+  prc_var <- pcmat$sdev ^ 2
+  var_explained <- round(prc_var / sum(prc_var) * 100, 2)
+  cumvar_explained <- cumsum(var_explained)/sum(var_explained)
+  
+  return(list(PC = pcmat, 
+              Var_explained = var_explained, 
+              Cumvar_explained = cumvar_explained))
+}
+
+
+
+pc_scatter <- function(df,
+                       pc_list,
+                       pc_x,
+                       pc_y,
+                       title = NULL) {
+  
+  ggplot(df, aes(x = !!sym(paste0("PC", pc_x)),
+                 y = !!sym(paste0("PC", pc_y)))) +
+    geom_point(aes(fill = Symbol, shape = Species), size = 6) +
+    xlab(paste0("PC", pc_x, "(", pc_list$Var_explained[pc_x], "%)")) +
+    ylab(paste0("PC", pc_y, "(", pc_list$Var_explained[pc_y], "%)")) +
+    ggtitle(title) +
+    scale_shape_manual(values = c(22, 24)) +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    theme_classic() +
+    theme(axis.title = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+  
+}
+
+
+
+gene1 <- "PAX6"
+gene2 <- "RUNX1"
+gene3 <- "ASCL1"
+
+
+gene_mat1 <- bind_ortho_matrix(gene = gene1,
+                               agg_l_hg = agg_tf_hg,
+                               agg_l_mm = agg_tf_mm)
+
+
+gene_mat2 <- bind_ortho_matrix(gene = gene2,
+                               agg_l_hg = agg_tf_hg,
+                               agg_l_mm = agg_tf_mm)
+
+
+gene_mat3 <- bind_ortho_matrix(gene = gene3,
+                               agg_l_hg = agg_tf_hg,
+                               agg_l_mm = agg_tf_mm)
+
+
+# gene_mat3 <- bind_ortho_matrix(gene = gene3,
+#                                agg_l_hg = agg_ribo_hg,
+#                                agg_l_mm = agg_ribo_mm)
+
+
+ortho_mat <- cbind(gene_mat1, gene_mat2, gene_mat3)
+
+
+ortho_pca <- pca_and_var(ortho_mat, scale_arg = FALSE)
+
+
+npcs <- 10
+
+# top genes
+# sort(abs(ortho_pca$PC$rotation[, 1]), decreasing = TRUE)[1:50]
+# sort(abs(ortho_pca$PC$rotation[, 2]), decreasing = TRUE)[1:50]
+
+
+pca_df <- data.frame(
+  ortho_pca$PC$x[, 1:npcs],
+  Symbol = c(rep(gene1, ncol(gene_mat1)), 
+             rep(gene2, ncol(gene_mat2)), 
+             rep(gene3, ncol(gene_mat3))),
+  ID = colnames(ortho_mat)
+) %>% 
+  left_join(sc_meta[, c("ID", "Species")], by = "ID")
+
+
+
+p1a <- pc_scatter(df = pca_df, pc_list = ortho_pca, pc_x = 1, pc_y = 2)
+p1b <- pc_scatter(df = pca_df, pc_list = ortho_pca, pc_x = 2, pc_y = 3)
+p1c <- pc_scatter(df = pca_df, pc_list = ortho_pca, pc_x = 3, pc_y = 4) 
+p1d <- pc_scatter(df = pca_df, pc_list = ortho_pca, pc_x = 4, pc_y = 5) 
+p1_leg <- get_legend(p1d)
+p1d <- p1d + theme(legend.position = "none")
+p1 <- plot_grid(p1a, p1b, p1c, p1d, nrow = 2)
+p1 <- plot_grid(p1, p1_leg, rel_widths = c(2, 0.3))
+
+
+
+# genes <- c("ASCL1", "RUNX1", "PAX6", "HES1", "MEF2C", "NEUROD1", "MECP2", "TCF4")
+# genes <- c(gene1, gene2, gene3)
+# genes <- slice_max(ortho_df, Cor, n = 8)$Symbol
+genes <- slice_max(ortho_df, Topk_count, n = 8)$Symbol
+
+
+# Rank has self-gene removed. Need to add back in
+
+b1 <- lapply(genes, function(x) {
+  
+  df <- rank_tf_ortho[[x]][, c("Symbol_hg", "Avg_RSR_hg", "Avg_RSR_mm")]
+  colnames(df) <- c("Symbol", paste0(x, c("_Human", "_Mouse")))
+  
+  df <- rbind(df, c(x, 1, 1))
+
+  df <- df %>% 
+    arrange(match(Symbol, pc_ortho$Symbol_hg)) %>% 
+    select(-Symbol) %>% 
+    mutate_if(is.character, as.numeric)
+  
+  
+  return(df)
+})
+
+b2 <- do.call(cbind, b1)
+rownames(b2) <- pc_ortho$Symbol_hg
+
+
+agg_pca <- pca_and_var(b2, scale_arg = FALSE)
+
+
+agg_pca_df <- data.frame(
+  agg_pca$PC$x[, 1:length(genes)],
+  Symbol = rep(genes, each = 2),
+  Species = rep(c("Human", "Mouse"), times = length(genes))
+) 
+
+
+pc_scatter(df = agg_pca_df, pc_list = agg_pca, pc_x = 1, pc_y = 2)
+pc_scatter(df = agg_pca_df, pc_list = agg_pca, pc_x = 3, pc_y = 4)
+pc_scatter(df = agg_pca_df, pc_list = agg_pca, pc_x = 1, pc_y = 3)
+
+
+tt1 <- umap::umap(t(b2))
+tt2 <- data.frame(tt1$layout)
+colnames(tt2) <- c("UMAP1", "UMAP2")
+tt3 <- cbind(tt2, agg_pca_df)
+
+
+ggplot(tt3, aes(x = UMAP1, y = UMAP2)) +
+  geom_point(aes(fill = Symbol, shape = Species), size = 6) +
+  scale_shape_manual(values = c(22, 24)) +
+  guides(fill = guide_legend(override.aes = list(shape = 21))) +
+  theme_classic() +
+  theme(axis.title = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 20))
 
 
 
@@ -380,7 +596,7 @@ qplot(ortho_perc_df, xvar = "Topk_count", yvar = "Perc_ortho") +
 
 # Scatter plot of topk counts between species
 
-plot_gene <- "NEUROG3"
+plot_gene <- "ASCL1"
 
 plot_dfx <- data.frame(
   Symbol = rownames(overlap_mat),
@@ -427,6 +643,18 @@ plot_grid(
   nrow = 2)
 
 
+# Plots of common
+
+
+plot_grid(
+  plot_hist(common_overlap, stat_col = "Hg_in_mm") + xlab("Human in mouse"),
+  plot_hist(common_overlap, stat_col = "Hg_in_mm") + xlab("Mouse in human"),
+  nrow = 2)
+
+
+qplot(common_overlap, xvar = "Hg_in_mm", yvar = "Mm_in_hg")
+
+
 
 
 ### TODO: OLD below, to be removed/updated
@@ -437,44 +665,7 @@ plot_grid(
 # ------------------------------------------------------------------------------
 
 
-# TODO: replace - get a matrix of aggregate vectors for one gene both species
 
-get_ortho_mat <- function(genes, ids, meta, pc_df, ncores = 1) {
-  
-  stopifnot(all(ids %in% meta$ID))
-  meta_hg <- filter(meta, ID %in% ids & Species == "Human")
-  meta_mm <- filter(meta, ID %in% ids & Species == "Mouse")
-  ortho_genes <- filter(pc_df, Symbol_hg %in% genes | Symbol_mm %in% genes)
-  
-  # load data and only keep requested gene 
-  
-  agg_hg <- mclapply(1:nrow(meta_hg), function(x) {
-    load_agg_mat_list(ids = meta_hg$ID[x], paths = meta_hg$Path[x])[[1]][pc_df$Symbol_hg, ortho_genes$Symbol_hg]
-  }, mc.cores = ncores)
-  
-  
-  agg_mm <- mclapply(1:nrow(meta_mm), function(x) {
-    load_agg_mat_list(ids = meta_mm$ID[x], paths = meta_mm$Path[x])[[1]][pc_df$Symbol_mm, ortho_genes$Symbol_mm]
-  }, mc.cores = ncores)
-  
-  
-  ortho_l <- mclapply(1:nrow(ortho_genes), function(i) {
-    
-    hg_l <- lapply(agg_hg, function(x) x[, ortho_genes$Symbol_hg[i]])
-    mm_l <- lapply(agg_mm, function(x) x[, ortho_genes$Symbol_mm[i]])
-    
-    ortho_mat <- do.call(cbind, c(hg_l, mm_l))
-    rownames(ortho_mat) <- pc_df$ID
-    colnames(ortho_mat) <- paste0(c(meta_hg$ID, meta_mm$ID), "_", ortho_genes$Symbol_hg[i])
-    
-    return(ortho_mat)
-  }, mc.cores = ncores)
-  
-  names(ortho_l) <- ortho_genes$ID
-  gc(verbose = FALSE)
-  
-  return(ortho_l)
-}
 
 
 
@@ -511,140 +702,9 @@ get_jaccard_matrix <- function(mat) {
 
 
 
-# Performs PCA with prcomp and returns list of the resulting 
-# object as well as the variance explained
-
-pca_and_var <- function(mat, scale_arg = TRUE) {
-  
-  # prcomp expects samples as rows, features (genes) as columns so transpose
-  pcmat <- prcomp(t(mat), scale = scale_arg)
-  
-  # variance explained by the PCs
-  prc_var <- pcmat$sdev ^ 2
-  var_explained <- round(prc_var / sum(prc_var) * 100, 2)
-  cumvar_explained <- cumsum(var_explained)/sum(var_explained)
-  return(list(PC = pcmat, 
-              Var_explained = var_explained, 
-              Cumvar_explained = cumvar_explained))
-}
 
 
 
-pc_scatter <- function(df,
-                       pc_list,
-                       pc_x,
-                       pc_y,
-                       title = NULL) {
-  
-  ggplot(df, aes(x = !!sym(paste0("PC", pc_x)),
-                 y = !!sym(paste0("PC", pc_y)))) +
-    geom_point(aes(fill = Symbol, shape = Species), size = 6) +
-    xlab(paste0("PC", pc_x, "(", pc_list$Var_explained[pc_x], "%)")) +
-    ylab(paste0("PC", pc_y, "(", pc_list$Var_explained[pc_y], "%)")) +
-    ggtitle(title) +
-    scale_shape_manual(values = c(22, 24)) +
-    guides(fill = guide_legend(override.aes = list(shape = 21))) +
-    theme_classic() +
-    theme(axis.title = element_text(size = 20),
-          legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
-  
-}
-
-
-
-# Generate ortho mat for given gene
-# ------------------------------------------------------------------------------
-
-
-tfs <- c("Ascl1", "Hes1", "Mecp2", "Mef2c", "Neurod1", "Pax6", "Runx1", "Tcf4")
-
-genes <- pc_df %>% 
-  filter(Symbol_hg %in% c(tfs, ribo_genes$Symbol_hg) | 
-         Symbol_mm %in% c(tfs, ribo_genes$Symbol_mm)) %>% 
-  pull(Symbol_hg)
-  
-ids <- c(meta_hg$ID, meta_mm$ID)
-
-
-
-# outfile <- "/space/scratch/amorin/R_objects/16-06-2023_ortho_aggcoexp.RDS"
-outfile <- "/space/scratch/amorin/R_objects/19-06-2023_ortho_aggcoexp.RDS"
-
-
-
-if (!file.exists(outfile)) {
-  
-  message("Starting to generate list of ortho matrices: ", Sys.time())
-  
-  ortho_l <- get_ortho_mat(genes = genes, 
-                           ids = ids, 
-                           meta = sc_meta, 
-                           pc_df = pc_df,
-                           ncores = ncore)
-  
-  saveRDS(ortho_l, outfile)
-  
-  message("Done: ", Sys.time())
-  
-} else {
-  
-  ortho_l <- readRDS(outfile)
-
-}
-
-
-
-
-# Extract a single matrix of interest
-
-# sub_genes <- filter(pc_df, Symbol_hg %in% c("PAX6", "RPL3", "RPL13"))$ID
-# sub_genes <- filter(pc_df, Symbol_mm %in% tfs)$ID
-# sub_genes <- c(filter(pc_df, Symbol_mm %in% tfs)$ID, filter(pc_df, Symbol_hg %in% c("RPL3", "RPL13"))$ID)
-# sub_genes <- filter(pc_df, Symbol_hg %in% c("RPL3", "RPL13"))$ID
-sub_genes <- names(ortho_l)
-# sub_genes <- filter(pc_df, Symbol_hg %in% c("RUNX1", "HES1"))$ID
-
-
-ortho_mat <- do.call(cbind, ortho_l[sub_genes])
-ortho_mat_bin <- make_discrete_k_mat(ortho_mat, k = 1000)
-
-
-
-
-# PCA 
-# ------------------------------------------------------------------------------
-
-# ortho_pca <- pca_and_var(ortho_mat, scale_arg = TRUE)
-ortho_pca <- pca_and_var(ortho_mat, scale_arg = FALSE)
-# ortho_pca <- pca_and_var(ortho_mat_bin, scale_arg = FALSE)
-
-
-
-# top genes
-npcs <- 10
-# sort(abs(ortho_pca$PC$rotation[, 1]), decreasing = TRUE)[1:50]
-# sort(abs(ortho_pca$PC$rotation[, 2]), decreasing = TRUE)[1:50]
-
-
-df <- data.frame(
-  ortho_pca$PC$x[, 1:npcs],
-  Matrix_ID = colnames(ortho_mat),
-  ID = rep(ids, length(sub_genes)),
-  Symbol = rep(sub_genes, each = length(ids))
-) %>%
-  left_join(sc_meta[, c("ID", "Species")], by = "ID")
-
-
-
-p1a <- pc_scatter(df = df, pc_list = ortho_pca, pc_x = 1, pc_y = 2) + theme(legend.position = "none")
-p1b <- pc_scatter(df = df, pc_list = ortho_pca, pc_x = 2, pc_y = 3) + theme(legend.position = "none")
-p1c <- pc_scatter(df = df, pc_list = ortho_pca, pc_x = 3, pc_y = 4) + theme(legend.position = "none")
-p1d <- pc_scatter(df = df, pc_list = ortho_pca, pc_x = 4, pc_y = 5) 
-p1_leg <- get_legend(p1d)
-p1d <- p1d + theme(legend.position = "none")
-p1 <- plot_grid(p1a, p1b, p1c, p1d, nrow = 2)
-p1 <- plot_grid(p1, p1_leg, rel_widths = c(2, 0.3))
 
 
 
