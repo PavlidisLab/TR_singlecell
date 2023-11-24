@@ -143,6 +143,8 @@ colwise_cor <- function(mat, cor_method = "spearman", ncores = 1) {
 
 
 # TODO:
+# https://stackoverflow.com/a/66594545 Jaccard faster than nested loop 
+
 
 colwise_jaccard <- function(mat, k, check_k_arg = TRUE) {
   
