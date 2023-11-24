@@ -79,12 +79,12 @@ join_ortho_ranks <- function(gene,
     filter(!is.na(ID))
   
   
-  ortho_df <- left_join(df_hg, df_mm, 
+  sim_df <- left_join(df_hg, df_mm, 
                         by = "ID", 
                         suffix = c("_hg", "_mm")) %>% 
     filter(!is.na(Avg_RSR_hg) & !is.na(Avg_RSR_mm))
   
-  return(ortho_df)
+  return(sim_df)
 }
 
 
@@ -201,21 +201,24 @@ topk_df <- gen_percentile_df(topk_mat, ncores = ncore)
 bottomk_df <- gen_percentile_df(bottomk_mat, ncores = ncore)
 
 
-# Prepare and join all similarity dfs
+# Measurement counts for each TF
+msr_df <- data.frame(
+  Symbol = tfs_ortho$Symbol_hg,
+  N_hg = rowSums(msr_hg[tfs_ortho$Symbol_hg, ]),
+  N_mm = rowSums(msr_mm[tfs_ortho$Symbol_mm, ])
+)
+
+
+# Prepare and join all dfs
 topk_df <- rename_with(topk_df, ~paste0("Topk_", .), -c("Symbol"))
 bottomk_df <- rename_with(bottomk_df, ~paste0("Bottomk_", .), -c("Symbol"))
-sim_df <- plyr::join_all(list(cor_df, topk_df, bottomk_df), by = "Symbol")
+sim_df <- plyr::join_all(list(cor_df, topk_df, bottomk_df, msr_df), by = "Symbol")
 
 
 
-# Exploring the Spearman's correlations
+# Sandbox for exploring ranks between species for a given TF. Look at difference
+# in ranks, adding the average RSR values, and rank product
 # ------------------------------------------------------------------------------
-
-
-cor_summ <- summary(cor_df$Cor)
-
-cor_low <- filter(cor_df, Cor < -0.2) %>% arrange(Cor)
-cor_high <- filter(cor_df, Cor > 0.8) %>% arrange(-Cor)
 
 
 check_tf <- "ASCL1"
@@ -228,146 +231,136 @@ rank_common <- rank_tf_ortho[[check_tf]] %>%
   relocate(Symbol_hg, RP, Rank_RSR_hg, Rank_RSR_mm, Add, Diff_rank, Avg_RSR_hg, Avg_RSR_mm)
 
 
+# Inspect TF overlap
 
-# Check data coverage of extreme TFs, find they are generally well-measured
+overlap_df <- data.frame(
+  Symbol = rownames(topk_mat),
+  Topk_hg_in_mm = topk_mat[check_tf, ],
+  Topk_mm_in_hg = topk_mat[, check_tf],
+  Bottomk_hg_in_mm = bottomk_mat[check_tf, ],
+  Bottomk_mm_in_hg = bottomk_mat[, check_tf]
+)
 
-ext_counts_hg <- rowSums(msr_hg[c(cor_low$Symbol, cor_high$Symbol), ])
-ext_mm <- filter(pc_ortho, Symbol_hg %in% c(cor_low$Symbol, cor_high$Symbol))$Symbol_mm
-ext_counts_mm <- rowSums(msr_mm[ext_mm, ])
 
 
-
-
-
-# Topk overlap of matched ortho TFs
+# Correlation across metrics. The elevated correlation of bottom K with
+# Scor makes me concerned that the high Scor values are being elevated by the 
+# bottom of the rankings, which are less reliable. Also see strong cor between
+# measurement and Scor. 
 # ------------------------------------------------------------------------------
 
 
-
-
-tt <- calc_overlap_mat(ortho_l = rank_tf_ortho, 
-                       k = 200, 
-                       ncores = ncore)
+sim_cor <- cor(select_if(sim_df, is.numeric), method = "spearman")
 
 
 
-tt2 <- calc_overlap_mat(ortho_l = rank_tf_ortho, 
-                        reverse = TRUE,
-                        k = 200, 
-                        ncores = ncore)
+# Exploring Spearman's correlations
+# ------------------------------------------------------------------------------
 
 
+# High median Scor (0.71). Few TFs that have low correlation, with HESX1 lowest.
+# Cautious about interpreting this as species differential... different coverage
+# of cell types and inspection doesn't provide immediately striking examples. 
 
-tt3 <- gen_percentile_df(tt1, ncores = ncore)
-tt4 <- gen_percentile_df(tt2, ncores = ncore)
+summ_cor <- summary(sim_df$Cor)
+cor_low <- filter(sim_df, Cor < -0.2) %>% arrange(Cor)
+cor_high <- filter(sim_df, Cor > 0.8) %>% arrange(-Cor)
 
 
+# Topk overlap
+# ------------------------------------------------------------------------------
 
+
+# Find that 174 (14.0%) of human and 171 (13.8%) of mouse TFs have best match
+# with their ortholog.
+
+
+summ_topk <- summary(Filter(is.numeric, topk_df))
+
+extremes_topk <- list(
+  Count0 = sum(topk_df$Topk_Count == 0),
+  Perc_hg1 = sum(topk_df$Topk_Perc_hg_in_mm == 1),
+  Perc_mm1 = sum(topk_df$Topk_Perc_mm_in_hg == 1),
+  Perc_ortho1 = sum(topk_df$Topk_Perc_ortho == 1)
+)
 
 
 # Mean across rows (human) and cols (mouse) to get most common/generic 
 
-common_overlap <- data.frame(
-  Symbol = rownames(overlap_mat),
-  Hg_in_mm = rowMeans(overlap_mat),
-  Mm_in_hg = colMeans(overlap_mat)
+common_topk <- data.frame(
+  Symbol = rownames(topk_mat),
+  Hg_in_mm = rowMeans(topk_mat),
+  Mm_in_hg = colMeans(topk_mat)
 )
 
 
 
-# Inspect the human in mouse with the highest overlap
-slice_max(common_overlap, Hg_in_mm)
-overlap_mat["MEF2C", "MEF2C"]
-head(sort(-overlap_mat["MEF2C", ]), 20)
-sum(msr_hg["MEF2C", ])
-intersect(topk_l$MEF2C$Human, topk_l$FLI1$Mouse)
+# Inspect TFs with highest generic human in mouse overlap. Find that they still
+# generally are specific to their matched ortholog, despite having more common
+# overlap in general. FOXO4 exception: high Mm_in_hg, but Perc_mm_in_hg ~ 0.68
 
-# Inspect the mouse in human with the highest overlap
-slice_max(common_overlap, Mm_in_hg)
-overlap_mat["RXRA", "RXRA"]
-head(sort(-overlap_mat[, "RXRA"]), 20)
-sum(msr_mm["Rxra", ])
-intersect(topk_l$MEF2C$Human, topk_l$RXRA$Mouse)
-
-# Inspect the human in mouse with lowest overlap
-slice_min(common_overlap, Hg_in_mm)
-overlap_mat["ZSCAN5B", "ZSCAN5B"]
-head(sort(-overlap_mat["ZSCAN5B", ]), 20)
-sum(msr_hg["ZSCAN5B", ])
-intersect(topk_l$ZSCAN5B$Human, topk_l$ASCL2$Mouse)
-
-# Inspect mouse in human with lowest overlap
-slice_min(common_overlap, Mm_in_hg)
-overlap_mat["DMRTC2", "DMRTC2"]
-head(sort(-overlap_mat[, "DMRTC2"]), 20)
-sum(msr_mm["Dmrtc2", ])
-intersect(topk_l$KLF17$Human, topk_l$DMRTC2$Mouse)
+most_common_topk <- common_topk %>% 
+  filter(Symbol %in% slice_max(., Hg_in_mm, n = 5)$Symbol | 
+         Symbol %in% slice_max(., Mm_in_hg, n = 5)$Symbol) %>% 
+  left_join(., sim_df, by = "Symbol")
 
 
-# Relative positioning of CENPA
-which(arrange(common_overlap, desc(Hg_in_mm))$Symbol == "CENPA")
+# TFs with no overlap
+
+no_topk <- filter(sim_df, Topk_Count == 0)
 
 
 
 
-
-summary(Filter(is.numeric, ortho_perc_df))
-summary(Filter(is.numeric, filter(ortho_perc_df, Topk_count > 0)))
-
-sum(ortho_perc_df$Topk_count == 0)
-sum(ortho_perc_df$Perc_mm_in_hg == 1)
-sum(ortho_perc_df$Perc_hg_in_mm == 1)
-sum(ortho_perc_df$Perc_ortho == 1)
-
-
-
-# NEUROG3 example of no overlap but elevated percentiles
-
-inspect_df <- data.frame(
-  Symbol = rownames(overlap_mat),
-  Hg_in_mm = overlap_mat["NEUROG3", ],
-  Mm_in_hg = overlap_mat[, "NEUROG3"]
-)
-
-
-
-# Inspect bottom k
+# Bottomk overlap 
 # ------------------------------------------------------------------------------
 
 
-
-summary(Filter(is.numeric, bottomk_perc_df))
-
-
-# Combining similarities
-
-a1 <- rename_with(ortho_perc_df, ~paste0("Topk_", .), -c("Symbol", "Topk_count"))
-a2 <- rename_with(bottomk_perc_df, ~paste0("Bottomk_", .), -c("Symbol", "Bottomk_count"))
-ortho_df <- left_join(ortho_cor, a1, by = "Symbol") %>% left_join(a2, by = "Symbol")
+# Find that 53 (4.3%) of human and 70 (5.6%) of mouse TFs have best match
+# with their ortholog.
 
 
-cor(select_if(ortho_df, is.numeric), method = "spearman")
+summ_bottomk <- summary(Filter(is.numeric, bottomk_df))
 
-qplot(ortho_df, xvar = "Bottomk_Perc_mm_in_hg", yvar = "Bottomk_Perc_hg_in_mm")
+extremes_bottomk <- list(
+  Count0 = sum(bottomk_df$Bottomk_Count == 0),
+  Perc_hg1 = sum(bottomk_df$Bottomk_Perc_hg_in_mm == 1),
+  Perc_mm1 = sum(bottomk_df$Bottomk_Perc_mm_in_hg == 1),
+  Perc_ortho1 = sum(bottomk_df$Bottomk_Perc_ortho == 1)
+)
 
-qplot(ortho_df, xvar = "Bottomk_Perc_ortho", yvar = "Topk_Perc_ortho")
 
-qplot(ortho_df, xvar = "Topk_count", yvar = "Bottomk_count")
+# Mean across rows (human) and cols (mouse) to get most common/generic 
 
-qplot(ortho_df, xvar = "Bottomk_count", yvar = "Bottomk_Perc_ortho")
-
-
-qplot(ortho_df, xvar = "Bottomk_count", yvar = "Cor")
-qplot(ortho_df, xvar = "Topk_count", yvar = "Cor")
+common_bottomk <- data.frame(
+  Symbol = rownames(bottomk_mat),
+  Hg_in_mm = rowMeans(bottomk_mat),
+  Mm_in_hg = colMeans(bottomk_mat)
+)
 
 
 
-filter(ortho_df, Topk_Perc_ortho == 1 & Bottomk_Perc_ortho == 1)
-filter(ortho_df, Topk_Perc_ortho > 0.99 & Bottomk_Perc_ortho > 0.99)
+# Inspect TFs with highest generic human in mouse overlap. Find that they still
+# generally are specific to their matched ortholog, perhaps a touch less than 
+# the common topk comparison
+
+most_common_bottomk <- common_bottomk %>% 
+  filter(Symbol %in% slice_max(., Hg_in_mm, n = 5)$Symbol | 
+         Symbol %in% slice_max(., Mm_in_hg, n = 5)$Symbol) %>% 
+  left_join(., sim_df, by = "Symbol")
 
 
+# TFs with no overlap
+
+no_bottomk <- filter(sim_df, Bottomk_Count == 0)
 
 
+# TFs showing top specificity at top and bottom
+
+most_specific <- list(
+  Top1 = filter(sim_df, Topk_Perc_ortho == 1 & Bottomk_Perc_ortho == 1),
+  Top99 = filter(sim_df, Topk_Perc_ortho > 0.99 & Bottomk_Perc_ortho > 0.99)
+)
 
 
 # Plots
@@ -376,7 +369,7 @@ filter(ortho_df, Topk_Perc_ortho > 0.99 & Bottomk_Perc_ortho > 0.99)
 
 # Histogram of ortho TF spearman cors
 
-px <- plot_hist(cor_df, 
+px1 <- plot_hist(cor_df, 
                 stat_col = "Cor", 
                 xlab = "Spearman's correlation", 
                 title = "n=1241 orthologous TFs") + 
@@ -384,51 +377,77 @@ px <- plot_hist(cor_df,
 
 
 
-ggsave(px, height = 5, width = 7, device = "png", dpi = 300,
+ggsave(px1, height = 5, width = 7, device = "png", dpi = 300,
        filename = file.path(plot_dir, "ortho_rank_similarity.png"))
 
 
 # Scatter of mouse versus human RSR for a given TF
 
-qplot(rank_tf_ortho[[check_tf]], xvar = "Avg_RSR_hg", yvar = "Avg_RSR_mm", title = check_tf)
+px2 <- qplot(rank_tf_ortho[[check_tf]], 
+             xvar = "Avg_RSR_hg", 
+             yvar = "Avg_RSR_mm", 
+             title = check_tf)
 
 
+# Scatter of overlap percentiles in mouse/human
 
-# Scatterplot of percentile in mouse/human
-
-qplot(ortho_perc_df, xvar = "Perc_mm_in_hg", yvar = "Perc_hg_in_mm") +
-  xlab("Percentile mouse in human") +
-  ylab("Percentile human in mouse")
+px3a <- qplot(sim_df, xvar = "Topk_Perc_mm_in_hg", yvar = "Topk_Perc_hg_in_mm") +
+  xlab(paste0("Top K=", k, " percentile mouse in human")) +
+  ylab(paste0("Top K=", k, " percentile human in mouse"))
 
 
-# Hist of actual Top K counts
+px3b <- qplot(sim_df, xvar = "Bottomk_Perc_mm_in_hg", yvar = "Bottomk_Perc_hg_in_mm") +
+  xlab(paste0("Bottom K=", k, " percentile mouse in human")) +
+  ylab(paste0("Bottom K=", k, " percentile human in mouse"))
 
-plot_hist(ortho_perc_df, nbins = 50, stat_col = "Topk_count")
+
+px3c <- qplot(sim_df, xvar = "Bottomk_Perc_ortho", yvar = "Topk_Perc_ortho") +
+  xlab(paste0("Bottom K=", k, " percentile ortho")) +
+  ylab(paste0("Top K=", k, " percentile ortho"))
+
+
+# Plots of the raw overlap counts
+
+px4a <- plot_hist(sim_df, nbins = 50, stat_col = "Topk_Count")
+px4b <- plot_hist(sim_df, nbins = 50, stat_col = "Bottomk_Count")
+px4c <- qplot(sim_df, xvar = "Topk_Count", yvar = "Bottomk_Count")
 
 
 # Scatter of perc ortho versus top k
 
-qplot(ortho_perc_df, xvar = "Topk_count", yvar = "Perc_ortho") +
-  xlab("Top K count") +
-  ylab("Percentile ortho")
+px5a <- qplot(sim_df, xvar = "Topk_Count", yvar = "Topk_Perc_ortho")
+px5b <- qplot(sim_df, xvar = "Bottomk_Count", yvar = "Bottomk_Perc_ortho")
 
 
-
-# Scatter plot of topk counts between species
-
-plot_gene <- "ASCL1"
-
-plot_dfx <- data.frame(
-  Symbol = rownames(overlap_mat),
-  Topk_hg_in_mm = overlap_mat[plot_gene, ],
-  Topk_mm_in_hg = overlap_mat[, plot_gene],
-  Label = rownames(overlap_mat) == plot_gene)
+# Scatter plot of topk counts between species. Label the matched TF in red,
+# and label TFs that were high in both species as black
 
 
-ggplot(plot_dfx, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
+label_genes <- overlap_df %>% 
+  filter(Symbol %in% slice_max(overlap_df, Topk_hg_in_mm, n = 100)$Symbol &
+         Symbol %in% slice_max(overlap_df, Topk_mm_in_hg, n = 100)$Symbol &
+         Symbol != check_tf) %>% 
+  pull(Symbol)
+
+
+plot_df6 <- mutate(overlap_df, 
+                   tf_label = Symbol == check_tf,
+                   gene_label = Symbol %in% label_genes)
+
+
+px6a <- 
+  ggplot(plot_df6, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
   geom_jitter(shape = 21, size = 2.4, width = 0.5, height = 0.5) +
   geom_text_repel(
-    data = filter(plot_dfx, Label),
+    data = filter(plot_df6, tf_label),
+    aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg, label = Symbol, fontface = "italic"),
+    size = 5,
+    nudge_y = 2,
+    segment.size = 0.1,
+    segment.color = "grey50",
+    color = "red") +
+  geom_text_repel(
+    data = filter(plot_df6, gene_label),
     aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg, label = Symbol, fontface = "italic"),
     size = 5,
     segment.size = 0.1,
@@ -446,16 +465,16 @@ ggplot(plot_dfx, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
 # Hist of topk counts for each species
 
 
-plot_grid(
+px6b <- plot_grid(
   
-  plot_hist(plot_dfx, stat_col = "Topk_hg_in_mm") + 
-    geom_vline(xintercept = filter(plot_dfx, Symbol == plot_gene)$Topk_hg_in_mm,
+  plot_hist(plot_df6, stat_col = "Topk_hg_in_mm") + 
+    geom_vline(xintercept = filter(plot_df6, Symbol == check_tf)$Topk_hg_in_mm,
                # width = 1.6,
                col = "royalblue") +
     xlab("Human in mouse"),
   
-  plot_hist(plot_dfx, stat_col = "Topk_mm_in_hg") + 
-    geom_vline(xintercept = filter(plot_dfx, Symbol == plot_gene)$Topk_mm_in_hg, 
+  plot_hist(plot_df6, stat_col = "Topk_mm_in_hg") + 
+    geom_vline(xintercept = filter(plot_df6, Symbol == check_tf)$Topk_mm_in_hg, 
                # width = 1.6,
                col = "goldenrod") +
     xlab("Mouse in human"),
@@ -463,243 +482,26 @@ plot_grid(
   nrow = 2)
 
 
-# Plots of common
+# Plots of common/generic
 
 
-plot_grid(
-  plot_hist(common_overlap, stat_col = "Hg_in_mm") + xlab("Human in mouse"),
-  plot_hist(common_overlap, stat_col = "Hg_in_mm") + xlab("Mouse in human"),
+px7a <- plot_grid(
+  plot_hist(common_topk, stat_col = "Hg_in_mm") + xlab("Human in mouse"),
+  plot_hist(common_topk, stat_col = "Hg_in_mm") + xlab("Mouse in human"),
   nrow = 2)
 
 
-qplot(common_overlap, xvar = "Hg_in_mm", yvar = "Mm_in_hg")
+px7b <- plot_grid(
+  plot_hist(common_bottomk, stat_col = "Hg_in_mm") + xlab("Human in mouse"),
+  plot_hist(common_bottomk, stat_col = "Hg_in_mm") + xlab("Mouse in human"),
+  nrow = 2)
 
 
+px7c <- qplot(common_topk, xvar = "Hg_in_mm", yvar = "Mm_in_hg")
+px7d <- qplot(common_bottomk, xvar = "Hg_in_mm", yvar = "Mm_in_hg")
 
 
-### TODO: OLD below, to be removed/updated
+# Scatter of Scor versus overlap
 
-
-
-# Functions
-# ------------------------------------------------------------------------------
-
-
-
-
-
-
-# TODO: check overlap with similarity functions
-
-# Binarize matrix such that top k and bottom k is 1, mid is 0
-
-make_discrete_k_mat <- function(mat, k = 1000) {
-  
-  bin_mat <- apply(mat, 2, function(x) {
-    sort_values <- sort(x, decreasing = TRUE)
-    topk <- sort_values[k]
-    btmk <- sort_values[length(x) - k + 1]
-    ifelse(x >= topk | x <= btmk, 1, 0)
-  })
-  
-  return(bin_mat)
-}
-
-
-
-# https://stackoverflow.com/a/66594545 Jaccard faster than nested loop 
-
-binary_jaccard <- function(x, y) {
-  sum(x & y) / sum(x | y)  
-}
-
-
-get_jaccard_matrix <- function(mat) {
-  tmp <- asplit(mat, 2)
-  jacc_mat <- outer(tmp, tmp, Vectorize(binary_jaccard))
-  return(jacc_mat)
-}
-
-
-
-
-
-
-
-
-
-# Get average per gene
-ortho_avg <- do.call(
-  cbind,
-  lapply(sub_genes, function(x) rowMeans(ortho_mat[, filter(df, Symbol == x)$Matrix_ID]))
-)
-colnames(ortho_avg) <- sub_genes
-
-
-lapply(1:ncol(ortho_avg), function(x) head(sort(ortho_avg[, x], decreasing = TRUE), 10))
-
-# ortho_mat_rank <- colrank_mat(ortho_mat)
-# head(sort(rowMeans(ortho_mat), decreasing = TRUE), 20)
-# head(sort(rowMeans(ortho_mat_rank), decreasing = FALSE), 20)
-
-
-
-
- 
-# Similarity by TF status. Use Jaccard of top/bottomk and cor
-
-jacc_mat <- get_jaccard_matrix(ortho_mat_bin)
-cor_mat <- WGCNA::cor(ortho_mat, method = "pearson")
-
-
-# Organize into df of unique pairs with group status
-
-
-# hacky name fix for _ delim in IDs
-split_ids <- str_split(colnames(jacc_mat), pattern = "_")
-
-fixed_names <- lapply(split_ids, function(x) {
-  if (length(x) > 2) {
-    x <- paste0(x[1], x[2], "_", x[3])
-  } else {
-    x <- paste0(x[1], "_", x[2])
-  }
-  return(x)
-})
-
-
-colnames(jacc_mat) <- rownames(jacc_mat) <- unlist(fixed_names) 
-
-
-format_pair_df <- function(mat, meta, symmetric = TRUE) {
-  
-  df <- mat_to_df(mat, symmetric = symmetric)
-  
-  row_split <- str_split(df$Row, "_", simplify = TRUE)
-  col_split <- str_split(df$Col, "_", simplify = TRUE)
-  
-  id1 <- row_split[, 1]
-  id2 <- col_split[, 1]
-  
-  tf1 <- str_to_upper(row_split[, 2])
-  tf2 <- str_to_upper(col_split[, 2])
-
-  species1 <- meta$Species[match(id1, meta$ID)]
-  species2 <- meta$Species[match(id2, meta$ID)]
-
-  
-  group <- vapply(1:nrow(row_split), function(i) {
-    if (tf1[i] == tf2[i] & species1[i] == species2[i]) {
-      return("In_gene_in_species")
-    } else if (tf1[i] == tf2[i] & species1[i] != species2[i]) {
-      return("In_gene_out_species")
-    } else {
-      return("Out")
-    }
-  }, FUN.VALUE = character(1))
-  
-
-  group <- factor(group,
-                  levels = c("In_gene_in_species", "In_gene_out_species", "Out"))
-  
-  pair_df <- data.frame(df, 
-                        TF1 = tf1, 
-                        TF2 = tf2, 
-                        Group = group)
-  
-  return(pair_df)
-}
-
-
-
-pair_df <- format_pair_df(jacc_mat, meta = sc_meta, symmetric = TRUE) %>% 
-  dplyr::rename(Jaccard = Value) %>% 
-  mutate(Cor = mat_to_df(cor_mat, symmetric = TRUE)$Value)
-
-
-
-stat <- "Cor"
-boxplot(pair_df[[stat]] ~ pair_df$Group)
-plot(density(filter(pair_df, Group == "In_gene_in_species")[[stat]]))
-lines(density(filter(pair_df, Group == "In_gene_out_species")[[stat]]), col = "red")
-lines(density(filter(pair_df, Group == "Out")[[stat]]), col = "blue")
-
-
-
-
-
-# Why are there numerous examples of perfect similarities between datasets...
-# Because they are not expressed 
-
-top <- filter(pair_df, Jaccard == 1)
-
-id1 <- "GSE115469"
-id2 <- "GSE145928"
-gene1 <- "PAX6"
-
-
-plot(ortho_mat[, paste0(id1, "_", gene1)], ortho_mat[, paste0(id2, "_", gene1)])
-cor(ortho_mat[, paste0(id1, "_", gene1)], ortho_mat[, paste0(id2, "_", gene1)], method = "spearman")
-
-sub_meta <- filter(sc_meta, ID %in% c(id1, id2))
-
-agg_l <- load_agg_mat_list(ids = sub_meta$ID, paths = sub_meta$Path)
-dat_l <- load_dat_list(ids = sub_meta$ID)
-
-sub_mat <- do.call(cbind, lapply(agg_l, function(x) x[, gene1]))
-plot(sub_mat[, 1], sub_mat[, 2])
-cor(sub_mat, method = "spearman")
-
-gene2 <- names(head(sort(sub_mat[, 2], decreasing = TRUE)))[2]
-
-all_celltype_cor(mat = dat_l[[id1]]$Mat, meta = dat_l[[id1]]$Meta, gene1 = gene1, gene2 = gene2)
-all_celltype_cor(mat = dat_l[[id1]]$Mat, meta = dat_l[[id1]]$Meta, gene1 = "RPL3", gene2 = "RPL11")
-
-
-# Train a classifier to check model performance at group discrimination
-
-
-
-
-### TODO: for loop vs mclapply vs outer
-
-
-# TODO: the existance of the nested list object is somehow greatly slowing
-# down R session... speeds back up when removed
-
-# a1 <- mclapply(1:length(topk_l), function(i) {
-#   lapply(1:length(topk_l), function(j) {
-#     topk_intersect(topk_l[[i]]$Human, topk_l[[j]]$Mouse)
-#   })
-# }, mc.cores = ncore)
-
-
-a1 <- lapply(1:length(topk_l), function(i) {
-  lapply(1:length(topk_l), function(j) {
-    topk_intersect(topk_l[[i]]$Human, topk_l[[j]]$Mouse)
-  })
-})
-
-
-a2 <- as.numeric(unlist(a1))
-a3 <- matrix(a2, byrow = TRUE, nrow = length(topk_l), ncol = length(topk_l))
-rownames(a3) <- colnames(a3) <- names(topk_l)
-identical(overlap_mat, a3)
-
-
-
-# https://stackoverflow.com/a/66594545 Jaccard faster than nested loop 
-
-binary_jaccard <- function(x, y) {
-  sum(x & y) / sum(x | y)  
-}
-
-
-get_jaccard_matrix <- function(mat) {
-  tmp <- asplit(mat, 2)
-  jacc_mat <- outer(tmp, tmp, Vectorize(binary_jaccard))
-  return(jacc_mat)
-}
-
-
-###
+px8a <- qplot(sim_df, xvar = "Bottomk_Count", yvar = "Cor")
+px8b <- qplot(sim_df, xvar = "Topk_Count", yvar = "Cor")
