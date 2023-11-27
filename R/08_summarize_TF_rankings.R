@@ -41,13 +41,13 @@ rank_ribo_mm <- readRDS(rank_ribo_mm_path)
 evidence_l <- readRDS(evidence_path)
 
 # Measurement matrices used for filtering when a gene was never expressed
-msr_hg <- readRDS(msr_mat_hg_path)
+# msr_hg <- readRDS(msr_mat_hg_path)
 # msr_mm <- readRDS(msr_mat_mm_path)
 
 # Loading the TF aggregate matrices
-agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
+# agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
 # agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
-agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
+# agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
 # agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
 
 
@@ -76,18 +76,15 @@ rank_order_hg <- sort(rowMeans(rank_mat_hg, na.rm = TRUE))
 rank_order_mm <- sort(rowMeans(rank_mat_mm, na.rm = TRUE))
 
 
-head(rank_order_hg)
-tail(rank_order_hg)
+# head(rank_order_hg)
+# tail(rank_order_hg)
+# head(rank_order_mm)
+# tail(rank_order_mm)
 
-head(rank_order_mm)
-tail(rank_order_mm)
+head(sort(rank_mat_hg["RPL18A",]), 50)
+tail(sort(rank_mat_hg["RPL18A",]), 100)
+hist(rank_mat_hg["RPL18A",])
 
-head(sort(rank_mat_hg["RPL27",]), 50)
-tail(sort(rank_mat_hg["RPL27",]), 50)
-
-
-head(sort(rank_mat_mm["Hes6",]), 50)
-tail(sort(rank_mat_mm["Pax6",]), 50)
 
 
 # microglia
@@ -139,6 +136,80 @@ top_mm <- lapply(rank_tf_mm, slice_min, Rank_RSR) %>%
   do.call(rbind, .,) %>% 
   rownames_to_column(var = "TF") %>% 
   arrange(desc(Topk_count))
+
+
+# Largest delta between top ranked by Avg_RSR and second highest... evidence
+# of neighbouring genes?
+
+calc_top_delta <- function(rank_l) {
+  
+  tfs <- names(rank_l)
+  
+  delta_l <- lapply(tfs, function(x) {
+    top <- slice_max(rank_l[[x]], Avg_RSR, n = 2) %>% arrange(desc(Avg_RSR))
+    data.frame(TF = x, Symbol = top$Symbol[1], Delta = abs(diff(top$Avg_RSR)))
+  })
+  
+  delta_df <- data.frame(do.call(rbind, delta_l)) %>% arrange(desc(Delta))
+  
+  return(delta_df)
+}
+
+
+delta_hg <- calc_top_delta(rank_tf_hg)
+delta_mm <- calc_top_delta(rank_tf_mm)
+
+
+
+source("~/TRagg/R/utils/range_table_functions.R")
+pc_gr_hg <- pc_to_gr(filter(pc_hg, !is.na(Start)))
+pc_gr_mm <- pc_to_gr(filter(pc_mm, !is.na(Start)))
+
+
+# Removing NA start removes some TFs with rankings
+# TODO: check why ZNF883 removed
+delta_hg <- filter(delta_hg, TF %in% pc_gr_hg$Symbol)
+delta_mm <- filter(delta_hg, TF %in% pc_gr_mm$Symbol)
+
+
+# Distance
+# TODO: NA necessary?
+
+# dist_hg <- lapply(1:nrow(delta_hg), function(x) {
+#   
+#   tf_gr <- pc_gr_hg[pc_gr_hg$Symbol %in% c(delta_hg$TF[x], delta_hg$Symbol[x])]
+#   chroms <- as.character(seqnames(tf_gr))
+#   
+#   if (!identical(chroms[1], chroms[2])) {
+#     return(NA)
+#   } else {
+#     abs(distance(tf_gr[1], tf_gr[2], ignore.strand = TRUE))
+#   }
+# })
+
+
+# delta_hg$Distance <- unlist(dist_hg)
+
+
+# TODO: nearest gene
+
+dist_hg <- lapply(1:nrow(delta_hg), function(x) {
+  
+  tf_gr <- pc_gr_hg[pc_gr_hg$Symbol == delta_hg$TF[x]]
+  out_gr <- pc_gr_hg[pc_gr_hg$Symbol != delta_hg$TF[x]]
+  
+  out_gr$Distance <- distance(tf_gr, out_gr, ignore.strand = TRUE)
+  out_gr <- out_gr[order(out_gr$Distance)]
+  
+  top_dist <- out_gr[which(out_gr$Symbol == delta_hg$Symbol[x])]$Distance
+  top_rank <- which(out_gr$Symbol == delta_hg$Symbol[x])
+  
+  data.frame(Distance = top_dist, Rank = top_rank)
+  
+})
+
+
+delta_hg2 <- cbind(delta_hg, do.call(rbind, dist_hg))
 
 
 
