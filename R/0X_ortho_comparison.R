@@ -242,6 +242,11 @@ overlap_df <- data.frame(
 )
 
 
+intersect(
+  slice_min(rank_tf_ortho$ASCL1, Rank_RSR_hg, n = k)$Symbol_hg,
+  slice_min(rank_tf_ortho$ASCL1, Rank_RSR_mm, n = k)$Symbol_hg
+)
+
 
 # Correlation across metrics. The elevated correlation of bottom K with
 # Scor makes me concerned that the high Scor values are being elevated by the 
@@ -350,9 +355,14 @@ most_common_bottomk <- common_bottomk %>%
   left_join(., sim_df, by = "Symbol")
 
 
-# TFs with no overlap
+# TFs with minimal or no overlap
 
 no_bottomk <- filter(sim_df, Bottomk_Count == 0)
+minimal_overlap <- filter(sim_df, Topk_Perc_ortho < 0.5 & Bottomk_Perc_ortho < 0.5)
+
+# TFs preserved in bottom but not top
+
+bottom_not_top <- filter(sim_df, Topk_Perc_ortho < 0.5 & Bottomk_Perc_ortho > 0.9)
 
 
 # TFs showing top specificity at top and bottom
@@ -406,6 +416,10 @@ px3c <- qplot(sim_df, xvar = "Bottomk_Perc_ortho", yvar = "Topk_Perc_ortho") +
   ylab(paste0("Top K=", k, " percentile ortho"))
 
 
+ggsave(px3a, height = 7, width = 7, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "topk_percentile_between_species.png"))
+
+
 # Plots of the raw overlap counts
 
 px4a <- plot_hist(sim_df, nbins = 50, stat_col = "Topk_Count")
@@ -435,7 +449,7 @@ plot_df6 <- mutate(overlap_df,
                    gene_label = Symbol %in% label_genes)
 
 
-px6a <- 
+  px6a <- 
   ggplot(plot_df6, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
   geom_jitter(shape = 21, size = 2.4, width = 0.5, height = 0.5) +
   geom_text_repel(
@@ -461,7 +475,10 @@ px6a <-
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
+ggsave(px6a, height = 7, width = 7, device = "png", dpi = 300,
+       filename = file.path(plot_dir, paste0(check_tf, "_topk_count_between_species.png")))
 
+  
 # Hist of topk counts for each species
 
 
@@ -480,6 +497,10 @@ px6b <- plot_grid(
     xlab("Mouse in human"),
   
   nrow = 2)
+
+
+ggsave(px6b, height = 7, width = 7, device = "png", dpi = 300,
+       filename = file.path(plot_dir, paste0(check_tf, "_topk_count_hist.png")))
 
 
 # Plots of common/generic
