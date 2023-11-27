@@ -400,7 +400,8 @@ point_plot_similarity1 <- function(summary_df,
                     hjust = 1,
                     direction = "y",
                     size = 5,
-                    segment.size = 0.2) +
+                    segment.size = 0.1,
+                    segment.color = "grey50") +
     geom_hline(yintercept = null_expected, colour = "firebrick") +
     annotate("text", x = 60, y = null_expected + 1, label = "Null", colour = "firebrick", size = 5) +
     ggtitle(plot_title) +
@@ -417,48 +418,48 @@ point_plot_similarity1 <- function(summary_df,
 
 
 
-# Labels to the right
-point_plot_similarity2 <- function(summary_df,
-                                   null_df,
-                                   topn_label = 30,
-                                   plot_title,
-                                   ylabel) {
-  
-  null_expected <- mean(null_df[, "Mean"])
-  
-  topn_genes <- slice_max(summary_df, Mean, n = topn_label)$Symbol
-  
-  summary_df <- summary_df %>%
-    arrange(Mean) %>% 
-    mutate(
-      Group = Symbol %in% topn_genes,
-      Symbol = factor(Symbol, levels = unique(Symbol)))
-  
-  ggplot(summary_df, aes(y = Mean, x = Symbol)) +
-    geom_point() +
-    geom_text_repel(data = filter(summary_df, Group),
-                    aes(x = Symbol, y = Mean, label = Symbol, fontface = "italic"),
-                    max.overlaps = topn_label, 
-                    force = 0.5,
-                    nudge_x = 300,
-                    hjust = 0,
-                    direction = "y",
-                    size = 5,
-                    segment.size = 0.1,
-                    segment.color = "grey50") +
-    geom_hline(yintercept = null_expected, colour = "firebrick") +
-    annotate("text", x = 60, y = null_expected + 1, label = "Null", colour = "firebrick", size = 5) +
-    ggtitle(plot_title) +
-    ylab(ylabel) +
-    expand_limits(x = nrow(summary_df) + 300) +  # prevent point cut off
-    theme_classic() +
-    theme(axis.text = element_text(size = 20),
-          axis.text.x = element_blank(),
-          axis.ticks.x = element_blank(),
-          axis.title = element_text(size = 20),
-          plot.title = element_text(size = 20),
-          plot.margin = margin(c(10, 10, 10, 10)))
-}
+# # Labels to the right
+# point_plot_similarity2 <- function(summary_df,
+#                                    null_df,
+#                                    topn_label = 30,
+#                                    plot_title,
+#                                    ylabel) {
+#   
+#   null_expected <- mean(null_df[, "Mean"])
+#   
+#   topn_genes <- slice_max(summary_df, Mean, n = topn_label)$Symbol
+#   
+#   summary_df <- summary_df %>%
+#     arrange(Mean) %>% 
+#     mutate(
+#       Group = Symbol %in% topn_genes,
+#       Symbol = factor(Symbol, levels = unique(Symbol)))
+#   
+#   ggplot(summary_df, aes(y = Mean, x = Symbol)) +
+#     geom_point() +
+#     geom_text_repel(data = filter(summary_df, Group),
+#                     aes(x = Symbol, y = Mean, label = Symbol, fontface = "italic"),
+#                     max.overlaps = topn_label, 
+#                     force = 0.5,
+#                     nudge_x = 300,
+#                     hjust = 0,
+#                     direction = "y",
+#                     size = 5,
+#                     segment.size = 0.1,
+#                     segment.color = "grey50") +
+#     geom_hline(yintercept = null_expected, colour = "firebrick") +
+#     annotate("text", x = 60, y = null_expected + 1, label = "Null", colour = "firebrick", size = 5) +
+#     ggtitle(plot_title) +
+#     ylab(ylabel) +
+#     expand_limits(x = nrow(summary_df) + 300) +  # prevent point cut off
+#     theme_classic() +
+#     theme(axis.text = element_text(size = 20),
+#           axis.text.x = element_blank(),
+#           axis.ticks.x = element_blank(),
+#           axis.title = element_text(size = 20),
+#           plot.title = element_text(size = 20),
+#           plot.margin = margin(c(10, 10, 10, 10)))
+# }
 
 
 
@@ -476,16 +477,16 @@ px_mm1 <- point_plot_similarity1(summ_tf_mm$Topk,
 
 
 # Using text labels to the right
-px_hg2 <- point_plot_similarity2(summ_tf_hg$Topk,
-                                 null_df = summ_null_hg$Topk,
-                                 plot_title = "Human",
-                                 ylabel = paste0("Mean Top k (k=", k, ")"))
-
-
-px_mm2 <- point_plot_similarity2(summ_tf_mm$Topk,
-                                 null_df = summ_null_mm$Topk,
-                                 plot_title = "Mouse",
-                                 ylabel = paste0("Mean Top k (k=", k, ")"))
+# px_hg2 <- point_plot_similarity2(summ_tf_hg$Topk,
+#                                  null_df = summ_null_hg$Topk,
+#                                  plot_title = "Human",
+#                                  ylabel = paste0("Mean Top k (k=", k, ")"))
+# 
+# 
+# px_mm2 <- point_plot_similarity2(summ_tf_mm$Topk,
+#                                  null_df = summ_null_mm$Topk,
+#                                  plot_title = "Mouse",
+#                                  ylabel = paste0("Mean Top k (k=", k, ")"))
 
 
 
@@ -504,12 +505,13 @@ hist_expected <- function(summary_df, null_df, ribo_df, xlabel) {
   
   ggplot(expected_df, aes(x = Stat)) + 
     facet_wrap(~Group, nrow = 3, scales = "free") + 
-    geom_histogram(bins = 30) +
+    geom_histogram(bins = 30, fill = "slategrey", colour = "slategrey") +
     xlab(xlabel) +
     ylab("Count") +
+    scale_x_continuous(breaks = pretty_breaks()) +
     theme_classic() +
-    theme(axis.text = element_text(size = 20),
-          axis.title = element_text(size = 20),
+    theme(axis.text = element_text(size = 15),
+          axis.title = element_text(size = 18),
           plot.title = element_text(size = 20),
           strip.text = element_text(size = 20),
           strip.background = element_rect(color = "black", fill = c("lightgrey")),
@@ -535,16 +537,17 @@ py_mm <- hist_expected(summary_df = summ_tf_mm$Topk,
 pxy_hg1 <- plot_grid(py_hg, px_hg1, rel_widths = c(0.5, 1))
 pxy_mm1 <- plot_grid(py_mm, px_mm1, rel_widths = c(0.5, 1))
 
-# Combining point plot and hist of expected (labels right)
-pxy_hg2 <- plot_grid(py_hg, px_hg2, rel_widths = c(0.5, 1))
-pxy_mm2 <- plot_grid(py_mm, px_mm2, rel_widths = c(0.5, 1))
+# # Combining point plot and hist of expected (labels right)
+# pxy_hg2 <- plot_grid(py_hg, px_hg2, rel_widths = c(0.5, 1))
+# pxy_mm2 <- plot_grid(py_mm, px_mm2, rel_widths = c(0.5, 1))
 
 # Flip mouse histogram for combining with human panels
 pxy_mm3 <- plot_grid(px_mm1, py_mm, rel_widths = c(1, 0.5))
 pxy_both <- plot_grid(pxy_hg1, pxy_mm3, nrow = 1)
 
 
-ggsave(pxy_both, height = 10, width = 21, device = "png", dpi = 600,
+# ggsave(pxy_both, height = 11, width = 22, device = "png", dpi = 600,
+ggsave(pxy_both, height = 10, width = 20, device = "png", dpi = 600,
        filename = file.path(paste0(plot_dir, "mean_topk=", k, "_human_and_mouse.png")))
 
 
@@ -692,11 +695,11 @@ density_topk <- function(plot_df, k) {
 # Isolating the max TF by topk similarity, a representative TF, a ribosomal gene,
 # and a null
 
-example_tf_hg <- "ASCL1"
-example_tf_mm <- "Ascl1"
+example_tf_hg <- "NEUROD6"
+example_tf_mm <- "Neurod6"
 
-max_tf_hg <- "E2F8"
-max_tf_mm <- "E2f8"
+max_tf_hg <- "PAX6"
+max_tf_mm <- "Pax6"
 # max_tf_hg <- as.character(slice_max(summ_sub_tf_hg$Topk, Median)$Symbol)
 # max_tf_mm <- as.character(slice_max(summ_sub_tf_mm$Topk, Median)$Symbol)
 
@@ -744,6 +747,10 @@ plot_df_mm$Group <- factor(plot_df_mm$Group, levels = unique(plot_df_mm$Group))
 p4a <- density_topk(plot_df_hg, k = k)
 p4b <- density_topk(plot_df_mm, k = k)
 p4 <- plot_grid(p4a, p4b)
+
+
+boxplot(plot_df_hg$Topk ~ plot_df_hg$Group)
+boxplot(plot_df_mm$Topk ~ plot_df_mm$Group)
 
 # boxplot(log10(plot_df_hg$Topk+1) ~ plot_df_hg$Group)
 # boxplot(log10(plot_df_mm$Topk+1) ~ plot_df_mm$Group)
