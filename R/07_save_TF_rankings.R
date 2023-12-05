@@ -14,7 +14,7 @@ source("R/utils/functions.R")
 source("R/00_config.R")
 
 k <- 1000
-force_resave <- TRUE
+force_resave <- FALSE
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
