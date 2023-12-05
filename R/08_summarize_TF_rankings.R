@@ -37,9 +37,6 @@ rank_tf_mm <- readRDS(rank_tf_mm_path)
 rank_ribo_hg <- readRDS(rank_ribo_hg_path)
 rank_ribo_mm <- readRDS(rank_ribo_mm_path)
 
-# Genomic evidence from Morin 2023 
-evidence_l <- readRDS(evidence_path)
-
 # Measurement matrices used for filtering when a gene was never expressed
 # msr_hg <- readRDS(msr_mat_hg_path)
 # msr_mm <- readRDS(msr_mat_mm_path)
@@ -72,14 +69,15 @@ rank_mat_mm <- gen_rank_matrix(rank_tf_mm)
 # Most commonly highly ranked genes
 # TODO: are these genes high because of technical aspect?
 
-rank_order_hg <- sort(rowMeans(rank_mat_hg, na.rm = TRUE))
-rank_order_mm <- sort(rowMeans(rank_mat_mm, na.rm = TRUE))
+rank_order_hg <- data.frame(
+  Symbol = rownames(rank_mat_hg), Avg_RSR = rowMeans(rank_mat_hg)) %>% 
+  arrange(desc(-Avg_RSR))
+  
 
+rank_order_mm <- data.frame(
+  Symbol = rownames(rank_mat_mm), Avg_RSR = rowMeans(rank_mat_mm)) %>% 
+  arrange(desc(-Avg_RSR))
 
-# head(rank_order_hg)
-# tail(rank_order_hg)
-# head(rank_order_mm)
-# tail(rank_order_mm)
 
 head(sort(rank_mat_hg["RPL18A",]), 50)
 tail(sort(rank_mat_hg["RPL18A",]), 100)
@@ -169,54 +167,73 @@ pc_gr_mm <- pc_to_gr(filter(pc_mm, !is.na(Start)))
 # Removing NA start removes some TFs with rankings
 # TODO: check why ZNF883 removed
 delta_hg <- filter(delta_hg, TF %in% pc_gr_hg$Symbol)
-delta_mm <- filter(delta_hg, TF %in% pc_gr_mm$Symbol)
+delta_mm <- filter(delta_mm, TF %in% pc_gr_mm$Symbol)
 
 
 # Distance
-# TODO: NA necessary?
 
-# dist_hg <- lapply(1:nrow(delta_hg), function(x) {
-#   
-#   tf_gr <- pc_gr_hg[pc_gr_hg$Symbol %in% c(delta_hg$TF[x], delta_hg$Symbol[x])]
-#   chroms <- as.character(seqnames(tf_gr))
-#   
-#   if (!identical(chroms[1], chroms[2])) {
-#     return(NA)
-#   } else {
-#     abs(distance(tf_gr[1], tf_gr[2], ignore.strand = TRUE))
-#   }
-# })
-
-
-# delta_hg$Distance <- unlist(dist_hg)
-
-
-# TODO: nearest gene
-
-dist_hg <- lapply(1:nrow(delta_hg), function(x) {
+add_distance_cols <- function(delta_df, pc_gr) {
   
-  tf_gr <- pc_gr_hg[pc_gr_hg$Symbol == delta_hg$TF[x]]
-  out_gr <- pc_gr_hg[pc_gr_hg$Symbol != delta_hg$TF[x]]
+  dist_l <- lapply(1:nrow(delta_df), function(x) {
+    
+    tf_gr <- pc_gr[pc_gr$Symbol == delta_df$TF[x]]
+    out_gr <- pc_gr[pc_gr$Symbol != delta_df$TF[x]]
+    
+    out_gr$Distance <- distance(tf_gr, out_gr, ignore.strand = TRUE)
+    out_gr <- out_gr[order(out_gr$Distance)]
+    
+    top_dist <- out_gr[which(out_gr$Symbol == delta_df$Symbol[x])]$Distance
+    
+    top_rank <- ifelse(is.na(top_dist), 
+                       NA, 
+                       which(out_gr$Symbol == delta_df$Symbol[x]))
+    
+    data.frame(Distance = top_dist, Rank = top_rank)
+    
+  })
   
-  out_gr$Distance <- distance(tf_gr, out_gr, ignore.strand = TRUE)
-  out_gr <- out_gr[order(out_gr$Distance)]
+  delta_df <- cbind(delta_df, do.call(rbind, dist_l))
   
-  top_dist <- out_gr[which(out_gr$Symbol == delta_hg$Symbol[x])]$Distance
-  top_rank <- which(out_gr$Symbol == delta_hg$Symbol[x])
-  
-  data.frame(Distance = top_dist, Rank = top_rank)
-  
-})
+  return(delta_df)
+}
 
 
-delta_hg2 <- cbind(delta_hg, do.call(rbind, dist_hg))
+delta_hg <- add_distance_cols(delta_hg, pc_gr = pc_gr_hg)
+delta_mm <- add_distance_cols(delta_mm, pc_gr = pc_gr_mm)
 
+
+sum(delta_hg$Rank == 1, na.rm = TRUE)
+sum(delta_mm$Rank == 1, na.rm = TRUE)
+
+sum(is.na(delta_hg$Rank)) / nrow(delta_hg)
+sum(is.na(delta_mm$Rank)) / nrow(delta_mm)
+
+filter(delta_hg, Rank == 1) %>% view
+filter(delta_hg, Delta > 0.05) %>% view
+
+plot_hist(delta_hg, stat_col = "Delta", xlab = "Avg RSR Rank1 - Rank2")
+plot_hist(delta_mm, stat_col = "Delta", xlab = "Avg RSR Rank1 - Rank2")
+
+qplot(delta_hg, xvar = "Rank", yvar = "Delta")
+
+filter(delta_hg, Rank < 10) %>% 
+  qplot(., xvar = "Rank", yvar = "Delta")
+
+filter(delta_hg, Rank == 1) %>% 
+  plot_hist(., stat_col = "Delta", xlab = "Avg RSR Rank1 - Rank2")
+
+qplot(delta_hg, xvar = "Distance", yvar = "Delta")
 
 
 
 # Inspecting targets from the most similar TFs
 arrange(rank_tf_hg$E2F8, desc(Avg_RSR)) %>% head(30)
 arrange(rank_tf_mm$E2f8, desc(Avg_RSR)) %>% head(30)
+
+
+
+
+
 
 
 
