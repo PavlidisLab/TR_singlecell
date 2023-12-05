@@ -519,9 +519,9 @@ plot_auc_density <- function(plot_df, vline, stat, tf) {
     ggtitle(tf) +
     xlim(xlim) +
     theme_classic() +
-    theme(axis.text = element_text(size = 20),
-          axis.title = element_text(size = 20),
-          plot.title = element_text(size = 20),
+    theme(axis.text = element_text(size = 25),
+          axis.title = element_text(size = 25),
+          plot.title = element_text(size = 25),
           plot.margin = margin(c(10, 10, 10, 10)))
 }
 
@@ -552,17 +552,17 @@ plot_df3_mm <- agg_df_mm
 # plot_df3_mm <- agg_df_common_mm
 
 
-p3a <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_coexpr"), xlab = "AUPRC coexpression")
-p3b <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_coexpr"), xlab = "AUPRC coexpression")
+p3a <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_coexpr"), xlab = "AUPRC percentile coexpression", title = "Human") 
+p3b <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_coexpr"), xlab = "AUPRC percentile coexpression", title = "Mouse")
 
-p3c <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_coexpr"), xlab = "AUROC coexpression")
-p3d <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_coexpr"), xlab = "AUROC coexpression")
+p3c <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_coexpr"), xlab = "AUROC percentile coexpression", title = "Human")
+p3d <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_coexpr"), xlab = "AUROC percentile coexpression", title = "Mouse")
 
-p3e <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_unibind"), xlab = "AUPRC binding")
-p3f <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_unibind"), xlab = "AUPRC binding")
+p3e <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_unibind"), xlab = "AUPRC percentile binding", title = "Human")
+p3f <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_unibind"), xlab = "AUPRC percentile binding", title = "Mouse")
 
-p3g <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_unibind"), xlab = "AUROC binding")
-p3h <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_unibind"), xlab = "AUROC binding")
+p3g <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_unibind"), xlab = "AUROC percentile binding", title = "Human")
+p3h <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_unibind"), xlab = "AUROC percentile binding", title = "Mouse")
 
 
 # Focus on AUPRC, showing both species and both aggregations
@@ -585,7 +585,7 @@ vline4 <- plot_l4[[plot_tf4]]$Perf_df[[plot_stat4]]
 
 p4 <- plot_auc_density(plot_df4, vline = vline4, stat = plot_stat4, tf = plot_tf4)
 
-ggsave(p4, height = 5, width = 6, device = "png", dpi = 300,
+ggsave(p4, height = 6, width = 9, device = "png", dpi = 300,
        filename = file.path(paste0(plot_dir, plot_tf4, "_coexpr_aggregate_vs_null_density.png")))
 
 
@@ -700,6 +700,19 @@ pl_delta_auc_hist <- list(
 
 
 p_delta_auc_hist <- plot_grid(plotlist = pl_delta_auc_hist, nrow = 2)
+
+
+
+# diff from null
+pl_diff_auc_hist <- list(
+  plot_hist(plot_df3_hg, stat_col = paste0("AUROC_diff_coexpr"), xlab = "AUROC diff coexpression", title = "Human") + geom_vline(xintercept = 0),
+  plot_hist(plot_df3_mm, stat_col = paste0("AUROC_diff_coexpr"), xlab = "AUROC diff coexpression", title = "Mouse") + geom_vline(xintercept = 0),
+  plot_hist(plot_df3_hg, stat_col = paste0("AUROC_diff_unibind"), xlab = "AUROC diff binding", title = "Human") + geom_vline(xintercept = 0),
+  plot_hist(plot_df3_mm, stat_col = paste0("AUROC_diff_unibind"), xlab = "AUROC diff binding", title = "Mouse") + geom_vline(xintercept = 0)
+)
+
+p_diff_auc_hist <- plot_grid(plotlist = pl_diff_auc_hist, nrow = 2)
+
 
 
 # Plotting null versus observed AUROCs
