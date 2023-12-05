@@ -259,12 +259,31 @@ topk_ortho_middle <- mclapply(rank_ortho, function(x) {
 
 
 
+# Total counts (can have duplicates)
+
+# n_topk_ortho <- data.frame(
+#   Symbol = names(rank_ortho),
+#   Stringent = unlist(lapply(topk_ortho_stringent, nrow)),
+#   Middle = unlist(lapply(topk_ortho_middle, nrow)),
+#   Relaxed = unlist(lapply(topk_ortho_relaxed, nrow))
+# )
+
+# Counts without duplicates
+
+topk_ortho_middle_dedup <- lapply(names(topk_ortho_middle), function(x) {
+  nrow(setdiff(topk_ortho_middle[[x]], topk_ortho_stringent[[x]]))
+})
+
+topk_ortho_relaxed_dedup <- lapply(names(topk_ortho_relaxed), function(x) {
+  nrow(setdiff(topk_ortho_relaxed[[x]], topk_ortho_middle[[x]]))
+})
+
 
 n_topk_ortho <- data.frame(
   Symbol = names(rank_ortho),
   Stringent = unlist(lapply(topk_ortho_stringent, nrow)),
-  Middle = unlist(lapply(topk_ortho_middle, nrow)),
-  Relaxed = unlist(lapply(topk_ortho_relaxed, nrow))
+  Middle = unlist(topk_ortho_middle_dedup),
+  Relaxed = unlist(topk_ortho_relaxed_dedup)
 )
 
 
