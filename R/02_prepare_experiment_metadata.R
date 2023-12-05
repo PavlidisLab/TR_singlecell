@@ -112,7 +112,8 @@ saveRDS(counts_l, file = celltype_list_path)
 
 p1 <- count(meta_loaded, Species) %>% 
   ggplot(., aes(x = Species, y = n)) +
-  geom_bar(stat = "identity", fill = "#1c9099", col = "black", width = 0.6) +
+  # geom_bar(stat = "identity", fill = "#1c9099", col = "black", width = 0.6) +
+  geom_bar(stat = "identity", fill = "slategrey", col = "black", width = 0.6) +
   ylab("Count of data sets") +
   theme_classic() +
   theme(axis.text = element_text(size = 25),
@@ -128,11 +129,12 @@ ggsave(p1, height = 6, width = 4.5, device = "png", dpi = 300,
 
 # Histogram of log10 cell counts by species
 
-p2 <- ggplot(meta_loaded, aes(x = log10(N_cells), fill = Species)) +
+p2 <- ggplot(meta_loaded, aes(x = log10(N_cells), fill = Species, colour = Species)) +
   geom_histogram(bins = 30) +
   ylab("Count of data sets") +
   xlab("Log10 count of cells") +
   scale_fill_manual(values = c("royalblue", "goldenrod")) +
+  scale_colour_manual(values = c("royalblue", "goldenrod")) +
   theme_classic() +
   theme(axis.text = element_text(size = 25),
         axis.title = element_text(size = 25),
@@ -142,7 +144,7 @@ p2 <- ggplot(meta_loaded, aes(x = log10(N_cells), fill = Species)) +
         plot.margin = margin(10, 5, 5, 5))
 
 
-ggsave(p2, height = 6, width = 6, device = "png", dpi = 600,
+ggsave(p2, height = 6, width = 9, device = "png", dpi = 600,
        filename = file.path(plot_dir, "cell_counts_by_species.png"))
 
 
@@ -161,5 +163,5 @@ p3 <- ggplot(meta_loaded, aes(x = N_celltypes, fill = Species)) +
         legend.position = c(0.85, 0.75))
 
 
-ggsave(p3, height = 6, width = 6, device = "png", dpi = 600,
+ggsave(p3, height = 6, width = 9, device = "png", dpi = 600,
        filename = file.path(plot_dir, "celltype_counts_by_species.png"))
