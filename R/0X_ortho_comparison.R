@@ -24,16 +24,9 @@ pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 pc_ortho <- read.delim(pc_ortho_path)
 
-# Ribosomal genes
-sribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
-lribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
-ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
-
 # Saved list RDS of the ranks
 rank_tf_hg <- readRDS(rank_tf_hg_path)
 rank_tf_mm <- readRDS(rank_tf_mm_path)
-rank_ribo_hg <- readRDS(rank_ribo_hg_path)
-rank_ribo_mm <- readRDS(rank_ribo_mm_path)
 
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
@@ -56,7 +49,8 @@ tfs_ortho <- filter(pc_ortho,
 
 
 # Gene is assumed to be an ortho gene found in pc_df. Retrieve and join the 
-# corresponding gene ranks from the mouse and human rank lists.
+# corresponding gene rank dfs from the mouse and human rank lists. Re-rank
+# average RSR just using ortho genes
 
 join_ortho_ranks <- function(gene,
                              pc_df = pc_ortho,
@@ -67,21 +61,24 @@ join_ortho_ranks <- function(gene,
   
   if (nrow(gene_ortho) != 1) stop("A one to one match was not found")
   
-  df_hg <- left_join(rank_hg[[gene_ortho$Symbol_hg]], 
-                     pc_ortho[, c("Symbol_hg", "ID")],
-                     by = c("Symbol" = "Symbol_hg")) %>% 
-    filter(!is.na(ID))
+  df_hg <- 
+    left_join(rank_hg[[gene_ortho$Symbol_hg]], 
+              pc_ortho[, c("Symbol_hg", "ID")],
+              by = c("Symbol" = "Symbol_hg")) %>% 
+    filter(!is.na(ID)) %>% 
+    mutate(Rank_RSR = rank(-Avg_RSR, ties.method = "min"))
   
+  df_mm <- 
+    left_join(rank_mm[[gene_ortho$Symbol_mm]], 
+              pc_ortho[, c("Symbol_mm", "ID")], 
+              by = c("Symbol" = "Symbol_mm")) %>% 
+    filter(!is.na(ID)) %>% 
+    mutate(Rank_RSR = rank(-Avg_RSR, ties.method = "min"))
   
-  df_mm <- left_join(rank_mm[[gene_ortho$Symbol_mm]], 
-                     pc_ortho[, c("Symbol_mm", "ID")], 
-                     by = c("Symbol" = "Symbol_mm")) %>% 
-    filter(!is.na(ID))
-  
-  
-  sim_df <- left_join(df_hg, df_mm, 
-                        by = "ID", 
-                        suffix = c("_hg", "_mm")) %>% 
+  sim_df <- 
+    left_join(df_hg, df_mm,
+              by = "ID",
+              suffix = c("_hg", "_mm")) %>% 
     filter(!is.na(Avg_RSR_hg) & !is.na(Avg_RSR_mm))
   
   return(sim_df)
@@ -242,7 +239,7 @@ overlap_df <- data.frame(
 )
 
 
-intersect(
+overlap_genes <- intersect(
   slice_min(rank_tf_ortho$ASCL1, Rank_RSR_hg, n = k)$Symbol_hg,
   slice_min(rank_tf_ortho$ASCL1, Rank_RSR_mm, n = k)$Symbol_hg
 )
@@ -278,7 +275,6 @@ cor_high <- filter(sim_df, Cor > 0.8) %>% arrange(-Cor)
 
 # Find that 174 (14.0%) of human and 171 (13.8%) of mouse TFs have best match
 # with their ortholog.
-
 
 summ_topk <- summary(Filter(is.numeric, topk_df))
 
@@ -316,14 +312,12 @@ no_topk <- filter(sim_df, Topk_Count == 0)
 
 
 
-
 # Bottomk overlap 
 # ------------------------------------------------------------------------------
 
 
 # Find that 53 (4.3%) of human and 70 (5.6%) of mouse TFs have best match
 # with their ortholog.
-
 
 summ_bottomk <- summary(Filter(is.numeric, bottomk_df))
 
@@ -449,7 +443,7 @@ plot_df6 <- mutate(overlap_df,
                    gene_label = Symbol %in% label_genes)
 
 
-  px6a <- 
+px6a <- 
   ggplot(plot_df6, aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg)) +
   geom_jitter(shape = 21, size = 2.4, width = 0.5, height = 0.5) +
   geom_text_repel(
@@ -526,3 +520,199 @@ px7d <- qplot(common_bottomk, xvar = "Hg_in_mm", yvar = "Mm_in_hg")
 
 px8a <- qplot(sim_df, xvar = "Bottomk_Count", yvar = "Cor")
 px8b <- qplot(sim_df, xvar = "Topk_Count", yvar = "Cor")
+
+
+
+# Demoing same stacked barchart idea, but just for ortho coexpression at different
+# cut-offs
+
+ortho_coexpr_counts <- mclapply(rank_tf_ortho, function(x) {
+  
+  k200 = filter(x, Rank_RSR_hg <= 200 & Rank_RSR_mm <= 200) 
+  k500 = filter(x, Rank_RSR_hg <= 500 & Rank_RSR_mm <= 500 & (!Symbol_hg %in% k200$Symbol_hg)) 
+  k1000 = filter(x, Rank_RSR_hg <= 1000 & Rank_RSR_mm <= 1000 & (!Symbol_hg %in% k500$Symbol_hg))
+  
+  data.frame(K200 = nrow(k200),
+             K500 = nrow(k500),
+             K1000 = nrow(k1000))
+}, mc.cores = ncore)
+
+
+n_topk_ortho <- data.frame(
+  Symbol = names(rank_tf_ortho),
+  do.call(rbind, ortho_coexpr_counts)
+)
+
+
+plot_df9 <- pivot_longer(n_topk_ortho,
+                         cols = c("K200", "K500", "K1000"),
+                         names_to = "Cutoff",
+                         values_to = "Count") %>% 
+  mutate(Cutoff = factor(Cutoff, levels = c("K1000", "K500", "K200")))
+
+
+# p9_cols <- c("#f2f0f7","#cbc9e2", "#9e9ac8", "#6a51a3")
+# p9_cols <- c("#9e9ac8","#6a51a3", "#54278f", "#3f007d")
+# p9_cols <- c("#9e9ac8","#6a51a3", "#3f007d", "black")
+p9_cols <- c("#9e9ac8","#6a51a3", "#3f007d")
+
+
+# plot_df9 <- filter(plot_df9, Symbol %in% sample(names(rank_tf_ortho), 100))
+
+
+p9a <- ggplot(plot_df9, aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Cutoff, colour = Cutoff)) +
+  geom_bar(position = "stack", stat = "identity") +
+  ylab("Count of orthologous interactions") +
+  xlab("Transcription factor") +
+  ggtitle(paste0("N=", nrow(n_topk_ortho))) +
+  scale_fill_manual(values = p9_cols) +
+  scale_colour_manual(values = p9_cols) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 20),
+        legend.position = c(0.85, 0.85),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+# Null distn of overlap
+
+
+calc_null_topk <- function(rank_tf_ortho, ncores = 1) {
+  
+  # Helper to get size of overlap between mouse and human for sampled TFs
+  
+  calc_topk <- function(k, sample_tfs) {
+    topk_intersect(
+      slice_max(rank_tf_ortho[[sample_tfs[1]]], Avg_RSR_hg, n = k)$Symbol_hg,
+      slice_max(rank_tf_ortho[[sample_tfs[2]]], Avg_RSR_mm, n = k)$Symbol_hg
+    )
+  }
+  
+  # Iteratively sample TFs and calculate overlap between mouse and human
+  
+  null_topk <- mclapply(1:1000, function(x) {
+    
+    sample_tfs <- sample(names(rank_tf_ortho), 2, replace = FALSE)
+    
+    data.frame(
+      K200 = calc_topk(k = 200, sample_tfs),
+      K500 = calc_topk(k = 500, sample_tfs),
+      K1000 = calc_topk(k = 1000, sample_tfs))
+    
+  }, mc.cores = ncores)
+  
+  null_df <- do.call(rbind, null_topk)
+  return(null_df)
+}
+
+
+set.seed(5)
+
+n_topk_null <- calc_null_topk(rank_tf_ortho, ncores = ncore)
+
+
+p9b1 <- plot_hist(n_topk_ortho, stat_col = "K200") + geom_vline(xintercept = median(n_topk_null$K200))
+p9b2 <- plot_hist(n_topk_null, stat_col = "K200")
+
+p9b3 <- plot_hist(n_topk_ortho, stat_col = "K500") + geom_vline(xintercept = median(n_topk_null$K500))
+p9b4 <- plot_hist(n_topk_null, stat_col = "K500")
+
+p9b5 <- plot_hist(n_topk_ortho, stat_col = "K1000") + geom_vline(xintercept = median(n_topk_null$K1000))
+p9b6 <- plot_hist(n_topk_null, stat_col = "K1000")
+
+plot_grid(p9b1, p9b3, p9b5, ncol = 1)
+
+
+
+# TODO: why are K200 and K500 shaped identically
+
+# Not because of reorder...
+plot_df9 <- pivot_longer(n_topk_ortho,
+                         cols = c("K200", "K500", "K1000"),
+                         names_to = "Cutoff",
+                         values_to = "Count") %>% 
+  mutate(Cutoff = factor(Cutoff, levels = c("K1000", "K500", "K200")))
+
+
+tf_order <- plot_df9 %>% 
+  group_by(Symbol) %>% 
+  summarise(Med = median(Count)) %>% 
+  arrange(Med)
+
+
+plot_df9 <- mutate(plot_df9, Symbol = factor(Symbol, levels = unique(tf_order$Symbol)))
+
+
+ggplot(plot_df9, aes(x = Symbol, y = Count, fill = Cutoff, colour = Cutoff)) +
+  geom_bar(position = "stack", stat = "identity") +
+  ylab("Count of orthologous interactions") +
+  xlab("Transcription factor") +
+  ggtitle(paste0("N=", nrow(n_topk_ortho))) +
+  scale_fill_manual(values = p9_cols) +
+  scale_colour_manual(values = p9_cols) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 20),
+        legend.position = c(0.85, 0.85),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+# Not because of fill and colour...
+ggplot(plot_df9, aes(x = Symbol, y = Count, fill = Cutoff)) +
+  geom_bar(position = "stack", stat = "identity") +
+  ylab("Count of orthologous interactions") +
+  xlab("Transcription factor") +
+  ggtitle(paste0("N=", nrow(n_topk_ortho))) +
+  scale_fill_manual(values = p9_cols) +
+  # scale_colour_manual(values = p9_cols) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 20),
+        legend.position = c(0.85, 0.85),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+# Looks like because of factor order of cutoff?
+
+plot_df9 <- pivot_longer(n_topk_ortho,
+                         cols = c("K200", "K500", "K1000"),
+                         names_to = "Cutoff",
+                         values_to = "Count") %>% 
+  mutate(Cutoff = factor(Cutoff, levels = c("K1000", "K500", "K200")))
+
+
+plot_df9 <- filter(plot_df9, Symbol %in% sample(names(rank_tf_ortho), 100))
+
+
+ggplot(plot_df9, aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Cutoff, colour = Cutoff)) +
+  geom_bar(position = "stack", stat = "identity") +
+  ylab("Count of orthologous interactions") +
+  xlab("Transcription factor") +
+  ggtitle(paste0("N=", nrow(n_topk_ortho))) +
+  scale_fill_manual(values = p9_cols) +
+  scale_colour_manual(values = p9_cols) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 20),
+        legend.position = c(0.85, 0.85),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
