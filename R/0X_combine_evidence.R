@@ -1,8 +1,7 @@
-## TODO
-# TODO: ortho join
+## Combine the coexpression and binding rankings to nominate TF-gene interactions
+## with reproducible evidence across species and methods
 # TODO: winner takes all binding evidence?
 # TODO: get distn of all average bind scores? look for outliers
-
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -88,11 +87,7 @@ join_coexpr_bind <- function(coexpr_l, bind_mat) {
 subset_topk <- function(rank_l, k, ncores = 1) {
   
   topk_l <- mclapply(rank_l, function(x) {
-    
-    # k <- min(
-    #   check_k(sort(x$Bind_score, decreasing = TRUE), k = k),
-    #   check_k(sort(x$Avg_RSR, decreasing = TRUE), k = k))
-    
+
     k_bind <- check_k(sort(x$Bind_score, decreasing = TRUE), k = k)
     k_rsr <- check_k(sort(x$Avg_RSR, decreasing = TRUE), k = k)
     
@@ -111,10 +106,6 @@ subset_bottomk <- function(rank_l, k, ncores = 1) {
   
   topk_l <- mclapply(rank_l, function(x) {
     
-    # k <- min(
-    #   check_k(sort(x$Bind_score, decreasing = TRUE), k = k),
-    #   check_k(sort(x$Avg_RSR, decreasing = TRUE), k = k))
-    
     k_bind <- check_k(sort(x$Bind_score, decreasing = TRUE), k = k)
     k_rsr <- check_k(sort(x$Avg_RSR, decreasing = TRUE), k = k)
     
@@ -127,6 +118,99 @@ subset_bottomk <- function(rank_l, k, ncores = 1) {
 }
 
 
+# Take the list of ranked dfs for each species, and for the ortho TFs with 
+# binding data, subset their ranked dfs to ortho genes and then join the two
+# species. re-rank the RSR and binding scores with the reduced gene list, and
+# generate the rank product across all four ranks
+
+join_and_rank_ortho <- function(rank_hg, rank_mm, pc_ortho, ncores = 1) {
+  
+  # Common ortho TFs
+  tf_ortho <- filter(pc_ortho, 
+                     Symbol_hg %in% names(rank_hg) & 
+                     Symbol_mm %in% names(rank_mm))
+  
+  # Only keeping key columns for each ranking df
+  sub_cols <- c("Symbol", "Avg_RSR", "Bind_score")
+  
+  # Iteratively subset to ortho genes, join human and mouse, and re-rank
+  ortho_l <- mclapply(1:nrow(tf_ortho), function(x) {
+    
+    df_hg <- left_join(rank_hg[[tf_ortho$Symbol_hg[x]]][, sub_cols],
+                       pc_ortho[, c("Symbol_hg", "ID")],
+                       by = c("Symbol" = "Symbol_hg")) %>%
+      filter(!is.na(ID))
+    
+    
+    df_mm <- left_join(rank_mm[[tf_ortho$Symbol_mm[x]]][, sub_cols], 
+                       pc_ortho[, c("Symbol_mm", "ID")], 
+                       by = c("Symbol" = "Symbol_mm")) %>% 
+      filter(!is.na(ID))
+    
+    
+    df_ortho <- left_join(df_hg, df_mm,
+                          by = "ID",
+                          suffix = c("_hg", "_mm")) %>%
+      filter(!is.na(Avg_RSR_hg) & !is.na(Avg_RSR_mm)) %>%
+      mutate(
+        Rank_RSR_hg = rank(-Avg_RSR_hg, ties.method = "min"),
+        Rank_RSR_mm = rank(-Avg_RSR_mm, ties.method = "min"),
+        Rank_bind_hg = rank(-Bind_score_hg, ties.method = "min"),
+        Rank_bind_mm = rank(-Bind_score_mm, ties.method = "min"),
+        RP = rank(log(Rank_RSR_hg + Rank_RSR_mm + Rank_bind_hg + Rank_bind_mm))
+      )
+  }, mc.cores = ncores)
+  
+  names(ortho_l) <- tf_ortho$Symbol_hg
+  return(ortho_l)
+}
+
+
+# Taking the list of ortho rankings, subset each rank df into 3 tiers of
+# evidence: stringent (top K in all 4 rankings), middle (top K in 3/4), and
+# relaxed, which allows genes with top K in one data type in the opposite species
+# (but not both data types in just one species - want to emphasize ortho aspect)
+
+subset_tiered_evidence <- function(rank_l, k, ncores = 1) {
+  
+  tiered_l <- mclapply(rank_l, function(rank_df) {
+    
+    # May need to decrease k if the current k includes tied values
+    k_bind_hg <- check_k(sort(rank_df$Bind_score_hg, decreasing = TRUE), k = k)
+    k_bind_mm <- check_k(sort(rank_df$Bind_score_mm, decreasing = TRUE), k = k)
+    k_rsr_hg <- check_k(sort(rank_df$Avg_RSR_hg, decreasing = TRUE), k = k)
+    k_rsr_mm <- check_k(sort(rank_df$Avg_RSR_mm, decreasing = TRUE), k = k)
+    
+    # Stringent requires top k in all four of human and mouse coexpr and binding 
+    stringent <- filter(
+      rank_df, 
+      (Rank_RSR_hg <= k_rsr_hg & Rank_RSR_mm <= k_rsr_mm) & 
+      (Rank_bind_hg <= k_bind_hg & Rank_bind_mm <= k_bind_mm))
+    
+    # Middle requires evidence in 3/4 rankings
+    middle <- filter(
+      rank_df,
+      (((Rank_RSR_hg <= k_rsr_hg | Rank_RSR_mm <= k_rsr_mm) & 
+       (Rank_bind_hg <= k_bind_hg & Rank_bind_mm <= k_bind_mm)
+      ) |
+      ((Rank_bind_hg <= k_bind_hg | Rank_bind_mm <= k_bind_mm) &
+       (Rank_RSR_hg <= k_rsr_hg & Rank_RSR_mm <= k_rsr_mm))) &
+      Symbol_hg %!in% stringent$Symbol_hg)
+    
+    # Relaxed requires evidence in one data type for each species
+    relaxed <- filter(
+      rank_df,
+      (Rank_RSR_hg <= k_rsr_hg | Rank_RSR_mm <= k_rsr_mm) & 
+      (Rank_bind_hg <= k_bind_hg | Rank_bind_mm <= k_bind_mm) &
+      Symbol_hg %!in% c(middle$Symbol_hg, stringent$Symbol_hg))
+    
+    list(Stringent = stringent, Middle = middle, Relaxed = relaxed)
+    
+  }, mc.cores = ncores)
+  
+  names(tiered_l) <- names(rank_l)
+  return(tiered_l)
+}
 
 
 # Join aggregate coexpression and binding
@@ -161,138 +245,41 @@ n_bottomk_mm <- sort(unlist(lapply(bottomk_mm, nrow)), decreasing = TRUE)
 # ------------------------------------------------------------------------------
 
 
-tf_ortho <- filter(pc_ortho,
-                   Symbol_hg %in% names(rank_hg) &
-                   Symbol_mm %in% names(rank_mm))
-
-
-# TODO: this is largely copied from ortho_comparison
-
-sub_cols <- c("Symbol", "Avg_RSR", "Bind_score")
-
-
-rank_ortho <- mclapply(1:nrow(tf_ortho), function(x) {
-  
-  df_hg <- left_join(rank_hg[[tf_ortho$Symbol_hg[x]]][, sub_cols], 
-                     pc_ortho[, c("Symbol_hg", "ID")],
-                     by = c("Symbol" = "Symbol_hg")) %>% 
-    filter(!is.na(ID))
-  
-  
-  df_mm <- left_join(rank_mm[[tf_ortho$Symbol_mm[x]]][, sub_cols], 
-                     pc_ortho[, c("Symbol_mm", "ID")], 
-                     by = c("Symbol" = "Symbol_mm")) %>% 
-    filter(!is.na(ID))
-  
-  
-  df_ortho <- left_join(df_hg, df_mm,
-                        by = "ID",
-                        suffix = c("_hg", "_mm")) %>%
-    filter(!is.na(Avg_RSR_hg) & !is.na(Avg_RSR_mm)) %>%
-    mutate(
-      Rank_RSR_hg = rank(-Avg_RSR_hg, ties.method = "min"),
-      Rank_RSR_mm = rank(-Avg_RSR_mm, ties.method = "min"),
-      Rank_bind_hg = rank(-Bind_score_hg, ties.method = "min"),
-      Rank_bind_mm = rank(-Bind_score_mm, ties.method = "min"),
-      RP = rank(log(Rank_RSR_hg + Rank_RSR_mm + Rank_bind_hg + Rank_bind_mm))
-    )
-}, mc.cores = ncore)
-
-names(rank_ortho) <- tf_ortho$Symbol_hg
 
 
 
-# Require top K in both species for each data type
-# TODO: topk check
-
-topk_ortho_stringent <- mclapply(rank_ortho, function(x) {
-  
-  k_bind_hg <- check_k(sort(x$Bind_score_hg, decreasing = TRUE), k = k)
-  k_bind_mm <- check_k(sort(x$Bind_score_mm, decreasing = TRUE), k = k)
-  k_rsr_hg <- check_k(sort(x$Avg_RSR_hg, decreasing = TRUE), k = k)
-  k_rsr_mm <- check_k(sort(x$Avg_RSR_mm, decreasing = TRUE), k = k)
-  
-  # k <- min(
-  #   check_k(sort(x$Bind_score_hg, decreasing = TRUE), k = k),
-  #   check_k(sort(x$Bind_score_mm, decreasing = TRUE), k = k),
-  #   check_k(sort(x$Avg_RSR_hg, decreasing = TRUE), k = k),
-  #   check_k(sort(x$Avg_RSR_mm, decreasing = TRUE), k = k))
-  
-  filter(x, 
-        (Rank_RSR_hg <= k_rsr_hg & Rank_RSR_mm <= k_rsr_mm) & 
-        (Rank_bind_hg <= k_bind_hg & Rank_bind_mm <= k_bind_mm))
-  
-}, mc.cores = ncore)
-
-
-# Require top K in at least one species for each data type
-
-topk_ortho_relaxed <- mclapply(rank_ortho, function(x) {
-  
-  k_bind_hg <- check_k(sort(x$Bind_score_hg, decreasing = TRUE), k = k)
-  k_bind_mm <- check_k(sort(x$Bind_score_mm, decreasing = TRUE), k = k)
-  k_rsr_hg <- check_k(sort(x$Avg_RSR_hg, decreasing = TRUE), k = k)
-  k_rsr_mm <- check_k(sort(x$Avg_RSR_mm, decreasing = TRUE), k = k)
-  
-  filter(x, 
-        (Rank_RSR_hg <= k_rsr_hg | Rank_RSR_mm <= k_rsr_mm) & 
-        (Rank_bind_hg <= k_bind_hg | Rank_bind_mm <= k_bind_mm))
-  
-}, mc.cores = ncore)
-
-
-# Require top K in both for species for one data type, but allow top K in only
-# one species for the other data type
-
-topk_ortho_middle <- mclapply(rank_ortho, function(x) {
-  
-  k_bind_hg <- check_k(sort(x$Bind_score_hg, decreasing = TRUE), k = k)
-  k_bind_mm <- check_k(sort(x$Bind_score_mm, decreasing = TRUE), k = k)
-  k_rsr_hg <- check_k(sort(x$Avg_RSR_hg, decreasing = TRUE), k = k)
-  k_rsr_mm <- check_k(sort(x$Avg_RSR_mm, decreasing = TRUE), k = k)
-  
-  filter(x,
-         ((Rank_RSR_hg <= k_rsr_hg | Rank_RSR_mm <= k_rsr_mm) & 
-          (Rank_bind_hg <= k_bind_hg & Rank_bind_mm <= k_bind_mm)
-         ) |
-         ((Rank_bind_hg <= k_bind_hg | Rank_bind_mm <= k_bind_mm) &
-          (Rank_RSR_hg <= k_rsr_hg & Rank_RSR_mm <= k_rsr_mm)
-         ))
-  
-}, mc.cores = ncore)
 
 
 
-# Total counts (can have duplicates)
-
-# n_topk_ortho <- data.frame(
-#   Symbol = names(rank_ortho),
-#   Stringent = unlist(lapply(topk_ortho_stringent, nrow)),
-#   Middle = unlist(lapply(topk_ortho_middle, nrow)),
-#   Relaxed = unlist(lapply(topk_ortho_relaxed, nrow))
-# )
-
-# Counts without duplicates
-
-topk_ortho_middle_dedup <- lapply(names(topk_ortho_middle), function(x) {
-  setdiff(topk_ortho_middle[[x]], topk_ortho_stringent[[x]])
-})
-names(topk_ortho_middle_dedup) <- names(topk_ortho_middle)
 
 
-topk_ortho_relaxed_dedup <- lapply(names(topk_ortho_relaxed), function(x) {
-  setdiff(topk_ortho_relaxed[[x]], topk_ortho_middle[[x]])
-})
-names(topk_ortho_relaxed_dedup) <- names(topk_ortho_relaxed)
 
+rank_ortho <- join_and_rank_ortho(rank_hg, rank_mm, pc_ortho, ncores = ncore)
+
+
+
+
+
+
+
+
+
+
+tiered_l <- subset_tiered_evidence(rank_ortho, k = k, ncores = ncore)
 
 n_topk_ortho <- data.frame(
   Symbol = names(rank_ortho),
-  Stringent = unlist(lapply(topk_ortho_stringent, nrow)),
-  Middle = unlist(lapply(topk_ortho_middle_dedup, nrow)),
-  Relaxed = unlist(lapply(topk_ortho_relaxed_dedup, nrow))
+  Stringent = unlist(lapply(lapply(tiered_l, pluck, "Stringent"), nrow)),
+  Middle = unlist(lapply(lapply(tiered_l, pluck, "Middle"), nrow)),
+  Relaxed = unlist(lapply(lapply(tiered_l, pluck, "Relaxed"), nrow))
 )
 
+
+# Plots
+# ------------------------------------------------------------------------------
+
+
+# Stacked barchart of tiered evidence counts
 
 plot_df1 <- pivot_longer(n_topk_ortho,
                          cols = c("Stringent", "Middle", "Relaxed"),
@@ -302,7 +289,10 @@ plot_df1 <- pivot_longer(n_topk_ortho,
   
 
 
-p1 <- ggplot(plot_df1, aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Scheme, colour = Scheme)) +
+p1 <- ggplot(
+  plot_df1, 
+  aes(x = reorder(Symbol, Count, FUN = median), 
+      y = Count, fill = Scheme, colour = Scheme)) +
   geom_bar(position = "stack", stat = "identity") +
   ylab("Count of reproducible interactions") +
   xlab("Transcription factor") +
@@ -482,6 +472,7 @@ labels_curated <- get_curated_labels(tf = plot_tf,
                                      remove_self = TRUE)
 
 curated_vec <- setNames(as.integer(genes %in% labels_curated), genes)
+
 
 pheatmap(curated_vec,
          cluster_rows = FALSE,
