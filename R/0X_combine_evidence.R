@@ -9,6 +9,7 @@ library(tidyverse)
 library(parallel)
 library(cowplot)
 library(ggrepel)
+library(pheatmap)
 source("R/utils/functions.R")
 source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
@@ -45,6 +46,9 @@ colnames(bind_summary$Mouse_TF) <- str_to_title(colnames(bind_summary$Mouse_TF))
 setdiff(colnames(bind_summary$Mouse_TF), pc_mm$Symbol)
 common_hg <- intersect(names(rank_tf_hg), colnames(bind_summary$Human_TF))
 common_mm <- intersect(names(rank_tf_mm), colnames(bind_summary$Mouse_TF))
+
+# Curated low throughput targets
+curated <- read.delim(curated_all_path, stringsAsFactors = FALSE)
 
 
 # Functions
@@ -271,19 +275,22 @@ topk_ortho_middle <- mclapply(rank_ortho, function(x) {
 # Counts without duplicates
 
 topk_ortho_middle_dedup <- lapply(names(topk_ortho_middle), function(x) {
-  nrow(setdiff(topk_ortho_middle[[x]], topk_ortho_stringent[[x]]))
+  setdiff(topk_ortho_middle[[x]], topk_ortho_stringent[[x]])
 })
+names(topk_ortho_middle_dedup) <- names(topk_ortho_middle)
+
 
 topk_ortho_relaxed_dedup <- lapply(names(topk_ortho_relaxed), function(x) {
-  nrow(setdiff(topk_ortho_relaxed[[x]], topk_ortho_middle[[x]]))
+  setdiff(topk_ortho_relaxed[[x]], topk_ortho_middle[[x]])
 })
+names(topk_ortho_relaxed_dedup) <- names(topk_ortho_relaxed)
 
 
 n_topk_ortho <- data.frame(
   Symbol = names(rank_ortho),
   Stringent = unlist(lapply(topk_ortho_stringent, nrow)),
-  Middle = unlist(topk_ortho_middle_dedup),
-  Relaxed = unlist(topk_ortho_relaxed_dedup)
+  Middle = unlist(lapply(topk_ortho_middle_dedup, nrow)),
+  Relaxed = unlist(lapply(topk_ortho_relaxed_dedup, nrow))
 )
 
 
@@ -309,4 +316,181 @@ p1 <- ggplot(plot_df1, aes(x = reorder(Symbol, Count, FUN = median), y = Count, 
         axis.ticks.x = element_blank(),
         plot.title = element_text(size = 20),
         plot.margin = margin(c(10, 20, 10, 10)))
+
+
+# Heatmap of tiered evidence for a given TF
+
+plot_tf <- "ASCL1"
+
+scale01 <- function(x) (x - min(x)) / (max(x) - min(x))
+
+
+genes <- c(arrange(topk_ortho_stringent[[plot_tf]], RP)$Symbol_hg,
+           arrange(topk_ortho_middle_dedup[[plot_tf]], RP)$Symbol_hg,
+           arrange(topk_ortho_relaxed_dedup[[plot_tf]], RP)$Symbol_hg)
+
+
+plot_df2 <- rank_ortho[[plot_tf]] %>% 
+  mutate(Avg_RSR_hg = scale01(Avg_RSR_hg),
+         Avg_RSR_mm = scale01(Avg_RSR_mm),
+         Bind_score_hg = scale01(Bind_score_hg),
+         Bind_score_mm = scale01(Bind_score_mm),
+         Rank_RSR_hg = as.integer(Rank_RSR_hg <= k), 
+         Rank_RSR_mm = as.integer(Rank_RSR_mm <= k), 
+         Rank_bind_hg = as.integer(Rank_bind_hg <= k), 
+         Rank_bind_mm = as.integer(Rank_bind_mm <= k)) %>%  
+  filter(Symbol_hg %in% genes) %>% 
+  arrange(match(Symbol_hg, genes))
+
+rownames(plot_df2) <- plot_df2$Symbol_hg
+
+
+# Padding between species (columns) and genes in evidence tiers (rows)
+
+gaps_row <- rep(c(nrow(topk_ortho_stringent[[plot_tf]]),
+                  nrow(topk_ortho_middle_dedup[[plot_tf]])),
+                each = 4)
+
+gaps_col <- rep(1, 4)
+
+
+pheatmap(plot_df2[, c("Avg_RSR_hg", "Avg_RSR_mm")],
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = c('#fff7ec','#fee8c8','#fdd49e','#fdbb84','#fc8d59','#ef6548','#d7301f','#b30000','#7f0000'),
+         breaks = seq(0, 1, length.out = 9),
+         border_color = "black",
+         gaps_row = gaps_row,
+         gaps_col = gaps_col,
+         cellwidth = 10,
+         cellheight = 10,
+         filename = file.path(plot_dir, "demo_stringent_coexpr_heatmap.png")
+)
+
+
+pheatmap(plot_df2[, c("Bind_score_hg", "Bind_score_mm")],
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = c('#fff7fb','#ece7f2','#d0d1e6','#a6bddb','#74a9cf','#3690c0','#0570b0','#045a8d','#023858'),
+         breaks = seq(0, 1, length.out = 9),
+         border_color = "black",
+         gaps_row = gaps_row,
+         gaps_col = gaps_col,
+         cellwidth = 10,
+         cellheight = 10,
+         filename = file.path(plot_dir, "demo_stringent_binding_heatmap.png")
+)
+
+
+# Binarizing status
+
+
+pheatmap(plot_df2[, c("Rank_RSR_hg", "Rank_RSR_mm")],
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = c('white', '#7f0000'),
+         border_color = "black",
+         gaps_row = gaps_row,
+         gaps_col = gaps_col,
+         cellwidth = 10,
+         cellheight = 10,
+         filename = file.path(plot_dir, "demo_stringent_coexpr_binary_heatmap.png")
+)
+
+
+pheatmap(plot_df2[, c("Rank_bind_hg", "Rank_bind_mm")],
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = c('white', '#045a8d'),
+         border_color = "black",
+         gaps_row = gaps_row,
+         gaps_col = gaps_col,
+         cellwidth = 10,
+         cellheight = 10,
+         filename = file.path(plot_dir, "demo_stringent_binding_binary_heatmap.png")
+)
+
+
+# Bin status
+
+
+plot_df2 <- rank_ortho[[plot_tf]] %>% 
+  
+  mutate(
+    
+    Avg_RSR_hg = scale01(Avg_RSR_hg),
+    Avg_RSR_mm = scale01(Avg_RSR_mm),
+    Bind_score_hg = scale01(Bind_score_hg),
+    Bind_score_mm = scale01(Bind_score_mm), 
+    
+    Rank_RSR_hg = case_when(Rank_RSR_hg <= k ~ 0,
+                            Rank_RSR_hg > k & Rank_RSR_hg <= k + 500 ~ 1,
+                            TRUE ~ 2), 
+    
+    Rank_RSR_mm = case_when(Rank_RSR_mm <= k ~ 0,
+                            Rank_RSR_mm > k & Rank_RSR_mm <= k + 500 ~ 1,
+                            TRUE ~ 2),
+    
+    Rank_bind_hg = case_when(Rank_bind_hg <= k ~ 0,
+                             Rank_bind_hg > k & Rank_bind_hg <= k + 500 ~ 1,
+                             TRUE ~ 2),
+    
+    Rank_bind_mm = case_when(Rank_bind_mm <= k ~ 0,
+                             Rank_bind_mm > k & Rank_bind_mm <= k + 500 ~ 1,
+                             TRUE ~ 2)) %>% 
+ 
+  filter(Symbol_hg %in% genes) %>% 
+  arrange(match(Symbol_hg, genes))
+
+rownames(plot_df2) <- plot_df2$Symbol_hg
+
+
+
+pheatmap(plot_df2[, c("Rank_RSR_hg", "Rank_RSR_mm")],
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = rev(c('white', "#fc8d59", '#7f0000')),
+         border_color = "black",
+         gaps_row = gaps_row,
+         gaps_col = gaps_col,
+         cellwidth = 10,
+         cellheight = 10,
+         filename = file.path(plot_dir, "demo_stringent_coexpr_step_heatmap.png")
+)
+
+
+pheatmap(plot_df2[, c("Rank_bind_hg", "Rank_bind_mm")],
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = rev(c('white', "#a6bddb",'#045a8d')),
+         border_color = "black",
+         gaps_row = gaps_row,
+         gaps_col = gaps_col,
+         cellwidth = 10,
+         cellheight = 10,
+         filename = file.path(plot_dir, "demo_stringent_binding_step_heatmap.png")
+)
+
+
+# Binary curated status
+
+
+labels_curated <- get_curated_labels(tf = plot_tf, 
+                                     curated_df = curated, 
+                                     pc_df = pc_hg, 
+                                     species = "Human", 
+                                     remove_self = TRUE)
+
+curated_vec <- setNames(as.integer(genes %in% labels_curated), genes)
+
+pheatmap(curated_vec,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = c("white", "black"),
+         border_color = "black",
+         gaps_row = gaps_row,
+         cellwidth = 10,
+         cellheight = 10,
+         filename = file.path(plot_dir, "demo_curated_heatmap.png")
+)
 
