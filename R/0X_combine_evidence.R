@@ -245,27 +245,13 @@ n_bottomk_mm <- sort(unlist(lapply(bottomk_mm, nrow)), decreasing = TRUE)
 # ------------------------------------------------------------------------------
 
 
-
-
-
-
-
-
-
-
-
 rank_ortho <- join_and_rank_ortho(rank_hg, rank_mm, pc_ortho, ncores = ncore)
 
 
 
-
-
-
-
-
-
-
 tiered_l <- subset_tiered_evidence(rank_ortho, k = k, ncores = ncore)
+
+
 
 n_topk_ortho <- data.frame(
   Symbol = names(rank_ortho),
@@ -273,6 +259,202 @@ n_topk_ortho <- data.frame(
   Middle = unlist(lapply(lapply(tiered_l, pluck, "Middle"), nrow)),
   Relaxed = unlist(lapply(lapply(tiered_l, pluck, "Relaxed"), nrow))
 )
+
+
+# Tally the unique genes that are in the most stringent set
+stringent_genes <- lapply(tiered_l, pluck, "Stringent", "Symbol_hg")
+stringent_genes <- stringent_genes[lapply(stringent_genes, length) > 0]
+n_stringent_genes <- sort(table(unlist(stringent_genes)))
+
+sum(n_stringent_genes > 1)
+
+# Get the TFs that are associated with each of these stringent genes
+stringent_tfs <- lapply(names(n_stringent_genes), function(x) {
+  gene_in_tf <- unlist(lapply(stringent_genes, function(y) x %in% y))
+  names(gene_in_tf[gene_in_tf])
+})
+names(stringent_tfs) <- names(n_stringent_genes)
+
+
+unique(unlist(stringent_tfs[c("TRIB1", "TNFAIP3", "MCL1")]))
+
+
+sum(n_topk_ortho$Stringent > 0)
+sum(n_topk_ortho$Stringent)
+summary(filter(n_topk_ortho, Stringent > 0)$Stringent)
+
+
+# Demo seeing how many interactions are exclusively found within species
+
+
+common_hg <- intersect(names(rank_hg), names(rank_ortho))
+
+specific_hg <- lapply(names(rank_hg), function(x) {
+  
+  if (x %!in% names(rank_ortho)) {
+    return(data.frame(Symbol = x, Ortho = FALSE, N = nrow(topk_hg[[x]])))
+  }
+  
+  n_specific <- setdiff(
+    topk_hg[[x]]$Symbol,
+    unlist(lapply(tiered_l[[x]], pluck, "Symbol_hg")))
+  
+  data.frame(Symbol = x, Ortho = TRUE, N = length(n_specific))
+  
+})
+
+
+specific_hg <- do.call(rbind, specific_hg)
+
+
+
+
+specific_mm <- lapply(names(rank_mm), function(x) {
+  
+  if (str_to_upper(x) %!in% names(rank_ortho)) {
+    return(data.frame(Symbol = x, Ortho = FALSE, N = nrow(topk_mm[[x]])))
+  }
+  
+  n_specific <- setdiff(
+    topk_mm[[x]]$Symbol,
+    unlist(lapply(tiered_l[[str_to_upper(x)]], pluck, "Symbol_mm")))
+  
+  data.frame(Symbol = x, Ortho = TRUE, N = length(n_specific))
+  
+})
+
+
+specific_mm <- do.call(rbind, specific_mm)
+
+
+
+
+n_topk_hg <- left_join(specific_hg, n_topk_ortho, by = "Symbol") %>% 
+  rename("Human_specific" = "N")
+n_topk_hg[is.na(n_topk_hg)] <- 0
+
+
+
+n_topk_mm <- specific_mm %>% 
+  mutate(Symbol = str_to_upper(Symbol)) %>% 
+  left_join(., n_topk_ortho, by = "Symbol") %>% 
+  rename("Mouse_specific" = "N")
+n_topk_mm[is.na(n_topk_mm)] <- 0
+
+
+
+p_dfx <- pivot_longer(n_topk_hg,
+                      cols = c("Human_specific", "Stringent", "Middle", "Relaxed"),
+                      names_to = "Scheme",
+                      values_to = "Count") %>% 
+  mutate(Scheme = factor(Scheme, levels = c("Human_specific", "Relaxed", "Middle", "Stringent")))
+  
+
+
+# p_dfx$Symbol <- factor(p_dfx$Symbol, levels = arrange(n_topk_hg, Stringent)$Symbol)
+# p_dfx$Symbol <- factor(p_dfx$Symbol, levels = arrange(n_topk_hg, Human_specific)$Symbol)
+  
+
+
+ggplot(
+  p_dfx, 
+  aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Scheme, colour = Scheme)) +
+  # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
+  geom_bar(position = "stack", stat = "identity") +
+  ylab("Count of reproducible interactions") +
+  xlab("Transcription factor") +
+  ggtitle(paste0("N=", nrow(p_dfx))) +
+  scale_fill_manual(values = c("#1b9e77", "#d95f02", "#7570b3", "#e7298a")) +
+  scale_colour_manual(values = c("#1b9e77", "#d95f02", "#7570b3", "#e7298a")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+p_dfx2a <- n_topk_hg %>% 
+  mutate(N_ortho = rowSums(n_topk_hg[, c("Stringent", "Middle", "Relaxed")])) %>% 
+  select(-c(Stringent, Middle, Relaxed)) %>% 
+  pivot_longer(cols = c("Human_specific", "N_ortho"),
+               names_to = "Scheme",
+               values_to = "Count")
+
+
+
+p_dfx2b <- n_topk_mm %>% 
+  mutate(N_ortho = rowSums(n_topk_mm[, c("Stringent", "Middle", "Relaxed")])) %>% 
+  select(-c(Stringent, Middle, Relaxed)) %>% 
+  pivot_longer(cols = c("Mouse_specific", "N_ortho"),
+               names_to = "Scheme",
+               values_to = "Count")
+
+
+p2a <- ggplot(
+  p_dfx2a, 
+  aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Scheme, colour = Scheme)) +
+  # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
+  geom_bar(position = "stack", stat = "identity") +
+  facet_wrap(~Ortho, scales = "free") +
+  ylab("Count of reproducible interactions") +
+  xlab("Transcription factor") +
+  # ggtitle(paste0("N=", nrow(p_dfx))) +
+  scale_fill_manual(values = c("royalblue", "darkgrey")) +
+  scale_colour_manual(values = c("royalblue", "darkgrey")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 20),
+        legend.position = c(0.75, 0.75),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+p2b <- ggplot(
+  p_dfx2b, 
+  aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Scheme, colour = Scheme)) +
+  # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
+  geom_bar(position = "stack", stat = "identity") +
+  facet_wrap(~Ortho, scales = "free") +
+  ylab("Count of reproducible interactions") +
+  xlab("Transcription factor") +
+  # ggtitle(paste0("N=", nrow(p_dfx))) +
+  scale_fill_manual(values = c("goldenrod", "darkgrey")) +
+  scale_colour_manual(values = c("goldenrod", "darkgrey")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 20),
+        legend.position = c(0.75, 0.75),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+p2 <- plot_grid(p2a, p2b, ncol = 1)
+
+
+# Demo overlap of AP1 members
+
+
+ap1_genes <- c("FOS", "FOSL1", "FOSL2", "JUN", "JUNB", "JUND")
+
+ap1_hg <- lapply(ap1_genes, function(x) {
+  rank_hg[[x]] %>% 
+    arrange(match(Symbol, pc_hg$Symbol)) %>%
+    select(Symbol, Rank_bind, Rank_RSR, RP) %>% 
+    rename_with(~paste0(., "_", x), -c("Symbol")) 
+})
+
+
+ap1_hg <- plyr::join_all(ap1_hg, by = "Symbol")
+
 
 
 # Plots
@@ -296,7 +478,7 @@ p1 <- ggplot(
   geom_bar(position = "stack", stat = "identity") +
   ylab("Count of reproducible interactions") +
   xlab("Transcription factor") +
-  ggtitle(paste0("N=", nrow(n_topk_ortho))) +
+  # ggtitle(paste0("N=", nrow(n_topk_ortho))) +
   scale_fill_manual(values = c("#1b9e77", "#d95f02", "#7570b3")) +
   scale_colour_manual(values = c("#1b9e77", "#d95f02", "#7570b3")) +
   theme_classic() +
@@ -305,7 +487,12 @@ p1 <- ggplot(
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         plot.title = element_text(size = 20),
+        legend.position = c(0.75, 0.75),
         plot.margin = margin(c(10, 20, 10, 10)))
+
+
+plot_grid(p1, p2, rel_widths = c(1, 0.5))
+
 
 
 # Heatmap of tiered evidence for a given TF
