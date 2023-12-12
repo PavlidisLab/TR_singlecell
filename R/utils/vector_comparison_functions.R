@@ -474,30 +474,59 @@ get_auc <- function(score_vec,
 
 
 
-# TODO:
+# Retrieve curated targets for the given TF, casting wide enough to capture
+# genes with 1:1 orthologous matches between mouse and human
 
 get_curated_labels <- function(tf,
                                curated_df,
+                               ortho_df,
                                pc_df,
                                species,
                                remove_self = TRUE) {
   
+  stopifnot(species %in% c("Human", "Mouse"))
+  
+  # Get all valid orthologous symbols for input TF
+  ortho_tf <- filter(ortho_df, 
+                     Symbol_hg == str_to_upper(tf) | 
+                     Symbol_mm == str_to_title(tf))
+  
+  tf <- union(
+    filter(pc_df, Symbol == tf)$Symbol,
+    c(ortho_tf$Symbol_hg, ortho_tf$Symbol_mm)
+  )
+  
+  # Extract all target genes matching any of the ortho TF symbols
   labels <- curated_df %>%
-    filter(str_to_upper(TF_Symbol) == str_to_upper(tf)) %>% 
+    filter(str_to_upper(TF_Symbol) %in% str_to_upper(tf)) %>%
     distinct(Target_Symbol) %>%
     pull(Target_Symbol)
   
+  # Remove the TF if it is also its own target
   if (remove_self) labels <- setdiff(str_to_upper(labels), str_to_upper(tf))
 
-  labels <- if (species == "Human") {
-    intersect(str_to_upper(labels), pc_df$Symbol)
+  # For labels, get the correct species symbol if it exists
+  if (species == "Human") {
+    
+    ortho_labels <- 
+      filter(pc_ortho, Symbol_hg %in% str_to_upper(labels))$Symbol_hg
+    
+    labels <- union(
+      ortho_labels,
+      filter(pc_df, Symbol %in% str_to_upper(labels))$Symbol)
+
   } else {
-    intersect(str_to_title(labels), pc_df$Symbol)
+    
+    ortho_labels <- 
+      filter(pc_ortho, Symbol_mm %in% str_to_title(labels))$Symbol_mm
+    
+    labels <- union(
+      ortho_labels,
+      filter(pc_df, Symbol %in% str_to_title(labels))$Symbol)
   }
   
   return(labels)
 }
-
 
 
 
