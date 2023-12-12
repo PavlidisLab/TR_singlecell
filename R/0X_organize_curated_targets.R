@@ -6,6 +6,7 @@
 library(tidyverse)
 library(googlesheets4)
 source("R/00_config.R")
+source("R/utils/functions.R")
 
 # Protein coding genes 
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
@@ -46,6 +47,7 @@ keep_cols <- c("DTRI_ID",
                "PubMed_ID",
                "Databases")
 
+# Chu2021: keep only columns of interest and reduce column names
 
 lt_chu2021 <- lt_chu2021 %>% 
   dplyr::rename(
@@ -59,6 +61,7 @@ lt_chu2021 <- lt_chu2021 %>%
   )
 
 
+# External dbs aggregated in Chu2021: db name from Current -> Chu2021
 
 lt_all <- lt_all %>%
   dplyr::rename(
@@ -68,6 +71,9 @@ lt_all <- lt_all %>%
   mutate(Databases = str_replace(Databases, "Current", "Chu2021"))
 
 
+# Join Chu2021 curated targets and those aggregated in Chu2021. Keep only genes
+# found in human or mouse Refseq select protein coding; coerce to mouse symbol
+# casing if recorded as mouse experiment
 
 lt_all <-
   left_join(lt_all, lt_chu2021, by = "DTRI_ID", suffix = c("", ".y")) %>%
@@ -90,7 +96,7 @@ lt_all <-
 
 # For pavlab/updated resource, only keep/add relevant cols, and only keep
 # protein coding genes. Add species info, which has been encoded by the casing
-# of the symbol name
+# of the symbol name. Db name -> "Pavlab" (distinguished from prior Chu2021)
 # ------------------------------------------------------------------------------
 
 
@@ -110,20 +116,21 @@ pavlab <- pavlab %>%
 
 
 
+# Combine Chu2021 (+ aggregated external) and updated curation
 lt_final <- rbind(lt_all, pavlab)
 
 
 
-# Keep:
+# Certain low-throughput only:
 # TRRUST, Pavlab, Chu2021, TFe, InnateDB
 # HTRIdb_LC is only the literature curated part of HTRIdb
 # Same for ORegAnno_LC
 
-#  Uncertain: 
-# CytReg 2020 update using eY1H
-# TFactS may have some non-low throughput
-sort(table(lt_final$Databases), decreasing = TRUE)
-unique(unlist(str_split(lt_final$Databases, ", ")))
+#  Uncertain if contains genomic evidence: 
+# CytReg (note 2020 update using eY1H, not included here!)
+
+# sort(table(lt_final$Databases))
+# unique(unlist(str_split(lt_final$Databases, ", ")))
 
 
 
@@ -153,6 +160,7 @@ lt_final <- lt_final %>%
   select(-Rm)
 
 
+# Get an estimate of count of targets per TF, collapsing species/casing
 
 n_target <- lt_final %>% 
   mutate(
@@ -165,14 +173,38 @@ n_target <- lt_final %>%
   mutate(TF_Symbol = factor(TF_Symbol, levels = unique(TF_Symbol)))
   
 
+# Summarize: minimum of 5 targets used for downstream benchmarking
 
-summary(filter(n_target, N_target >= 5)$N_target)
+n_target_min <- filter(n_target, N_target >= 5)
+
+n_genes <- lt_final %>% 
+  filter(TF_Symbol %in% n_target_min$TF_Symbol) %>% 
+  summarise(Distinct_targets = n_distinct(Target_Symbol),
+            Distinct_TFs = n_distinct(TF_Symbol))
+
+summ_n <- summary(n_target_min$N_target)
+
+
+# Inspect genes that are not in the 1:1 ortho set. Note that downstream
+# benchmarking uses genes with 1:1 orthologs for either species. Workflow grabs 
+# genes regardless of casing AND that have non-equivalent naming. Eg, curated
+# table has Tp53, TP53, and Trp53. All affiliated targets will be
+# considered for TP53/Trp53
+
+not_ortho <- lt_final %>% 
+  filter(Target_Symbol %!in% pc_ortho$Symbol_hg & 
+        Target_Symbol %!in% pc_ortho$Symbol_mm) %>% 
+  pull(Target_Symbol) %>% 
+  unique()
 
 
 
-#
+# Plots
 # ------------------------------------------------------------------------------
 
+
+# Barchart of the count of targets per TF (collapsing species/casing), adding a
+# vertical line showing the cut-off of minimum 5 targets
 
 p1 <- ggplot(n_target, aes(x = TF_Symbol, y = N_target)) +
   geom_bar(stat = "identity", fill = "slategrey") +
@@ -186,23 +218,12 @@ p1 <- ggplot(n_target, aes(x = TF_Symbol, y = N_target)) +
         axis.ticks.x = element_blank())
 
 
-
-
 ggsave(p1, height = 6, width = 9, device = "png", dpi = 300,
        filename = file.path(plot_dir, "count_of_distinct_curated_targets.png"))
 
 
-n_distinct(str_to_upper(lt_final$Target_Symbol))
-n_distinct(str_to_upper(lt_final$TF_Symbol))
 
-
-# table(n_target$TF_Symbol %in% c(tfs_hg$Symbol, str_to_upper(tfs_mm$Symbol)))
-# non_tfs <- setdiff(n_target$TF_Symbol, c(tfs_hg$Symbol, str_to_upper(tfs_mm$Symbol)))
-# filter(n_target, TF_Symbol %in% non_tfs) %>% view
-# sort(table(filter(lt_final, str_to_upper(TF_Symbol) == "CTNNB1")$Databases))
-
-sort(table(filter(lt_final, str_to_upper(TF_Symbol) == "SP1")$Databases))
-
+# Write out cleaned curation table
 
 write.table(lt_final, 
             sep = "\t",
