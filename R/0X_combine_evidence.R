@@ -2,6 +2,8 @@
 ## with reproducible evidence across species and methods
 # TODO: winner takes all binding evidence?
 # TODO: get distn of all average bind scores? look for outliers
+# https://www.biostars.org/p/350710/ 
+# https://datacatz.wordpress.com/2018/01/19/gene-set-enrichment-analysis-with-topgo-part-1/
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -171,6 +173,54 @@ join_and_rank_ortho <- function(rank_hg, rank_mm, pc_ortho, ncores = 1) {
 # relaxed, which allows genes with top K in one data type in the opposite species
 # (but not both data types in just one species - want to emphasize ortho aspect)
 
+# subset_tiered_evidence <- function(rank_l, k, ncores = 1) {
+#   
+#   tiered_l <- mclapply(rank_l, function(rank_df) {
+#     
+#     # May need to decrease k if the current k includes tied values
+#     k_bind_hg <- check_k(sort(rank_df$Bind_score_hg, decreasing = TRUE), k = k)
+#     k_bind_mm <- check_k(sort(rank_df$Bind_score_mm, decreasing = TRUE), k = k)
+#     k_rsr_hg <- check_k(sort(rank_df$Avg_RSR_hg, decreasing = TRUE), k = k)
+#     k_rsr_mm <- check_k(sort(rank_df$Avg_RSR_mm, decreasing = TRUE), k = k)
+#     
+#     # Stringent requires top k in all four of human and mouse coexpr and binding 
+#     stringent <- filter(
+#       rank_df, 
+#       (Rank_RSR_hg <= k_rsr_hg & Rank_RSR_mm <= k_rsr_mm) & 
+#       (Rank_bind_hg <= k_bind_hg & Rank_bind_mm <= k_bind_mm))
+#     
+#     # Middle requires evidence in 3/4 rankings
+#     middle <- filter(
+#       rank_df,
+#       (((Rank_RSR_hg <= k_rsr_hg | Rank_RSR_mm <= k_rsr_mm) & 
+#        (Rank_bind_hg <= k_bind_hg & Rank_bind_mm <= k_bind_mm)
+#       ) |
+#       ((Rank_bind_hg <= k_bind_hg | Rank_bind_mm <= k_bind_mm) &
+#        (Rank_RSR_hg <= k_rsr_hg & Rank_RSR_mm <= k_rsr_mm))) &
+#       Symbol_hg %!in% stringent$Symbol_hg)
+#     
+#     # Relaxed requires evidence in one data type for each species
+#     # relaxed <- filter(
+#     #   rank_df,
+#     #   (Rank_RSR_hg <= k_rsr_hg | Rank_RSR_mm <= k_rsr_mm) & 
+#     #   (Rank_bind_hg <= k_bind_hg | Rank_bind_mm <= k_bind_mm) &
+#     #   Symbol_hg %!in% c(middle$Symbol_hg, stringent$Symbol_hg))
+#     
+#     relaxed <- filter(
+#       rank_df,
+#       ((Rank_RSR_hg <= k_rsr_hg & Rank_bind_mm <= k_bind_mm) | 
+#       (Rank_RSR_mm <= k_rsr_mm & Rank_bind_hg <= k_bind_hg)) &
+#       Symbol_hg %!in% c(middle$Symbol_hg, stringent$Symbol_hg))
+#     
+#     list(Stringent = stringent, Middle = middle, Relaxed = relaxed)
+#     
+#   }, mc.cores = ncores)
+#   
+#   names(tiered_l) <- names(rank_l)
+#   return(tiered_l)
+# }
+
+
 subset_tiered_evidence <- function(rank_l, k, ncores = 1) {
   
   tiered_l <- mclapply(rank_l, function(rank_df) {
@@ -181,28 +231,30 @@ subset_tiered_evidence <- function(rank_l, k, ncores = 1) {
     k_rsr_hg <- check_k(sort(rank_df$Avg_RSR_hg, decreasing = TRUE), k = k)
     k_rsr_mm <- check_k(sort(rank_df$Avg_RSR_mm, decreasing = TRUE), k = k)
     
+    rank_df <- mutate(rank_df,
+                      Cutoff_RSR_hg = Rank_RSR_hg <= k_rsr_hg,
+                      Cutoff_RSR_mm = Rank_RSR_mm <= k_rsr_mm,
+                      Cutoff_bind_hg = Rank_bind_hg <= k_bind_hg,
+                      Cutoff_bind_mm = Rank_bind_mm <= k_bind_mm)
+    
     # Stringent requires top k in all four of human and mouse coexpr and binding 
     stringent <- filter(
-      rank_df, 
-      (Rank_RSR_hg <= k_rsr_hg & Rank_RSR_mm <= k_rsr_mm) & 
-      (Rank_bind_hg <= k_bind_hg & Rank_bind_mm <= k_bind_mm))
+      rank_df,
+      Cutoff_RSR_hg & Cutoff_RSR_mm & Cutoff_bind_hg & Cutoff_bind_mm) %>% 
+      select(-contains("Cutoff"))
     
     # Middle requires evidence in 3/4 rankings
-    middle <- filter(
-      rank_df,
-      (((Rank_RSR_hg <= k_rsr_hg | Rank_RSR_mm <= k_rsr_mm) & 
-       (Rank_bind_hg <= k_bind_hg & Rank_bind_mm <= k_bind_mm)
-      ) |
-      ((Rank_bind_hg <= k_bind_hg | Rank_bind_mm <= k_bind_mm) &
-       (Rank_RSR_hg <= k_rsr_hg & Rank_RSR_mm <= k_rsr_mm))) &
-      Symbol_hg %!in% stringent$Symbol_hg)
+    middle <- rank_df %>% 
+      mutate(n = rowSums(.[grep("Cutoff", names(.))])) %>% 
+      filter(n == 3) %>% 
+      select(-c(contains("Cutoff"), n))
     
     # Relaxed requires evidence in one data type for each species
-    relaxed <- filter(
-      rank_df,
-      (Rank_RSR_hg <= k_rsr_hg | Rank_RSR_mm <= k_rsr_mm) & 
-      (Rank_bind_hg <= k_bind_hg | Rank_bind_mm <= k_bind_mm) &
-      Symbol_hg %!in% c(middle$Symbol_hg, stringent$Symbol_hg))
+    relaxed <- rank_df %>%
+      filter(
+        (Cutoff_RSR_hg & Cutoff_bind_mm) | (Cutoff_RSR_mm & Cutoff_bind_hg)) %>% 
+      filter(Symbol_hg %!in% c(stringent$Symbol_hg, middle$Symbol_hg)) %>% 
+      select(-contains("Cutoff"))
     
     list(Stringent = stringent, Middle = middle, Relaxed = relaxed)
     
@@ -211,6 +263,7 @@ subset_tiered_evidence <- function(rank_l, k, ncores = 1) {
   names(tiered_l) <- names(rank_l)
   return(tiered_l)
 }
+
 
 
 # Join aggregate coexpression and binding
@@ -279,27 +332,79 @@ names(stringent_tfs) <- names(n_stringent_genes)
 unique(unlist(stringent_tfs[c("TRIB1", "TNFAIP3", "MCL1")]))
 
 
-sum(n_topk_ortho$Stringent > 0)
-sum(n_topk_ortho$Stringent)
-summary(filter(n_topk_ortho, Stringent > 0)$Stringent)
+# TODO: better counting
+
+summ_tiers <- lapply(c("Stringent", "Middle", "Relaxed"), function(x) {
+  list(
+    sum(n_topk_ortho[[x]] > 0),
+    sum(n_topk_ortho[[x]]),
+    summary(filter(n_topk_ortho, !!sym(x) > 0)[[x]])
+  )
+})
+
+
+
+# Which data type is typically absent from the middle collection?
+
+missing_middle <- lapply(tiered_l, function(x) {
+  
+  df <- data.frame(
+    N = nrow(x$Middle),
+    N_coexpr_hg = sum(x$Middle$Rank_RSR_hg > k),
+    N_coexpr_mm = sum(x$Middle$Rank_RSR_mm > k),
+    N_bind_hg = sum(x$Middle$Rank_bind_hg > k),
+    N_bind_mm = sum(x$Middle$Rank_bind_mm > k))
+  
+  df$N_human <- sum(df$N_bind_hg, df$N_coexpr_hg)
+  df$N_mouse <- sum(df$N_bind_mm, df$N_coexpr_mm)
+  df$N_coexpr <- sum(df$N_coexpr_hg, df$N_coexpr_mm)
+  df$N_bind <- sum(df$N_bind_hg, df$N_bind_mm)
+  
+  return(df)
+})
+
+
+missing_middle <- do.call(rbind, missing_middle)
+missing_middle2 <- missing_middle
+missing_middle2[, 2:ncol(missing_middle2)] <- t(apply(missing_middle, 1, function(x) x[2:ncol(missing_middle)] / x["N"]))
+
 
 
 # Demo seeing how many interactions are exclusively found within species
+# TODO: workflow needs collapse and clean
 
 
 common_hg <- intersect(names(rank_hg), names(rank_ortho))
 
+
 specific_hg <- lapply(names(rank_hg), function(x) {
+
+  topk <- topk_hg[[x]]$Symbol
   
+  not_ortho <- length(setdiff(topk, pc_ortho$Symbol_hg))
+    
   if (x %!in% names(rank_ortho)) {
-    return(data.frame(Symbol = x, Ortho = FALSE, N = nrow(topk_hg[[x]])))
+    
+    ortho <- FALSE
+    specific = length(topk)
+    
+  } else {
+    
+    ortho <- TRUE
+    specific <- length(setdiff(
+    topk,
+    # unlist(lapply(tiered_l[[x]], pluck, "Symbol_hg")))  # Including Relaxed
+    unlist(lapply(tiered_l[[x]][c("Stringent", "Middle")], pluck, "Symbol_hg"))
+    ))
   }
   
-  n_specific <- setdiff(
-    topk_hg[[x]]$Symbol,
-    unlist(lapply(tiered_l[[x]], pluck, "Symbol_hg")))
+  prop_not_ortho <- not_ortho / specific
   
-  data.frame(Symbol = x, Ortho = TRUE, N = length(n_specific))
+  data.frame(Symbol = x, 
+             Ortho = ortho, 
+             N_specific = specific, 
+             N_not_ortho = not_ortho,
+             Prop_not_ortho = prop_not_ortho)
   
 })
 
@@ -310,16 +415,33 @@ specific_hg <- do.call(rbind, specific_hg)
 
 
 specific_mm <- lapply(names(rank_mm), function(x) {
+
+  topk <- topk_mm[[x]]$Symbol
   
+  not_ortho <- length(setdiff(topk, pc_ortho$Symbol_mm))
+    
   if (str_to_upper(x) %!in% names(rank_ortho)) {
-    return(data.frame(Symbol = x, Ortho = FALSE, N = nrow(topk_mm[[x]])))
+    
+    ortho <- FALSE
+    specific = length(topk)
+    
+  } else {
+    
+    ortho <- TRUE
+    specific <- length(setdiff(
+    topk,
+    # unlist(lapply(tiered_l[[x]], pluck, "Symbol_mm")))  # Including Relaxed
+    unlist(lapply(tiered_l[[str_to_upper(x)]][c("Stringent", "Middle")], pluck, "Symbol_mm"))
+    ))
   }
   
-  n_specific <- setdiff(
-    topk_mm[[x]]$Symbol,
-    unlist(lapply(tiered_l[[str_to_upper(x)]], pluck, "Symbol_mm")))
+  prop_not_ortho <- not_ortho / specific
   
-  data.frame(Symbol = x, Ortho = TRUE, N = length(n_specific))
+  data.frame(Symbol = x, 
+             Ortho = ortho, 
+             N_specific = specific, 
+             N_not_ortho = not_ortho,
+             Prop_not_ortho = prop_not_ortho)
   
 })
 
@@ -330,7 +452,7 @@ specific_mm <- do.call(rbind, specific_mm)
 
 
 n_topk_hg <- left_join(specific_hg, n_topk_ortho, by = "Symbol") %>% 
-  rename("Human_specific" = "N")
+  rename("Human_specific" = "N_specific")
 n_topk_hg[is.na(n_topk_hg)] <- 0
 
 
@@ -338,32 +460,82 @@ n_topk_hg[is.na(n_topk_hg)] <- 0
 n_topk_mm <- specific_mm %>% 
   mutate(Symbol = str_to_upper(Symbol)) %>% 
   left_join(., n_topk_ortho, by = "Symbol") %>% 
-  rename("Mouse_specific" = "N")
+  rename("Mouse_specific" = "N_specific")
 n_topk_mm[is.na(n_topk_mm)] <- 0
 
+
+# TODO: make histogram plots of species-specific gains
+
+summary(filter(n_topk_hg, Ortho))
+summary(filter(n_topk_mm, Ortho))
+
+summary(filter(n_topk_hg, !Ortho))
+summary(filter(n_topk_mm, !Ortho))
+
+sum(filter(n_topk_hg, Ortho)$N_not_ortho == 0)
+sum(filter(n_topk_mm, Ortho)$N_not_ortho == 0)
+
+
+# Genes in species-specific that are not in ortho set
+
+setdiff(topk_hg$STAT1$Symbol, pc_ortho$Symbol_hg)
+
+
+
+# Candidate evolutionary divergent interactions
+
+mid_ortho <- nrow(rank_ortho[[1]]) / 2
+
+evo_div <- lapply(rank_ortho, function(x) {
+  
+  human = filter(x,
+                 Rank_RSR_hg <= k & Rank_bind_hg <= k &
+                 Rank_RSR_mm >= mid_ortho & Rank_bind_mm >= mid_ortho)
+  
+  mouse = filter(x,
+                 Rank_RSR_mm <= k & Rank_bind_mm <= k &
+                 Rank_RSR_hg >= mid_ortho & Rank_bind_hg >= mid_ortho)
+  
+  list(Human = human, Mouse = mouse)
+  
+})
+
+
+
+n_evo_div <- data.frame(
+  Symbol = names(rank_ortho),
+  do.call(rbind, lapply(evo_div, function(x) data.frame(Human = nrow(x$Human), Mouse = nrow(x$Mouse))))
+  )
+
+
+
+
+
+# Plotting interactions grouped by ortho collection
 
 
 p_dfx <- pivot_longer(n_topk_hg,
                       cols = c("Human_specific", "Stringent", "Middle", "Relaxed"),
                       names_to = "Scheme",
                       values_to = "Count") %>% 
-  mutate(Scheme = factor(Scheme, levels = c("Human_specific", "Relaxed", "Middle", "Stringent")))
+  mutate(Scheme = factor(Scheme, levels = c("Relaxed", "Human_specific", "Middle", "Stringent")))
   
 
 
-# p_dfx$Symbol <- factor(p_dfx$Symbol, levels = arrange(n_topk_hg, Stringent)$Symbol)
+p_dfx$Symbol <- factor(p_dfx$Symbol, levels = arrange(n_topk_hg, Stringent)$Symbol)
 # p_dfx$Symbol <- factor(p_dfx$Symbol, levels = arrange(n_topk_hg, Human_specific)$Symbol)
   
 
-
+# https://github.com/dgrtwo/drlib/blob/master/R/reorder_within.R
 ggplot(
   p_dfx, 
-  aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Scheme, colour = Scheme)) +
-  # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
+  # aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Scheme, colour = Scheme)) +
+  aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
   geom_bar(position = "stack", stat = "identity") +
+  facet_wrap(~ Ortho, scales = "free") +
   ylab("Count of reproducible interactions") +
   xlab("Transcription factor") +
-  ggtitle(paste0("N=", nrow(p_dfx))) +
+  ggtitle(paste0("N=", n_distinct(p_dfx$Symbol))) +
   scale_fill_manual(values = c("#1b9e77", "#d95f02", "#7570b3", "#e7298a")) +
   scale_colour_manual(values = c("#1b9e77", "#d95f02", "#7570b3", "#e7298a")) +
   theme_classic() +
@@ -377,7 +549,8 @@ ggplot(
 
 
 p_dfx2a <- n_topk_hg %>% 
-  mutate(N_ortho = rowSums(n_topk_hg[, c("Stringent", "Middle", "Relaxed")])) %>% 
+  # mutate(N_ortho = rowSums(n_topk_hg[, c("Stringent", "Middle", "Relaxed")])) %>% 
+  mutate(N_ortho = rowSums(n_topk_hg[, c("Stringent", "Middle")])) %>% 
   select(-c(Stringent, Middle, Relaxed)) %>% 
   pivot_longer(cols = c("Human_specific", "N_ortho"),
                names_to = "Scheme",
@@ -386,7 +559,8 @@ p_dfx2a <- n_topk_hg %>%
 
 
 p_dfx2b <- n_topk_mm %>% 
-  mutate(N_ortho = rowSums(n_topk_mm[, c("Stringent", "Middle", "Relaxed")])) %>% 
+  # mutate(N_ortho = rowSums(n_topk_mm[, c("Stringent", "Middle", "Relaxed")])) %>% 
+  mutate(N_ortho = rowSums(n_topk_mm[, c("Stringent", "Middle")])) %>% 
   select(-c(Stringent, Middle, Relaxed)) %>% 
   pivot_longer(cols = c("Mouse_specific", "N_ortho"),
                names_to = "Scheme",
@@ -440,6 +614,7 @@ p2b <- ggplot(
 p2 <- plot_grid(p2a, p2b, ncol = 1)
 
 
+
 # Demo overlap of AP1 members
 
 
@@ -470,11 +645,13 @@ plot_df1 <- pivot_longer(n_topk_ortho,
   mutate(Scheme = factor(Scheme, levels = c("Relaxed", "Middle", "Stringent")))
   
 
+plot_df1$Symbol <- factor(plot_df1$Symbol, levels = arrange(n_topk_ortho, Stringent)$Symbol)
+
 
 p1 <- ggplot(
   plot_df1, 
-  aes(x = reorder(Symbol, Count, FUN = median), 
-      y = Count, fill = Scheme, colour = Scheme)) +
+  # aes(x = reorder(Symbol, Count, FUN = median), 
+  aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
   geom_bar(position = "stack", stat = "identity") +
   ylab("Count of reproducible interactions") +
   xlab("Transcription factor") +
