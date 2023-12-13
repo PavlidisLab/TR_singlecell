@@ -1,4 +1,5 @@
-## TODO:
+## Save out a list of the AUC performances of aggregated ChIP-seq's ability
+## to recover curated targets
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -41,18 +42,12 @@ stopifnot(collection %in% c("Robust", "Permissive"))
 bind_summary_path <- paste0("/space/scratch/amorin/R_objects/unibind_", collection, "_bindscore_summary.RDS")
 bind_summary <- readRDS(bind_summary_path)
 
-# Curated TFs with ChIP-seq and all targets for null
-tfs_curated_hg <- intersect(colnames(bind_summary$Human_TF), str_to_upper(curated$TF_Symbol))
-tfs_curated_mm <- intersect(colnames(bind_summary$Mouse_TF), str_to_upper(curated$TF_Symbol))
-targets_curated_hg <- intersect(pc_hg$Symbol, str_to_upper(curated$Target_Symbol))
-targets_curated_mm <- intersect(pc_mm$Symbol, str_to_title(curated$Target_Symbol))
-
 # TODO: finalize
 unibind_auc_hg_path <- paste0("/space/scratch/amorin/R_objects/unibind_", collection, "_recover_curated_hg.RDS")
 unibind_auc_mm_path <- paste0("/space/scratch/amorin/R_objects/unibind_", collection, "_recover_curated_mm.RDS")
 
 
-# TODO:
+# Functions
 # ------------------------------------------------------------------------------
 
 
@@ -75,22 +70,69 @@ bind_hg <- split_to_list(bind_summary$Human_TF)
 bind_mm <- split_to_list(bind_summary$Mouse_TF)
 
 
-# TODO: review if necessary/can be avoided
-names(bind_mm) <- str_to_title(names(bind_mm))
-tfs_curated_mm <- str_to_title(tfs_curated_mm)
+
+# Get ortho-matched symbols of TFs with available data, as well as all targets
+# which are used for null
+# ------------------------------------------------------------------------------
 
 
-set.seed(5)
+# Human
+
+ortho_tf_hg <- pc_ortho %>% 
+  filter(Symbol_mm %in% curated$TF_Symbol | Symbol_hg %in% curated$TF_Symbol) %>% 
+  filter(Symbol_hg %in% colnames(bind_summary$Human_TF)) %>% 
+  pull(Symbol_hg)
+
+ortho_target_hg <- pc_ortho %>% 
+  filter(Symbol_mm %in% curated$Target_Symbol | Symbol_hg %in% curated$Target_Symbol) %>% 
+  filter(Symbol_hg %in% rownames(bind_summary$Human_TF)) %>% 
+  pull(Symbol_hg)
+
+tf_hg <- union(
+  intersect(colnames(bind_summary$Human_TF), str_to_upper(curated$TF_Symbol)),
+  ortho_tf_hg)
+
+target_hg <- union(
+  intersect(rownames(bind_summary$Human_TF), str_to_upper(curated$Target_Symbol)),
+  ortho_target_hg)
+
+
+# Mouse
+
+ortho_tf_mm <- pc_ortho %>% 
+  filter(Symbol_mm %in% curated$TF_Symbol | Symbol_hg %in% curated$TF_Symbol) %>% 
+  filter(Symbol_mm %in% colnames(bind_summary$Mouse_TF)) %>% 
+  pull(Symbol_mm)
+
+ortho_target_mm <- pc_ortho %>% 
+  filter(Symbol_mm %in% curated$Target_Symbol | Symbol_hg %in% curated$Target_Symbol) %>% 
+  filter(Symbol_mm %in% rownames(bind_summary$Mouse_TF)) %>% 
+  pull(Symbol_mm)
+
+tf_mm <- union(
+  intersect(colnames(bind_summary$Mouse_TF), str_to_title(curated$TF_Symbol)),
+  ortho_tf_mm)
+
+target_mm <- union(
+  intersect(rownames(bind_summary$Mouse_TF), str_to_title(curated$Target_Symbol)),
+  ortho_target_mm)
+
+
+
+# The following generates and saves a list containing, for each TF, a summary
+# dataframe of AUC performance, as well as another list of the null AUCs
+# ------------------------------------------------------------------------------
 
 
 # Human 
 
 save_curated_auc_list(path = unibind_auc_hg_path,
-                      tfs = tfs_curated_hg,
+                      tfs = tf_hg,
                       rank_l = bind_hg,
                       score_col = "Bind_score",
                       curated_df = curated,
-                      label_all = targets_curated_hg,
+                      label_all = target_hg,
+                      ortho_df = pc_ortho,
                       pc_df = pc_hg,
                       species = "Human",
                       n_samps = 1000,
@@ -102,11 +144,12 @@ save_curated_auc_list(path = unibind_auc_hg_path,
 # Mouse 
 
 save_curated_auc_list(path = unibind_auc_mm_path,
-                      tfs = tfs_curated_mm,
+                      tfs = tf_mm,
                       rank_l = bind_mm,
                       score_col = "Bind_score",
                       curated_df = curated,
-                      label_all = targets_curated_mm,
+                      label_all = target_mm,
+                      ortho_df = pc_ortho,
                       pc_df = pc_mm,
                       species = "Mouse",
                       n_samps = 1000,
