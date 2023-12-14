@@ -124,6 +124,9 @@ target_mm <- union(
 # ------------------------------------------------------------------------------
 
 
+set.seed(5)
+
+
 # Human 
 
 save_curated_auc_list(path = unibind_auc_hg_path,
