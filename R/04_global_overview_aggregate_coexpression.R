@@ -3,7 +3,6 @@
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
-library(Seurat)
 library(WGCNA)
 library(parallel)
 library(pheatmap)
@@ -126,9 +125,6 @@ if (!file.exists(btmcor_path) || force_resave) {
 
 
 
-stop()
-
-
 # Plotting
 # ------------------------------------------------------------------------------
 
@@ -175,8 +171,13 @@ px <- ggplot(cor_df, aes(x = Cor, y = reorder(ID, Cor, FUN = median))) +
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
+
 ggsave(px, height = 14, width = 9, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "bottom_cor_pair_Fth1-Rbm6.png"))
+       filename = file.path(plot_dir, "bottom_cor_pair_Ascl1-Apbb2.png"))
+
+
+# ggsave(px, height = 14, width = 9, device = "png", dpi = 300,
+#        filename = file.path(plot_dir, "bottom_cor_pair_Fth1-Rbm6.png"))
 
 # ggsave(px, height = 14, width = 9, device = "png", dpi = 300,
 #        filename = file.path(plot_dir, "bottom_cor_pair_GAPDH-ZNF644.png"))
