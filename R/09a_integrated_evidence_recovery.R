@@ -1,7 +1,5 @@
-## TODO: point to missing genes
-## TODO: missing genes excluded from rank df makes a difference?
-## TODO: common process for curated and top k evidence for get_rank_df
-## TODO: remove tf?
+## Save out a list of the AUC performances of the average coexpression profile 
+## versus the individual network/datasets ability to recover curated targets
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -48,26 +46,66 @@ rank_tf_mm <- readRDS(rank_tf_mm_path)
 # Curated low throughput targets
 curated <- read.delim(curated_all_path, stringsAsFactors = FALSE)
 
-# Curated TFs with ChIP-seq and all targets for null
-tfs_curated_hg <- intersect(tfs_hg$Symbol, str_to_upper(curated$TF_Symbol))
-tfs_curated_mm <- intersect(tfs_mm$Symbol, str_to_title(curated$TF_Symbol))
-targets_curated_hg <- intersect(pc_hg$Symbol, str_to_upper(curated$Target_Symbol))
-targets_curated_mm <- intersect(pc_mm$Symbol, str_to_title(curated$Target_Symbol))
 
-
-
-# 
+# Get ortho-matched symbols of TFs with available data, as well as all targets
+# which are used for null
 # ------------------------------------------------------------------------------
-# TODO: Better way to assign species-specific argument since already have to 
-# specifiy species?
+
+
+# Human
+
+ortho_tf_hg <- pc_ortho %>% 
+  filter(Symbol_mm %in% curated$TF_Symbol | Symbol_hg %in% curated$TF_Symbol) %>% 
+  filter(Symbol_hg %in% names(rank_tf_hg)) %>% 
+  pull(Symbol_hg)
+
+ortho_target_hg <- pc_ortho %>% 
+  filter(Symbol_mm %in% curated$Target_Symbol | Symbol_hg %in% curated$Target_Symbol) %>% 
+  filter(Symbol_hg %in% rownames(rank_tf_hg[[1]])) %>% 
+  pull(Symbol_hg)
+
+tf_hg <- union(
+  intersect(names(rank_tf_hg), str_to_upper(curated$TF_Symbol)),
+  ortho_tf_hg)
+
+target_hg <- union(
+  intersect(rownames(rank_tf_hg[[1]]), str_to_upper(curated$Target_Symbol)),
+  ortho_target_hg)
+
+
+# Mouse
+
+ortho_tf_mm <- pc_ortho %>% 
+  filter(Symbol_mm %in% curated$TF_Symbol | Symbol_hg %in% curated$TF_Symbol) %>% 
+  filter(Symbol_mm %in% names(rank_tf_mm)) %>% 
+  pull(Symbol_mm)
+
+ortho_target_mm <- pc_ortho %>% 
+  filter(Symbol_mm %in% curated$Target_Symbol | Symbol_hg %in% curated$Target_Symbol) %>% 
+  filter(Symbol_mm %in% rownames(rank_tf_mm[[1]])) %>% 
+  pull(Symbol_mm)
+
+tf_mm <- union(
+  intersect(names(rank_tf_mm), str_to_title(curated$TF_Symbol)),
+  ortho_tf_mm)
+
+target_mm <- union(
+  intersect(rownames(rank_tf_mm[[1]]), str_to_title(curated$Target_Symbol)),
+  ortho_target_mm)
+
+
+
+# Run and save
+# ------------------------------------------------------------------------------
 
 
 
 avg_vs_ind_recover_curated_hg <- get_colwise_curated_auc_list(
-  tfs = tfs_curated_hg,
+  tfs = tf_hg,
   agg_l = agg_tf_hg,
   msr_mat = msr_hg,
   curated_df = curated,
+  ortho_df = pc_ortho,
   pc_df = pc_hg,
   species = "Human",
   ncores = 8,
@@ -77,10 +115,11 @@ avg_vs_ind_recover_curated_hg <- get_colwise_curated_auc_list(
 
 
 avg_vs_ind_recover_curated_mm <- get_colwise_curated_auc_list(
-  tfs = tfs_curated_mm,
+  tfs = tf_mm,
   agg_l = agg_tf_mm,
   msr_mat = msr_mm,
   curated_df = curated,
+  ortho_df = pc_ortho,
   pc_df = pc_mm,
   species = "Mouse",
   ncores = 8,
