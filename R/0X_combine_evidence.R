@@ -173,54 +173,6 @@ join_and_rank_ortho <- function(rank_hg, rank_mm, pc_ortho, ncores = 1) {
 # relaxed, which allows genes with top K in one data type in the opposite species
 # (but not both data types in just one species - want to emphasize ortho aspect)
 
-# subset_tiered_evidence <- function(rank_l, k, ncores = 1) {
-#   
-#   tiered_l <- mclapply(rank_l, function(rank_df) {
-#     
-#     # May need to decrease k if the current k includes tied values
-#     k_bind_hg <- check_k(sort(rank_df$Bind_score_hg, decreasing = TRUE), k = k)
-#     k_bind_mm <- check_k(sort(rank_df$Bind_score_mm, decreasing = TRUE), k = k)
-#     k_rsr_hg <- check_k(sort(rank_df$Avg_RSR_hg, decreasing = TRUE), k = k)
-#     k_rsr_mm <- check_k(sort(rank_df$Avg_RSR_mm, decreasing = TRUE), k = k)
-#     
-#     # Stringent requires top k in all four of human and mouse coexpr and binding 
-#     stringent <- filter(
-#       rank_df, 
-#       (Rank_RSR_hg <= k_rsr_hg & Rank_RSR_mm <= k_rsr_mm) & 
-#       (Rank_bind_hg <= k_bind_hg & Rank_bind_mm <= k_bind_mm))
-#     
-#     # Middle requires evidence in 3/4 rankings
-#     middle <- filter(
-#       rank_df,
-#       (((Rank_RSR_hg <= k_rsr_hg | Rank_RSR_mm <= k_rsr_mm) & 
-#        (Rank_bind_hg <= k_bind_hg & Rank_bind_mm <= k_bind_mm)
-#       ) |
-#       ((Rank_bind_hg <= k_bind_hg | Rank_bind_mm <= k_bind_mm) &
-#        (Rank_RSR_hg <= k_rsr_hg & Rank_RSR_mm <= k_rsr_mm))) &
-#       Symbol_hg %!in% stringent$Symbol_hg)
-#     
-#     # Relaxed requires evidence in one data type for each species
-#     # relaxed <- filter(
-#     #   rank_df,
-#     #   (Rank_RSR_hg <= k_rsr_hg | Rank_RSR_mm <= k_rsr_mm) & 
-#     #   (Rank_bind_hg <= k_bind_hg | Rank_bind_mm <= k_bind_mm) &
-#     #   Symbol_hg %!in% c(middle$Symbol_hg, stringent$Symbol_hg))
-#     
-#     relaxed <- filter(
-#       rank_df,
-#       ((Rank_RSR_hg <= k_rsr_hg & Rank_bind_mm <= k_bind_mm) | 
-#       (Rank_RSR_mm <= k_rsr_mm & Rank_bind_hg <= k_bind_hg)) &
-#       Symbol_hg %!in% c(middle$Symbol_hg, stringent$Symbol_hg))
-#     
-#     list(Stringent = stringent, Middle = middle, Relaxed = relaxed)
-#     
-#   }, mc.cores = ncores)
-#   
-#   names(tiered_l) <- names(rank_l)
-#   return(tiered_l)
-# }
-
-
 subset_tiered_evidence <- function(rank_l, k, ncores = 1) {
   
   tiered_l <- mclapply(rank_l, function(rank_df) {
@@ -241,20 +193,23 @@ subset_tiered_evidence <- function(rank_l, k, ncores = 1) {
     stringent <- filter(
       rank_df,
       Cutoff_RSR_hg & Cutoff_RSR_mm & Cutoff_bind_hg & Cutoff_bind_mm) %>% 
-      select(-contains("Cutoff"))
+      select(-contains("Cutoff")) %>% 
+      arrange(RP)
     
     # Middle requires evidence in 3/4 rankings
     middle <- rank_df %>% 
       mutate(n = rowSums(.[grep("Cutoff", names(.))])) %>% 
       filter(n == 3) %>% 
-      select(-c(contains("Cutoff"), n))
+      select(-c(contains("Cutoff"), n)) %>% 
+      arrange(RP)
     
     # Relaxed requires evidence in one data type for each species
     relaxed <- rank_df %>%
       filter(
         (Cutoff_RSR_hg & Cutoff_bind_mm) | (Cutoff_RSR_mm & Cutoff_bind_hg)) %>% 
       filter(Symbol_hg %!in% c(stringent$Symbol_hg, middle$Symbol_hg)) %>% 
-      select(-contains("Cutoff"))
+      select(-contains("Cutoff")) %>% 
+      arrange(RP)
     
     list(Stringent = stringent, Middle = middle, Relaxed = relaxed)
     
@@ -348,12 +303,18 @@ summ_tiers <- lapply(c("Stringent", "Middle", "Relaxed"), function(x) {
 
 missing_middle <- lapply(tiered_l, function(x) {
   
+  # May need to decrease k if the current k includes tied values
+  k_bind_hg <- check_k(sort(rank_df$Bind_score_hg, decreasing = TRUE), k = k)
+  k_bind_mm <- check_k(sort(rank_df$Bind_score_mm, decreasing = TRUE), k = k)
+  k_rsr_hg <- check_k(sort(rank_df$Avg_RSR_hg, decreasing = TRUE), k = k)
+  k_rsr_mm <- check_k(sort(rank_df$Avg_RSR_mm, decreasing = TRUE), k = k)
+  
   df <- data.frame(
     N = nrow(x$Middle),
-    N_coexpr_hg = sum(x$Middle$Rank_RSR_hg > k),
-    N_coexpr_mm = sum(x$Middle$Rank_RSR_mm > k),
-    N_bind_hg = sum(x$Middle$Rank_bind_hg > k),
-    N_bind_mm = sum(x$Middle$Rank_bind_mm > k))
+    N_coexpr_hg = sum(x$Middle$Rank_RSR_hg > k_rsr_hg),
+    N_coexpr_mm = sum(x$Middle$Rank_RSR_mm > k_bind_mm),
+    N_bind_hg = sum(x$Middle$Rank_bind_hg > k_bind_hg),
+    N_bind_mm = sum(x$Middle$Rank_bind_mm > k_rsr_mm))
   
   df$N_human <- sum(df$N_bind_hg, df$N_coexpr_hg)
   df$N_mouse <- sum(df$N_bind_mm, df$N_coexpr_mm)
@@ -365,9 +326,17 @@ missing_middle <- lapply(tiered_l, function(x) {
 
 
 missing_middle <- do.call(rbind, missing_middle)
-missing_middle2 <- missing_middle
-missing_middle2[, 2:ncol(missing_middle2)] <- t(apply(missing_middle, 1, function(x) x[2:ncol(missing_middle)] / x["N"]))
 
+# Proportions
+missing_middle2 <- missing_middle
+colnames(missing_middle2) <- str_replace(colnames(missing_middle2), "N_", "Prop_")
+missing_middle2[, 2:ncol(missing_middle2)] <- t(apply(missing_middle, 1, function(x) x[2:ncol(missing_middle)] / x["N"]))
+missing_middle2 <- round(missing_middle2, 3)
+
+summary(missing_middle)
+
+summary(missing_middle2)
+summary(filter(missing_middle2, N >= 5))
 
 
 # Demo seeing how many interactions are exclusively found within species
@@ -486,14 +455,20 @@ setdiff(topk_hg$STAT1$Symbol, pc_ortho$Symbol_hg)
 
 mid_ortho <- nrow(rank_ortho[[1]]) / 2
 
-evo_div <- lapply(rank_ortho, function(x) {
+evo_div <- lapply(rank_ortho, function(rank_df) {
+
+  # May need to decrease k if the current k includes tied values
+  k_bind_hg <- check_k(sort(rank_df$Bind_score_hg, decreasing = TRUE), k = k)
+  k_bind_mm <- check_k(sort(rank_df$Bind_score_mm, decreasing = TRUE), k = k)
+  k_rsr_hg <- check_k(sort(rank_df$Avg_RSR_hg, decreasing = TRUE), k = k)
+  k_rsr_mm <- check_k(sort(rank_df$Avg_RSR_mm, decreasing = TRUE), k = k)
   
-  human = filter(x,
-                 Rank_RSR_hg <= k & Rank_bind_hg <= k &
+  human = filter(rank_df,
+                 Rank_RSR_hg <= k_rsr_hg & Rank_bind_hg <= k_bind_hg &
                  Rank_RSR_mm >= mid_ortho & Rank_bind_mm >= mid_ortho)
   
-  mouse = filter(x,
-                 Rank_RSR_mm <= k & Rank_bind_mm <= k &
+  mouse = filter(rank_df,
+                 Rank_RSR_mm <= k_rsr_mm & Rank_bind_mm <= k_bind_mm &
                  Rank_RSR_hg >= mid_ortho & Rank_bind_hg >= mid_ortho)
   
   list(Human = human, Mouse = mouse)
@@ -505,9 +480,30 @@ evo_div <- lapply(rank_ortho, function(x) {
 n_evo_div <- data.frame(
   Symbol = names(rank_ortho),
   do.call(rbind, lapply(evo_div, function(x) data.frame(Human = nrow(x$Human), Mouse = nrow(x$Mouse))))
-  )
+)
 
 
+
+n_evo_div %>% 
+  pivot_longer(cols = c("Human", "Mouse"),
+               names_to = "Species",
+               values_to = "Count") %>% 
+  ggplot(
+  # aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Species, colour = Species)) +
+  aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Species)) +
+  # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
+  geom_bar(position = "stack", stat = "identity", width = 1) +
+  ylab("Count of candidate interactions") +
+  xlab("Transcription factor") +
+  scale_fill_manual(values = c("royalblue", "goldenrod")) +
+  # scale_colour_manual(values = c("royalblue", "goldenrod")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
 
 
 
@@ -580,13 +576,13 @@ p2a <- ggplot(
   scale_colour_manual(values = c("royalblue", "darkgrey")) +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
+        # axis.title = element_text(size = 20),
+        axis.title = element_blank(),
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         plot.title = element_text(size = 20),
         legend.position = c(0.75, 0.75),
         plot.margin = margin(c(10, 20, 10, 10)))
-
 
 
 p2b <- ggplot(
@@ -602,7 +598,8 @@ p2b <- ggplot(
   scale_colour_manual(values = c("goldenrod", "darkgrey")) +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
+        # axis.title = element_text(size = 20),
+        axis.title = element_blank(),
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         plot.title = element_text(size = 20),
@@ -610,8 +607,24 @@ p2b <- ggplot(
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
+# https://stackoverflow.com/questions/33114380/centered-x-axis-label-for-muliplot-using-cowplot-package
+p2 <- plot_grid(p2a, p2b, ncol = 1) 
 
-p2 <- plot_grid(p2a, p2b, ncol = 1)
+library(grid)
+library(gridExtra)
+
+y.grob <- textGrob("Count of reproducible interactions", 
+                   gp = gpar(fontsize = 20), rot = 90)
+
+x.grob <- textGrob("Transcription factor", 
+                   gp = gpar(fontsize = 20))
+
+#add to plot
+
+p2 <- grid.arrange(arrangeGrob(p2, left = y.grob, bottom = x.grob))
+  
+
+
 
 
 
@@ -650,8 +663,8 @@ plot_df1$Symbol <- factor(plot_df1$Symbol, levels = arrange(n_topk_ortho, String
 
 p1 <- ggplot(
   plot_df1, 
-  # aes(x = reorder(Symbol, Count, FUN = median), 
-  aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
+  aes(x = reorder(Symbol, Count, FUN = sum), y = Count, fill = Scheme, colour = Scheme)) +
+  # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
   geom_bar(position = "stack", stat = "identity") +
   ylab("Count of reproducible interactions") +
   xlab("Transcription factor") +
@@ -679,9 +692,9 @@ plot_tf <- "ASCL1"
 scale01 <- function(x) (x - min(x)) / (max(x) - min(x))
 
 
-genes <- c(arrange(topk_ortho_stringent[[plot_tf]], RP)$Symbol_hg,
-           arrange(topk_ortho_middle_dedup[[plot_tf]], RP)$Symbol_hg,
-           arrange(topk_ortho_relaxed_dedup[[plot_tf]], RP)$Symbol_hg)
+genes <- c(tiered_l[[plot_tf]]$Stringent$Symbol_hg,
+           tiered_l[[plot_tf]]$Middle$Symbol_hg,
+           tiered_l[[plot_tf]]$Relaxed$Symbol_hg)
 
 
 plot_df2 <- rank_ortho[[plot_tf]] %>% 
@@ -701,10 +714,10 @@ rownames(plot_df2) <- plot_df2$Symbol_hg
 
 # Padding between species (columns) and genes in evidence tiers (rows)
 
-gaps_row <- rep(c(nrow(topk_ortho_stringent[[plot_tf]]),
-                  nrow(topk_ortho_middle_dedup[[plot_tf]])),
-                each = 4)
+ns <- nrow(tiered_l[[plot_tf]]$Stringent)
+nm <- nrow(tiered_l[[plot_tf]]$Middle)
 
+gaps_row <- rep(c(ns, nm + ns), each = 4)
 gaps_col <- rep(1, 4)
 
 
@@ -791,7 +804,8 @@ plot_df2 <- rank_ortho[[plot_tf]] %>%
     
     Rank_bind_mm = case_when(Rank_bind_mm <= k ~ 0,
                              Rank_bind_mm > k & Rank_bind_mm <= k + 500 ~ 1,
-                             TRUE ~ 2)) %>% 
+                             TRUE ~ 2)
+    ) %>% 
  
   filter(Symbol_hg %in% genes) %>% 
   arrange(match(Symbol_hg, genes))
@@ -831,6 +845,7 @@ pheatmap(plot_df2[, c("Rank_bind_hg", "Rank_bind_mm")],
 
 labels_curated <- get_curated_labels(tf = plot_tf, 
                                      curated_df = curated, 
+                                     ortho_df = pc_ortho,
                                      pc_df = pc_hg, 
                                      species = "Human", 
                                      remove_self = TRUE)
@@ -847,5 +862,286 @@ pheatmap(curated_vec,
          cellwidth = 10,
          cellheight = 10,
          filename = file.path(plot_dir, "demo_curated_heatmap.png")
+)
+
+
+# Using RP as order, take the top whatever, and show the evidence of the 
+# other groups as blocked colours
+
+
+
+plot_df3 <- rank_ortho[[plot_tf]] %>% 
+  
+  slice_min(RP, n = 40) %>% 
+  
+  mutate(
+    
+    Rank_RSR_hg = case_when(Rank_RSR_hg <= k ~ 0,
+                            Rank_RSR_hg > k & Rank_RSR_hg <= k + 500 ~ 1,
+                            TRUE ~ 2), 
+    
+    Rank_RSR_mm = case_when(Rank_RSR_mm <= k ~ 0,
+                            Rank_RSR_mm > k & Rank_RSR_mm <= k + 500 ~ 1,
+                            TRUE ~ 2),
+    
+    Rank_bind_hg = case_when(Rank_bind_hg <= k ~ 0,
+                             Rank_bind_hg > k & Rank_bind_hg <= k + 500 ~ 1,
+                             TRUE ~ 2),
+    
+    Rank_bind_mm = case_when(Rank_bind_mm <= k ~ 0,
+                             Rank_bind_mm > k & Rank_bind_mm <= k + 500 ~ 1,
+                             TRUE ~ 2)
+    )
+
+rownames(plot_df3) <- plot_df3$Symbol_hg
+
+
+pheatmap(plot_df3[, c("Rank_RSR_hg", "Rank_RSR_mm", "Rank_bind_hg", "Rank_bind_mm")],
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = rev(c('white', "#a6bddb",'#045a8d')),
+         border_color = "black",
+         gaps_col = rep(1:4, each = 4),
+         cellwidth = 20,
+         cellheight = 20,
+         legend = FALSE,
+         filename = file.path(plot_dir, "demo_rp_order_step_heatmap.png")
+)
+
+
+
+curated_vec <- setNames(as.integer(plot_df3$Symbol_hg %in% labels_curated), plot_df3$Symbol_hg)
+
+
+pheatmap(curated_vec,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = c("white", "black"),
+         border_color = "black",
+         cellwidth = 20,
+         cellheight = 20,
+         legend = FALSE,
+         filename = file.path(plot_dir, "demo_curated_heatmap.png")
+)
+
+
+
+# Join species specific and tiered
+
+
+plot_tf <- "PAX6"
+
+rank_l <- tiered_l[[plot_tf]]
+
+
+rm_genes <- filter(pc_ortho, Symbol_hg %in% c(rank_l$Stringent$Symbol_hg, rank_l$Middle$Symbol_hg))
+
+
+gain_hg <- topk_hg[[plot_tf]] %>%
+  filter(Symbol %!in% rm_genes$Symbol_hg) %>%
+  rename(Rank_RSR_hg = Rank_RSR, Rank_bind_hg = Rank_bind) %>%
+  mutate(Symbol_hg = Symbol) %>% 
+  left_join(pc_ortho, by = "Symbol_hg")
+
+
+gain_mm <- topk_mm[[str_to_title(plot_tf)]] %>%
+  filter(Symbol %!in% rm_genes$Symbol_mm) %>%
+  rename(Rank_RSR_mm = Rank_RSR, Rank_bind_mm = Rank_bind) %>%
+  mutate(Symbol_mm = Symbol) %>% 
+  left_join(pc_ortho, by = "Symbol_mm")
+
+
+
+gain_hg <- left_join(
+  gain_hg,
+  rank_mm[[str_to_title(plot_tf)]][, c("Symbol", "Rank_bind", "Rank_RSR", "RP")],
+  by = c("Symbol_mm" = "Symbol")) %>%
+  rename(Rank_RSR_mm = Rank_RSR, Rank_bind_mm = Rank_bind)
+
+
+gain_mm <- left_join(
+  gain_mm,
+  rank_hg[[plot_tf]][, c("Symbol", "Rank_bind", "Rank_RSR", "RP")],
+  by = c("Symbol_hg" = "Symbol")) %>%
+  rename(Rank_RSR_hg = Rank_RSR, Rank_bind_hg = Rank_bind) %>% 
+  mutate(Symbol_hg = ifelse(is.na(Symbol_hg), Symbol_mm, Symbol_hg))
+
+
+
+demo_tiered <- list(
+  Stringent = tiered_l[[plot_tf]]$Stringent,
+  Elevated = tiered_l[[plot_tf]]$Middle,
+  Human = gain_hg,
+  Mouse = gain_mm,
+  Relaxed = filter(rank_l$Relaxed, Symbol_hg %!in% c(gain_hg$Symbol_hg, gain_mm$Symbol_hg))
+)
+
+
+
+plot_df4 <- lapply(demo_tiered, `[`, c("Rank_RSR_hg", "Rank_RSR_mm", "Rank_bind_hg", "Rank_bind_mm")) %>%
+  do.call(rbind, .) %>% 
+
+  mutate(
+
+    Rank_RSR_hg = case_when(Rank_RSR_hg <= k ~ 0,
+                            Rank_RSR_hg > k & Rank_RSR_hg <= k + 500 ~ 1,
+                            is.na(Rank_RSR_hg) ~ NA_real_,
+                            TRUE ~ 2),
+
+    Rank_RSR_mm = case_when(Rank_RSR_mm <= k ~ 0,
+                            Rank_RSR_mm > k & Rank_RSR_mm <= k + 500 ~ 1,
+                            is.na(Rank_RSR_mm) ~ NA_real_,
+                            TRUE ~ 2),
+
+    Rank_bind_hg = case_when(Rank_bind_hg <= k ~ 0,
+                             Rank_bind_hg > k & Rank_bind_hg <= k + 500 ~ 1,
+                             is.na(Rank_bind_hg) ~ NA_real_,
+                             TRUE ~ 2),
+
+    Rank_bind_mm = case_when(Rank_bind_mm <= k ~ 0,
+                             Rank_bind_mm > k & Rank_bind_mm <= k + 500 ~ 1,
+                             is.na(Rank_bind_mm) ~ NA_real_,
+                             TRUE ~ 2)
+  )
+
+
+
+
+rownames(plot_df4) <- unlist(lapply(demo_tiered, pluck, "Symbol_hg"))
+
+
+# Padding between species and genes in evidence tiers 
+
+
+gap_genes <- rep(
+  head(cumsum(unlist(lapply(demo_tiered, nrow))), -1),
+  each = 4)
+
+
+gap_evidence <- rep(1:4, each = 4)
+
+
+pheatmap(t(plot_df4),
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = rev(c('white', "#a6bddb",'#045a8d')),
+         border_color = "black",
+         na_col = "black",
+         gaps_col = gap_genes,
+         gaps_row = gap_evidence,
+         # cellwidth = 10,
+         cellheight = 10,
+         legend = FALSE,
+         angle_col = 90
+         # filename = file.path(plot_dir, "demo_rp_order_step_heatmap.png")
+)
+
+
+# Versus just using the ortho list
+
+plot_tf <- "PAX6"
+
+rank_l <- tiered_l[[plot_tf]]
+
+rm_genes <- filter(pc_ortho, Symbol_hg %in% c(rank_l$Stringent$Symbol_hg, rank_l$Middle$Symbol_hg))
+
+
+gain_hg2 <- rank_ortho[[plot_tf]] %>%
+  filter(Rank_RSR_hg <= k & Rank_bind_hg <= k) %>% 
+  filter(Symbol_hg %!in% rm_genes$Symbol_hg)
+
+
+gain_mm2 <- rank_ortho[[plot_tf]] %>%
+  filter(Rank_RSR_mm <= k & Rank_bind_mm <= k) %>% 
+  filter(Symbol_hg %!in% rm_genes$Symbol_hg)
+
+
+demo_tiered2 <- list(
+  Stringent = tiered_l[[plot_tf]]$Stringent,
+  Elevated = tiered_l[[plot_tf]]$Middle,
+  Human = gain_hg2,
+  Mouse = gain_mm2,
+  Relaxed = filter(rank_l$Relaxed, Symbol_hg %!in% c(gain_hg2$Symbol_hg, gain_mm2$Symbol_hg))
+)
+
+
+plot_df5 <- lapply(demo_tiered2, `[`, c("Rank_RSR_hg", "Rank_RSR_mm", "Rank_bind_hg", "Rank_bind_mm")) %>%
+  do.call(rbind, .) %>% 
+
+  mutate(
+
+    Rank_RSR_hg = case_when(Rank_RSR_hg <= k ~ 0,
+                            Rank_RSR_hg > k & Rank_RSR_hg <= k + 500 ~ 1,
+                            is.na(Rank_RSR_hg) ~ NA_real_,
+                            TRUE ~ 2),
+
+    Rank_RSR_mm = case_when(Rank_RSR_mm <= k ~ 0,
+                            Rank_RSR_mm > k & Rank_RSR_mm <= k + 500 ~ 1,
+                            is.na(Rank_RSR_mm) ~ NA_real_,
+                            TRUE ~ 2),
+
+    Rank_bind_hg = case_when(Rank_bind_hg <= k ~ 0,
+                             Rank_bind_hg > k & Rank_bind_hg <= k + 500 ~ 1,
+                             is.na(Rank_bind_hg) ~ NA_real_,
+                             TRUE ~ 2),
+
+    Rank_bind_mm = case_when(Rank_bind_mm <= k ~ 0,
+                             Rank_bind_mm > k & Rank_bind_mm <= k + 500 ~ 1,
+                             is.na(Rank_bind_mm) ~ NA_real_,
+                             TRUE ~ 2)
+  )
+
+
+rownames(plot_df5) <- unlist(lapply(demo_tiered2, pluck, "Symbol_hg"))
+
+
+# Padding between species and genes in evidence tiers 
+
+
+gap_genes <- rep(
+  head(cumsum(unlist(lapply(demo_tiered2, nrow))), -1),
+  each = 4)
+
+
+gap_evidence <- rep(1:4, each = 4)
+
+
+pheatmap(t(plot_df5),
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = rev(c('white', "#a6bddb",'#045a8d')),
+         border_color = "black",
+         na_col = "black",
+         gaps_col = gap_genes,
+         gaps_row = gap_evidence,
+         # cellwidth = 10,
+         cellheight = 10,
+         legend = FALSE,
+         angle_col = 90
+)
+
+
+
+labels_curated <- get_curated_labels(tf = plot_tf, 
+                                     curated_df = curated, 
+                                     ortho_df = pc_ortho,
+                                     pc_df = pc_hg, 
+                                     species = "Human", 
+                                     remove_self = TRUE)
+
+
+curated_vec <- setNames(as.integer(rownames(plot_df5) %in% labels_curated), rownames(plot_df5))
+
+
+pheatmap(t(curated_vec),
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = c("white", "black"),
+         border_color = "black",
+         gaps_col = gap_genes,
+         # cellwidth = 20,
+         cellheight = 10,
+         legend = FALSE,
+         angle_col = 90
 )
 
