@@ -118,6 +118,8 @@ unibind_auc_hg_path <- "/space/scratch/amorin/R_objects/unibind_recover_curated_
 unibind_auc_mm_path <- "/space/scratch/amorin/R_objects/unibind_recover_curated_mm.RDS"
 avg_vs_ind_auc_hg_path <- "/space/scratch/amorin/R_objects/individual_vs_average_recover_curated_hg.RDS"
 avg_vs_ind_auc_mm_path <- "/space/scratch/amorin/R_objects/individual_vs_average_recover_curated_mm.RDS"
+rev_coexpr_auc_hg_path <- "/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_hg.RDS"
+rev_coexpr_auc_mm_path <- "/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_mm.RDS"
 
 
 
