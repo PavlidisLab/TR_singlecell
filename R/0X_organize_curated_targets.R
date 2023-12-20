@@ -198,6 +198,14 @@ not_ortho <- lt_final %>%
   unique()
 
 
+# Save cleaned curation table
+
+write.table(lt_final, 
+            sep = "\t",
+            quote = FALSE,
+            row.names = FALSE,
+            file = curated_all_path)
+
 
 # Plots
 # ------------------------------------------------------------------------------
@@ -221,12 +229,3 @@ p1 <- ggplot(n_target, aes(x = TF_Symbol, y = N_target)) +
 ggsave(p1, height = 6, width = 9, device = "png", dpi = 300,
        filename = file.path(plot_dir, "count_of_distinct_curated_targets.png"))
 
-
-
-# Write out cleaned curation table
-
-write.table(lt_final, 
-            sep = "\t",
-            quote = FALSE,
-            row.names = FALSE,
-            file = curated_all_path)
