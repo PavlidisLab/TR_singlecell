@@ -1,9 +1,5 @@
 ## Combine the coexpression and binding rankings to nominate TF-gene interactions
 ## with reproducible evidence across species and methods
-# TODO: winner takes all binding evidence?
-# TODO: get distn of all average bind scores? look for outliers
-# https://www.biostars.org/p/350710/ 
-# https://datacatz.wordpress.com/2018/01/19/gene-set-enrichment-analysis-with-topgo-part-1/
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -41,22 +37,18 @@ bind_summary_path <- paste0("/space/scratch/amorin/R_objects/unibind_", collecti
 bind_summary <- readRDS(bind_summary_path)
 bind_dat <- readRDS("/space/scratch/amorin/R_objects/processed_unibind_data.RDS")
 
-# TODO: revisit mouse casing (Unibind mouse upper case)
-colnames(bind_summary$Mouse_TF) <- str_to_title(colnames(bind_summary$Mouse_TF))
-# stopifnot(all(colnames(bind_summary$Mouse_TF) %in% pc_mm$Symbol))
-setdiff(colnames(bind_summary$Mouse_TF), pc_mm$Symbol)
-common_hg <- intersect(names(rank_tf_hg), colnames(bind_summary$Human_TF))
-common_mm <- intersect(names(rank_tf_mm), colnames(bind_summary$Mouse_TF))
-
 # Curated low throughput targets
 curated <- read.delim(curated_all_path, stringsAsFactors = FALSE)
+
 
 
 # Functions
 # ------------------------------------------------------------------------------
 
 
-# TODO: consider separate object or single list with reference to common TFs
+# For TFs with available ChIP-seq data, add the aggregated binding profile to
+# the aggregate coexpression ranking, and calc the rank product of the binding
+# and coexpression profiles
 
 join_coexpr_bind <- function(coexpr_l, bind_mat) {
   
@@ -82,48 +74,10 @@ join_coexpr_bind <- function(coexpr_l, bind_mat) {
 }
 
 
-# Subset each rank df in rank_l to genes that are in the top K of both coexpr 
-# and binding. Check k in case of ties, using the lowest value of k that ensures
-# there are no ties in either rank
-
-subset_topk <- function(rank_l, k, ncores = 1) {
-  
-  topk_l <- mclapply(rank_l, function(x) {
-
-    k_bind <- check_k(sort(x$Bind_score, decreasing = TRUE), k = k)
-    k_rsr <- check_k(sort(x$Avg_RSR, decreasing = TRUE), k = k)
-    
-    filter(x, Rank_RSR <= k_rsr & Rank_bind <= k_bind)
-    
-  }, mc.cores = ncore)
-  
-  names(topk_l) <- names(rank_l)
-  return(topk_l)
-}
-
-
-# TODO:
-
-subset_bottomk <- function(rank_l, k, ncores = 1) {
-  
-  topk_l <- mclapply(rank_l, function(x) {
-    
-    k_bind <- check_k(sort(x$Bind_score, decreasing = TRUE), k = k)
-    k_rsr <- check_k(sort(x$Avg_RSR, decreasing = TRUE), k = k)
-    
-    filter(x, Rank_RSR > (max(x$Rank_RSR) - k_rsr) & Rank_bind <= k_bind)
-    
-  }, mc.cores = ncore)
-  
-  names(topk_l) <- names(rank_l)
-  return(topk_l)
-}
-
-
 # Take the list of ranked dfs for each species, and for the ortho TFs with 
 # binding data, subset their ranked dfs to ortho genes and then join the two
-# species. re-rank the RSR and binding scores with the reduced gene list, and
-# generate the rank product across all four ranks
+# species. Re-rank the coexpression and binding scores with the reduced gene 
+# list, and generate the rank product across all four ranks
 
 join_and_rank_ortho <- function(rank_hg, rank_mm, pc_ortho, ncores = 1) {
   
@@ -173,103 +127,189 @@ join_and_rank_ortho <- function(rank_hg, rank_mm, pc_ortho, ncores = 1) {
 # relaxed, which allows genes with top K in one data type in the opposite species
 # (but not both data types in just one species - want to emphasize ortho aspect)
 
-subset_tiered_evidence <- function(rank_l, k, ncores = 1) {
+
+# TODO:
+# TODO: DUX4
+# TODO: k from species-specific versus ortho
+# TODO: Note species rank versus ortho rank (minimal difference)
+
+subset_tiered_evidence <- function(rank_ortho, 
+                                   rank_hg,
+                                   rank_mm,
+                                   pc_ortho,
+                                   k, 
+                                   ncores = 1) {
+  # Ortho symbol map
+  tfs <- filter(pc_ortho, 
+                Symbol_hg %in% names(rank_hg) |
+                Symbol_mm %in% names(rank_mm))
   
-  tiered_l <- mclapply(rank_l, function(rank_df) {
+  
+  tiered_l <- mclapply(1:nrow(tfs), function(x) {
     
-    # May need to decrease k if the current k includes tied values
-    k_bind_hg <- check_k(sort(rank_df$Bind_score_hg, decreasing = TRUE), k = k)
-    k_bind_mm <- check_k(sort(rank_df$Bind_score_mm, decreasing = TRUE), k = k)
-    k_rsr_hg <- check_k(sort(rank_df$Avg_RSR_hg, decreasing = TRUE), k = k)
-    k_rsr_mm <- check_k(sort(rank_df$Avg_RSR_mm, decreasing = TRUE), k = k)
+    # NULL if no data across species
+    specific_hg <- specific_mm <- stringent <- elevated <- mixed <- NULL
     
-    rank_df <- mutate(rank_df,
-                      Cutoff_RSR_hg = Rank_RSR_hg <= k_rsr_hg,
-                      Cutoff_RSR_mm = Rank_RSR_mm <= k_rsr_mm,
-                      Cutoff_bind_hg = Rank_bind_hg <= k_bind_hg,
-                      Cutoff_bind_mm = Rank_bind_mm <= k_bind_mm)
+    # Species and ortho rankings for the given TF
+    df_ortho <- rank_ortho[[tfs$Symbol_hg[x]]]
+    df_hg <- rank_hg[[tfs$Symbol_hg[x]]]
+    df_mm <- rank_mm[[tfs$Symbol_mm[x]]]
     
-    # Stringent requires top k in all four of human and mouse coexpr and binding 
-    stringent <- filter(
-      rank_df,
-      Cutoff_RSR_hg & Cutoff_RSR_mm & Cutoff_bind_hg & Cutoff_bind_mm) %>% 
-      select(-contains("Cutoff")) %>% 
-      arrange(RP)
+    # Convert ortho ranks to logical status for cut-off. Filter species to genes
+    # meeting cut-off in both data types. May need to decrease k if the current 
+    # k includes tied values
     
-    # Middle requires evidence in 3/4 rankings
-    middle <- rank_df %>% 
-      mutate(n = rowSums(.[grep("Cutoff", names(.))])) %>% 
-      filter(n == 3) %>% 
-      select(-c(contains("Cutoff"), n)) %>% 
-      arrange(RP)
+    if (!is.null(df_hg)) {
+      
+      k_rsr_hg <- check_k(sort(df_hg$Avg_RSR, decreasing = TRUE), k = k)
+      k_bind_hg <- check_k(sort(df_hg$Bind_score, decreasing = TRUE), k = k)
+      df_hg <- filter(df_hg, Rank_RSR <= k_rsr_hg & Rank_bind <= k_bind_hg)
+      
+    }
     
-    # Relaxed requires evidence in one data type for each species
-    relaxed <- rank_df %>%
-      filter(
+    if (!is.null(df_mm)) {
+      
+      k_rsr_mm <- check_k(sort(df_mm$Avg_RSR, decreasing = TRUE), k = k)
+      k_bind_mm <- check_k(sort(df_mm$Bind_score, decreasing = TRUE), k = k)
+      df_mm <- filter(df_mm, Rank_RSR <= k_rsr_mm & Rank_bind <= k_bind_mm)
+      
+    }
+    
+    if (!is.null(df_ortho)) {
+      
+      k_rsr_hg <- check_k(sort(df_ortho$Avg_RSR_hg, decreasing = TRUE), k = k)
+      k_bind_hg <- check_k(sort(df_ortho$Bind_score_hg, decreasing = TRUE), k = k)
+      k_rsr_mm <- check_k(sort(df_ortho$Avg_RSR_mm, decreasing = TRUE), k = k)
+      k_bind_mm <- check_k(sort(df_ortho$Bind_score_mm, decreasing = TRUE), k = k)
+      
+      df_ortho <- mutate(df_ortho,
+                         Cutoff_RSR_hg = Rank_RSR_hg <= k_rsr_hg,
+                         Cutoff_RSR_mm = Rank_RSR_mm <= k_rsr_mm,
+                         Cutoff_bind_hg = Rank_bind_hg <= k_bind_hg,
+                         Cutoff_bind_mm = Rank_bind_mm <= k_bind_mm)
+      
+      # Stringent requires top k in all four of human and mouse coexpr and binding 
+      stringent <- df_ortho %>%  
+        filter(Cutoff_RSR_hg & Cutoff_RSR_mm & Cutoff_bind_hg & Cutoff_bind_mm) %>%
+        select(-contains("Cutoff")) %>%
+        arrange(RP)
+    
+      # Elevated requires evidence in 3/4 rankings
+      elevated <- df_ortho %>%
+        mutate(n = rowSums(.[grep("Cutoff", names(.))])) %>%
+        filter(n == 3) %>%
+        select(-c(contains("Cutoff"), n)) %>%
+        arrange(RP)
+    
+      # Species specific
+      specific_hg <- filter(df_hg, Symbol %!in% c(stringent$Symbol_hg, elevated$Symbol_hg))
+      specific_mm <- filter(df_mm, Symbol %!in% c(stringent$Symbol_mm, elevated$Symbol_mm))
+    
+      # Mixed species requires evidence in one data type for each species
+      mixed <- df_ortho %>%
+        filter(
         (Cutoff_RSR_hg & Cutoff_bind_mm) | (Cutoff_RSR_mm & Cutoff_bind_hg)) %>% 
-      filter(Symbol_hg %!in% c(stringent$Symbol_hg, middle$Symbol_hg)) %>% 
-      select(-contains("Cutoff")) %>% 
-      arrange(RP)
+        filter(
+        Symbol_hg %!in% c(stringent$Symbol_hg, elevated$Symbol_hg, specific_hg$Symbol) &
+        Symbol_mm %!in% specific_mm$Symbol) %>% 
+        select(-contains("Cutoff")) %>% 
+        arrange(RP)
     
-    list(Stringent = stringent, Middle = middle, Relaxed = relaxed)
+    } 
+    
+    list(Stringent = stringent, 
+         Elevated = elevated,
+         Human = df_hg,
+         Human_specific = specific_hg,
+         Mouse = df_mm,
+         Mouse_specific = specific_mm,
+         Mixed = mixed)
     
   }, mc.cores = ncores)
   
-  names(tiered_l) <- names(rank_l)
+  names(tiered_l) <- tfs$Symbol_hg
   return(tiered_l)
 }
 
 
 
-# Join aggregate coexpression and binding
+# # Subset each rank df in rank_l to genes that are in the top K of both coexpr 
+# # and binding. Check k in case of ties, using the lowest value of k that ensures
+# # there are no ties in either rank
+# 
+# subset_topk <- function(rank_l, k, ncores = 1) {
+#   
+#   topk_l <- mclapply(rank_l, function(x) {
+# 
+#     k_bind <- check_k(sort(x$Bind_score, decreasing = TRUE), k = k)
+#     k_rsr <- check_k(sort(x$Avg_RSR, decreasing = TRUE), k = k)
+#     
+#     filter(x, Rank_RSR <= k_rsr & Rank_bind <= k_bind)
+#     
+#   }, mc.cores = ncore)
+#   
+#   names(topk_l) <- names(rank_l)
+#   return(topk_l)
+# }
+# 
+# 
+# # TODO:
+# 
+# subset_bottomk <- function(rank_l, k, ncores = 1) {
+#   
+#   topk_l <- mclapply(rank_l, function(x) {
+#     
+#     k_bind <- check_k(sort(x$Bind_score, decreasing = TRUE), k = k)
+#     k_rsr <- check_k(sort(x$Avg_RSR, decreasing = TRUE), k = k)
+#     
+#     filter(x, Rank_RSR > (max(x$Rank_RSR) - k_rsr) & Rank_bind <= k_bind)
+#     
+#   }, mc.cores = ncore)
+#   
+#   names(topk_l) <- names(rank_l)
+#   return(topk_l)
+# }
+
+
+# Join aggregate coexpression and binding and generate tiered evidence
 # ------------------------------------------------------------------------------
 
+
+# Produces lists of TF gene rank dfs for coexpression and binding data
 
 rank_hg <- join_coexpr_bind(rank_tf_hg, bind_summary$Human_TF)
 rank_mm <- join_coexpr_bind(rank_tf_mm, bind_summary$Mouse_TF)
-
-
-# Rank product (RP) can prioritize instances where one rank is near maximal and
-# the other is low. Select top K in both data types
-
-topk_hg <- subset_topk(rank_hg, k = k, ncores = ncore)
-topk_mm <- subset_topk(rank_mm, k = k, ncores = ncore)
-
-n_topk_hg <- sort(unlist(lapply(topk_hg, nrow)), decreasing = TRUE)
-n_topk_mm <- sort(unlist(lapply(topk_mm, nrow)), decreasing = TRUE)
-
-
-# Bottom of coexpr ranks to look for repression
-
-bottomk_hg <- subset_bottomk(rank_hg, k = k, ncores = ncore)
-bottomk_mm <- subset_bottomk(rank_mm, k = k, ncores = ncore)
-
-n_bottomk_hg <- sort(unlist(lapply(bottomk_hg, nrow)), decreasing = TRUE)
-n_bottomk_mm <- sort(unlist(lapply(bottomk_mm, nrow)), decreasing = TRUE)
-
-
-# Look for orthologous topk interactions
-# TODO: best to create single ortho list upfront, or just overlap topk objects?
-# ------------------------------------------------------------------------------
-
-
 rank_ortho <- join_and_rank_ortho(rank_hg, rank_mm, pc_ortho, ncores = ncore)
 
 
+# Produces a list for each TF within binding evidence in at least one species,
+# grouping genes by their status in the top K across species/data type rankings
 
-tiered_l <- subset_tiered_evidence(rank_ortho, k = k, ncores = ncore)
+tiered_l <- subset_tiered_evidence(rank_ortho = rank_ortho,
+                                   rank_hg = rank_hg,
+                                   rank_mm = rank_mm,
+                                   pc_ortho = pc_ortho,
+                                   k = k, 
+                                   ncores = ncore)
+
+
+# Tally the number of interactions at each tier
+
+n_interactions <- lapply(tiered_l, function(tf) {
+  unlist(lapply(tf, function(x) ifelse(is.null(x), NA, nrow(x))))
+})
+
+n_interactions <- do.call(rbind, n_interactions)
 
 
 
-n_topk_ortho <- data.frame(
-  Symbol = names(rank_ortho),
-  Stringent = unlist(lapply(lapply(tiered_l, pluck, "Stringent"), nrow)),
-  Middle = unlist(lapply(lapply(tiered_l, pluck, "Middle"), nrow)),
-  Relaxed = unlist(lapply(lapply(tiered_l, pluck, "Relaxed"), nrow))
-)
+
+# Examine stringent collection
+# ------------------------------------------------------------------------------
 
 
 # Tally the unique genes that are in the most stringent set
+
 stringent_genes <- lapply(tiered_l, pluck, "Stringent", "Symbol_hg")
 stringent_genes <- stringent_genes[lapply(stringent_genes, length) > 0]
 n_stringent_genes <- sort(table(unlist(stringent_genes)))
@@ -289,7 +329,7 @@ unique(unlist(stringent_tfs[c("TRIB1", "TNFAIP3", "MCL1")]))
 
 # TODO: better counting
 
-summ_tiers <- lapply(c("Stringent", "Middle", "Relaxed"), function(x) {
+summ_tiers <- lapply(c("Stringent", "Elevated", "Mixed"), function(x) {
   list(
     sum(n_topk_ortho[[x]] > 0),
     sum(n_topk_ortho[[x]]),
@@ -299,22 +339,16 @@ summ_tiers <- lapply(c("Stringent", "Middle", "Relaxed"), function(x) {
 
 
 
-# Which data type is typically absent from the middle collection?
+# Which data type is typically absent from the elevated collection?
 
-missing_middle <- lapply(tiered_l, function(x) {
-  
-  # May need to decrease k if the current k includes tied values
-  k_bind_hg <- check_k(sort(rank_df$Bind_score_hg, decreasing = TRUE), k = k)
-  k_bind_mm <- check_k(sort(rank_df$Bind_score_mm, decreasing = TRUE), k = k)
-  k_rsr_hg <- check_k(sort(rank_df$Avg_RSR_hg, decreasing = TRUE), k = k)
-  k_rsr_mm <- check_k(sort(rank_df$Avg_RSR_mm, decreasing = TRUE), k = k)
-  
+missing_elevated <- lapply(tiered_l, function(x) {
+
   df <- data.frame(
-    N = nrow(x$Middle),
-    N_coexpr_hg = sum(x$Middle$Rank_RSR_hg > k_rsr_hg),
-    N_coexpr_mm = sum(x$Middle$Rank_RSR_mm > k_bind_mm),
-    N_bind_hg = sum(x$Middle$Rank_bind_hg > k_bind_hg),
-    N_bind_mm = sum(x$Middle$Rank_bind_mm > k_rsr_mm))
+    N = nrow(x$Elevated),
+    N_coexpr_hg = sum(x$Elevated$Rank_RSR_hg > k),
+    N_coexpr_mm = sum(x$Elevated$Rank_RSR_mm > k),
+    N_bind_hg = sum(x$Elevated$Rank_bind_hg > k),
+    N_bind_mm = sum(x$Elevated$Rank_bind_mm > k))
   
   df$N_human <- sum(df$N_bind_hg, df$N_coexpr_hg)
   df$N_mouse <- sum(df$N_bind_mm, df$N_coexpr_mm)
@@ -325,18 +359,18 @@ missing_middle <- lapply(tiered_l, function(x) {
 })
 
 
-missing_middle <- do.call(rbind, missing_middle)
+missing_elevated <- do.call(rbind, missing_elevated)
+
 
 # Proportions
-missing_middle2 <- missing_middle
-colnames(missing_middle2) <- str_replace(colnames(missing_middle2), "N_", "Prop_")
-missing_middle2[, 2:ncol(missing_middle2)] <- t(apply(missing_middle, 1, function(x) x[2:ncol(missing_middle)] / x["N"]))
-missing_middle2 <- round(missing_middle2, 3)
+missing_elevated2 <- missing_elevated
+colnames(missing_elevated2) <- str_replace(colnames(missing_elevated2), "N_", "Prop_")
+missing_elevated2[, 2:ncol(missing_elevated2)] <- t(apply(missing_elevated, 1, function(x) x[2:ncol(missing_elevated)] / x["N"]))
+missing_elevated2 <- round(missing_elevated2, 3)
 
-summary(missing_middle)
-
-summary(missing_middle2)
-summary(filter(missing_middle2, N >= 5))
+summary(missing_elevated)
+summary(missing_elevated2)
+summary(filter(missing_elevated2, N >= 5))
 
 
 # Demo seeing how many interactions are exclusively found within species
@@ -362,8 +396,8 @@ specific_hg <- lapply(names(rank_hg), function(x) {
     ortho <- TRUE
     specific <- length(setdiff(
     topk,
-    # unlist(lapply(tiered_l[[x]], pluck, "Symbol_hg")))  # Including Relaxed
-    unlist(lapply(tiered_l[[x]][c("Stringent", "Middle")], pluck, "Symbol_hg"))
+    # unlist(lapply(tiered_l[[x]], pluck, "Symbol_hg")))  # Including Mixed
+    unlist(lapply(tiered_l[[x]][c("Stringent", "Elevated")], pluck, "Symbol_hg"))
     ))
   }
   
@@ -387,9 +421,11 @@ specific_mm <- lapply(names(rank_mm), function(x) {
 
   topk <- topk_mm[[x]]$Symbol
   
+  tf_ortho <- filter(pc_ortho, Symbol_mm == x)
+  
   not_ortho <- length(setdiff(topk, pc_ortho$Symbol_mm))
     
-  if (str_to_upper(x) %!in% names(rank_ortho)) {
+  if (tf_ortho$Symbol_hg %!in% names(rank_ortho)) {
     
     ortho <- FALSE
     specific = length(topk)
@@ -399,8 +435,8 @@ specific_mm <- lapply(names(rank_mm), function(x) {
     ortho <- TRUE
     specific <- length(setdiff(
     topk,
-    # unlist(lapply(tiered_l[[x]], pluck, "Symbol_mm")))  # Including Relaxed
-    unlist(lapply(tiered_l[[str_to_upper(x)]][c("Stringent", "Middle")], pluck, "Symbol_mm"))
+    # unlist(lapply(tiered_l[[x]], pluck, "Symbol_mm")))  # Including Mixed
+    unlist(lapply(tiered_l[[tf_ortho$Symbol_hg]][c("Stringent", "Elevated")], pluck, "Symbol_mm"))
     ))
   }
   
@@ -421,15 +457,14 @@ specific_mm <- do.call(rbind, specific_mm)
 
 
 n_topk_hg <- left_join(specific_hg, n_topk_ortho, by = "Symbol") %>% 
-  rename("Human_specific" = "N_specific")
+  dplyr::rename("Human_specific" = "N_specific")
 n_topk_hg[is.na(n_topk_hg)] <- 0
 
 
-
-n_topk_mm <- specific_mm %>% 
-  mutate(Symbol = str_to_upper(Symbol)) %>% 
-  left_join(., n_topk_ortho, by = "Symbol") %>% 
-  rename("Mouse_specific" = "N_specific")
+n_topk_mm <- specific_mm %>%
+  left_join(pc_ortho, by = c("Symbol" = "Symbol_mm")) %>% 
+  left_join(., n_topk_ortho, by = c("Symbol_hg" = "Symbol")) %>% 
+  dplyr::rename("Mouse_specific" = "N_specific")
 n_topk_mm[is.na(n_topk_mm)] <- 0
 
 
@@ -511,10 +546,10 @@ n_evo_div %>%
 
 
 p_dfx <- pivot_longer(n_topk_hg,
-                      cols = c("Human_specific", "Stringent", "Middle", "Relaxed"),
+                      cols = c("Human_specific", "Stringent", "Elevated", "Mixed"),
                       names_to = "Scheme",
                       values_to = "Count") %>% 
-  mutate(Scheme = factor(Scheme, levels = c("Relaxed", "Human_specific", "Middle", "Stringent")))
+  mutate(Scheme = factor(Scheme, levels = c("Mixed", "Human_specific", "Elevated", "Stringent")))
   
 
 
@@ -545,9 +580,9 @@ ggplot(
 
 
 p_dfx2a <- n_topk_hg %>% 
-  # mutate(N_ortho = rowSums(n_topk_hg[, c("Stringent", "Middle", "Relaxed")])) %>% 
-  mutate(N_ortho = rowSums(n_topk_hg[, c("Stringent", "Middle")])) %>% 
-  select(-c(Stringent, Middle, Relaxed)) %>% 
+  # mutate(N_ortho = rowSums(n_topk_hg[, c("Stringent", "Elevated", "Mixed")])) %>% 
+  mutate(N_ortho = rowSums(n_topk_hg[, c("Stringent", "Elevated")])) %>% 
+  select(-c(Stringent, Elevated, Mixed)) %>% 
   pivot_longer(cols = c("Human_specific", "N_ortho"),
                names_to = "Scheme",
                values_to = "Count")
@@ -555,9 +590,9 @@ p_dfx2a <- n_topk_hg %>%
 
 
 p_dfx2b <- n_topk_mm %>% 
-  # mutate(N_ortho = rowSums(n_topk_mm[, c("Stringent", "Middle", "Relaxed")])) %>% 
-  mutate(N_ortho = rowSums(n_topk_mm[, c("Stringent", "Middle")])) %>% 
-  select(-c(Stringent, Middle, Relaxed)) %>% 
+  # mutate(N_ortho = rowSums(n_topk_mm[, c("Stringent", "Elevated", "Mixed")])) %>% 
+  mutate(N_ortho = rowSums(n_topk_mm[, c("Stringent", "Elevated")])) %>% 
+  select(-c(Stringent, Elevated, Mixed)) %>% 
   pivot_longer(cols = c("Mouse_specific", "N_ortho"),
                names_to = "Scheme",
                values_to = "Count")
@@ -652,10 +687,10 @@ ap1_hg <- plyr::join_all(ap1_hg, by = "Symbol")
 # Stacked barchart of tiered evidence counts
 
 plot_df1 <- pivot_longer(n_topk_ortho,
-                         cols = c("Stringent", "Middle", "Relaxed"),
+                         cols = c("Stringent", "Elevated", "Mixed"),
                          names_to = "Scheme",
                          values_to = "Count") %>% 
-  mutate(Scheme = factor(Scheme, levels = c("Relaxed", "Middle", "Stringent")))
+  mutate(Scheme = factor(Scheme, levels = c("Mixed", "Elevated", "Stringent")))
   
 
 plot_df1$Symbol <- factor(plot_df1$Symbol, levels = arrange(n_topk_ortho, Stringent)$Symbol)
@@ -693,8 +728,8 @@ scale01 <- function(x) (x - min(x)) / (max(x) - min(x))
 
 
 genes <- c(tiered_l[[plot_tf]]$Stringent$Symbol_hg,
-           tiered_l[[plot_tf]]$Middle$Symbol_hg,
-           tiered_l[[plot_tf]]$Relaxed$Symbol_hg)
+           tiered_l[[plot_tf]]$Elevated$Symbol_hg,
+           tiered_l[[plot_tf]]$Mixed$Symbol_hg)
 
 
 plot_df2 <- rank_ortho[[plot_tf]] %>% 
@@ -715,7 +750,7 @@ rownames(plot_df2) <- plot_df2$Symbol_hg
 # Padding between species (columns) and genes in evidence tiers (rows)
 
 ns <- nrow(tiered_l[[plot_tf]]$Stringent)
-nm <- nrow(tiered_l[[plot_tf]]$Middle)
+nm <- nrow(tiered_l[[plot_tf]]$Elevated)
 
 gaps_row <- rep(c(ns, nm + ns), each = 4)
 gaps_col <- rep(1, 4)
@@ -934,19 +969,19 @@ plot_tf <- "PAX6"
 rank_l <- tiered_l[[plot_tf]]
 
 
-rm_genes <- filter(pc_ortho, Symbol_hg %in% c(rank_l$Stringent$Symbol_hg, rank_l$Middle$Symbol_hg))
+rm_genes <- filter(pc_ortho, Symbol_hg %in% c(rank_l$Stringent$Symbol_hg, rank_l$Elevated$Symbol_hg))
 
 
 gain_hg <- topk_hg[[plot_tf]] %>%
   filter(Symbol %!in% rm_genes$Symbol_hg) %>%
-  rename(Rank_RSR_hg = Rank_RSR, Rank_bind_hg = Rank_bind) %>%
+  dplyr::rename(Rank_RSR_hg = Rank_RSR, Rank_bind_hg = Rank_bind) %>%
   mutate(Symbol_hg = Symbol) %>% 
   left_join(pc_ortho, by = "Symbol_hg")
 
 
 gain_mm <- topk_mm[[str_to_title(plot_tf)]] %>%
   filter(Symbol %!in% rm_genes$Symbol_mm) %>%
-  rename(Rank_RSR_mm = Rank_RSR, Rank_bind_mm = Rank_bind) %>%
+  dplyr::rename(Rank_RSR_mm = Rank_RSR, Rank_bind_mm = Rank_bind) %>%
   mutate(Symbol_mm = Symbol) %>% 
   left_join(pc_ortho, by = "Symbol_mm")
 
@@ -956,24 +991,24 @@ gain_hg <- left_join(
   gain_hg,
   rank_mm[[str_to_title(plot_tf)]][, c("Symbol", "Rank_bind", "Rank_RSR", "RP")],
   by = c("Symbol_mm" = "Symbol")) %>%
-  rename(Rank_RSR_mm = Rank_RSR, Rank_bind_mm = Rank_bind)
+  dplyr::rename(Rank_RSR_mm = Rank_RSR, Rank_bind_mm = Rank_bind)
 
 
 gain_mm <- left_join(
   gain_mm,
   rank_hg[[plot_tf]][, c("Symbol", "Rank_bind", "Rank_RSR", "RP")],
   by = c("Symbol_hg" = "Symbol")) %>%
-  rename(Rank_RSR_hg = Rank_RSR, Rank_bind_hg = Rank_bind) %>% 
+  dplyr::rename(Rank_RSR_hg = Rank_RSR, Rank_bind_hg = Rank_bind) %>% 
   mutate(Symbol_hg = ifelse(is.na(Symbol_hg), Symbol_mm, Symbol_hg))
 
 
 
 demo_tiered <- list(
   Stringent = tiered_l[[plot_tf]]$Stringent,
-  Elevated = tiered_l[[plot_tf]]$Middle,
+  Elevated = tiered_l[[plot_tf]]$Elevated,
   Human = gain_hg,
   Mouse = gain_mm,
-  Relaxed = filter(rank_l$Relaxed, Symbol_hg %!in% c(gain_hg$Symbol_hg, gain_mm$Symbol_hg))
+  Mixed = filter(rank_l$Mixed, Symbol_hg %!in% c(gain_hg$Symbol_hg, gain_mm$Symbol_hg))
 )
 
 
@@ -1043,7 +1078,7 @@ plot_tf <- "PAX6"
 
 rank_l <- tiered_l[[plot_tf]]
 
-rm_genes <- filter(pc_ortho, Symbol_hg %in% c(rank_l$Stringent$Symbol_hg, rank_l$Middle$Symbol_hg))
+rm_genes <- filter(pc_ortho, Symbol_hg %in% c(rank_l$Stringent$Symbol_hg, rank_l$Elevated$Symbol_hg))
 
 
 gain_hg2 <- rank_ortho[[plot_tf]] %>%
@@ -1058,10 +1093,10 @@ gain_mm2 <- rank_ortho[[plot_tf]] %>%
 
 demo_tiered2 <- list(
   Stringent = tiered_l[[plot_tf]]$Stringent,
-  Elevated = tiered_l[[plot_tf]]$Middle,
+  Elevated = tiered_l[[plot_tf]]$Elevated,
   Human = gain_hg2,
   Mouse = gain_mm2,
-  Relaxed = filter(rank_l$Relaxed, Symbol_hg %!in% c(gain_hg2$Symbol_hg, gain_mm2$Symbol_hg))
+  Mixed = filter(rank_l$Mixed, Symbol_hg %!in% c(gain_hg2$Symbol_hg, gain_mm2$Symbol_hg))
 )
 
 
