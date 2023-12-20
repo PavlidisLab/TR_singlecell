@@ -84,7 +84,26 @@ download_ensembl_pcoding <- function(outfile,
 
 # Usage: download_refseq("refseq_pcoding_human.tsv", "Human")
 # Using ensembl range formatting: no 'chr' prefix and strand as 1/-1
-# https://www.ncbi.nlm.nih.gov/refseq/refseq_select/
+# Overview of selection: https://www.ncbi.nlm.nih.gov/refseq/refseq_select/
+# Table schema (mouse) http://genome.ucsc.edu/cgi-bin/hgTables?hgsid=1827432270_fzD31oCmH8TcANzQ82Yzz7h0RKlz&hgta_doSchemaDb=mm10&hgta_doSchemaTable=ncbiRefSeqSelect
+# ---
+# bin	
+# V2 == name == Refseq_ID	
+# V3 == chrom == Chromsome	
+# V4 == strand == Strand	
+# V5 == txStart == Start	
+# V6 == txEnd == End	
+# cdsStart	
+# cdsEnd	
+# exonCount	
+# exonStarts	
+# exonEnds	
+# score	
+# V13 == name2 == Symbol	
+# cdsStartStat	
+# cdsEndStat	
+# exonFrames
+#
 # ------------------------------------------------------------------------------
 
 
@@ -94,10 +113,10 @@ download_refseq <- function(outfile,
   if (file.exists(outfile)) return(message(outfile, " already exists!"))
   
   if (species == "Mouse") {
-    link <- "http://hgdownload.soe.ucsc.edu/goldenPath/mm10/database/ncbiRefSeqSelect.txt.gz"
+    link <- "https://hgdownload.soe.ucsc.edu/goldenPath/mm10/database/ncbiRefSeqSelect.txt.gz"
     chr <- c(1:19, "MT", "X", "Y")
   } else if (species == "Human") {
-    link <- "http://hgdownload.soe.ucsc.edu/goldenPath/hg38/database/ncbiRefSeqSelect.txt.gz"
+    link <- "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/database/ncbiRefSeqSelect.txt.gz"
     chr <- c(1:22, "MT", "X", "Y")
   }
   
