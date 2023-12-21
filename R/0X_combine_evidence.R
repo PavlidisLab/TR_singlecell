@@ -232,45 +232,6 @@ subset_tiered_evidence <- function(rank_ortho,
 }
 
 
-
-# # Subset each rank df in rank_l to genes that are in the top K of both coexpr 
-# # and binding. Check k in case of ties, using the lowest value of k that ensures
-# # there are no ties in either rank
-# 
-# subset_topk <- function(rank_l, k, ncores = 1) {
-#   
-#   topk_l <- mclapply(rank_l, function(x) {
-# 
-#     k_bind <- check_k(sort(x$Bind_score, decreasing = TRUE), k = k)
-#     k_rsr <- check_k(sort(x$Avg_RSR, decreasing = TRUE), k = k)
-#     
-#     filter(x, Rank_RSR <= k_rsr & Rank_bind <= k_bind)
-#     
-#   }, mc.cores = ncore)
-#   
-#   names(topk_l) <- names(rank_l)
-#   return(topk_l)
-# }
-# 
-# 
-# # TODO:
-# 
-# subset_bottomk <- function(rank_l, k, ncores = 1) {
-#   
-#   topk_l <- mclapply(rank_l, function(x) {
-#     
-#     k_bind <- check_k(sort(x$Bind_score, decreasing = TRUE), k = k)
-#     k_rsr <- check_k(sort(x$Avg_RSR, decreasing = TRUE), k = k)
-#     
-#     filter(x, Rank_RSR > (max(x$Rank_RSR) - k_rsr) & Rank_bind <= k_bind)
-#     
-#   }, mc.cores = ncore)
-#   
-#   names(topk_l) <- names(rank_l)
-#   return(topk_l)
-# }
-
-
 # Join aggregate coexpression and binding and generate tiered evidence
 # ------------------------------------------------------------------------------
 
@@ -293,7 +254,11 @@ tiered_l <- subset_tiered_evidence(rank_ortho = rank_ortho,
                                    ncores = ncore)
 
 
-# Tally the number of interactions at each tier
+# Inspecting the collections
+# ------------------------------------------------------------------------------
+
+
+# Tally the number of interactions at each tier for each TF
 
 n_interactions <- lapply(tiered_l, function(tf) {
   unlist(lapply(tf, function(x) ifelse(is.null(x), NA, nrow(x))))
@@ -302,46 +267,98 @@ n_interactions <- lapply(tiered_l, function(tf) {
 n_interactions <- do.call(rbind, n_interactions)
 
 
+# Summary of total interactions at each tier
+
+summ_tier <- lapply(colnames(n_interactions), function(x) {
+  list(
+    N_pairs = sum(n_interactions[, x], na.rm = TRUE),
+    N_TFs = sum(!is.na(n_interactions[, x]) & n_interactions[, x] > 0),
+    Summ = summary(n_interactions[n_interactions[, x] > 0, x]))
+})
+names(summ_tier) <- colnames(n_interactions)
 
 
-# Examine stringent collection
+
+# Genes can reoccur across different TFs reproducible interactions. Tally these
+# reoccurences, and group which TFs are affiliated with each unique gene
+# NOTE: Pretty clunky, as generating different versions of list with 3 levels
+# (tier, TF, and gene symbols in that tier) to make summaries.
 # ------------------------------------------------------------------------------
 
 
-# Tally the unique genes that are in the most stringent set
-
-stringent_genes <- lapply(tiered_l, pluck, "Stringent", "Symbol_hg")
-stringent_genes <- stringent_genes[lapply(stringent_genes, length) > 0]
-n_stringent_genes <- sort(table(unlist(stringent_genes)))
-
-sum(n_stringent_genes > 1)
-
-# Get the TFs that are associated with each of these stringent genes
-stringent_tfs <- lapply(names(n_stringent_genes), function(x) {
-  gene_in_tf <- unlist(lapply(stringent_genes, function(y) x %in% y))
-  names(gene_in_tf[gene_in_tf])
-})
-names(stringent_tfs) <- names(n_stringent_genes)
+tier_names <- colnames(n_interactions)
 
 
-unique(unlist(stringent_tfs[c("TRIB1", "TNFAIP3", "MCL1")]))
-
-
-# TODO: better counting
-
-summ_tiers <- lapply(c("Stringent", "Elevated", "Mixed"), function(x) {
-  list(
-    sum(n_topk_ortho[[x]] > 0),
-    sum(n_topk_ortho[[x]]),
-    summary(filter(n_topk_ortho, !!sym(x) > 0)[[x]])
-  )
+# Extract the gene symbols for each TF at each tier
+# list: TF -> tier -> gene symbols
+tf_symbols <- lapply(tiered_l, function(x) {
+  lapply(x, function(y) {
+    y[, intersect(colnames(y), c("Symbol", "Symbol_hg"))]
+  })
 })
 
+
+# Invert this list and remove empty so list is now tier with TF elements
+# list: tier -> TF -> gene symbols
+tier_symbols <- lapply(tier_names, function(x) {
+  l <- lapply(tf_symbols, pluck, x)
+  l <- l[lapply(l, length) > 0]
+})
+names(tier_symbols) <- tier_names
+
+
+# Tally genes at each tier
+tally_symbols <- lapply(tier_symbols, function(x) sort(table(unlist(x))))
+
+
+# Get the count of genes affiliated with more than 1 TF at each tier
+n_multi <- lapply(tally_symbols, function(x) sum(x > 1))
+
+
+# Inverted list: tier -> unique gene symbols -> TFs affiliated with each gene
+gene_tf  <- lapply(tier_names, function(tier) {
+  
+  gene_names <- names(tally_symbols[[tier]])
+  tf_l <- tier_symbols[[tier]]
+  
+  gene_l <- lapply(gene_names, function(gene) {
+      names(unlist(lapply(tf_l, function(tf) which(gene %in% tf))))
+  })
+  names(gene_l) <- gene_names
+  
+  # order by size of 'TF sets' each gene belongs to
+  gene_l <- gene_l[order(vapply(gene_l, length, integer(1)))]
+  
+  return(gene_l)
+})
+names(gene_tf) <- tier_names
+
+
+
+# Get the corresponding TFs from the genes with the largest TF sets
+max_genes <- lapply(tally_symbols, function(x) names(x[x == max(x)]))
+max_tfs <- lapply(tier_names, function(x) gene_tf[[x]][max_genes[[x]]])
+names(max_tfs) <- tier_names
+
+
+
+# Focus on stringent interactions in paper
+# tail(tally_symbols$Stringent, 10)
+# n_multi$Stringent
+# max_genes$Stringent
+# max_tfs$Stringent
+# unique(unlist(max_tfs$Stringent))
 
 
 # Which data type is typically absent from the elevated collection?
+# ------------------------------------------------------------------------------
 
-missing_elevated <- lapply(tiered_l, function(x) {
+
+missing_counts <- lapply(tiered_l, function(x) {
+  
+  if (is.null(x$Elevated)) {
+    return(NA)
+  }
 
   df <- data.frame(
     N = nrow(x$Elevated),
@@ -359,22 +376,22 @@ missing_elevated <- lapply(tiered_l, function(x) {
 })
 
 
-missing_elevated <- do.call(rbind, missing_elevated)
+missing_counts <- do.call(rbind, missing_counts[!is.na(missing_counts)])
 
 
 # Proportions
-missing_elevated2 <- missing_elevated
-colnames(missing_elevated2) <- str_replace(colnames(missing_elevated2), "N_", "Prop_")
-missing_elevated2[, 2:ncol(missing_elevated2)] <- t(apply(missing_elevated, 1, function(x) x[2:ncol(missing_elevated)] / x["N"]))
-missing_elevated2 <- round(missing_elevated2, 3)
+missing_prop <- missing_counts
+colnames(missing_prop) <- str_replace(colnames(missing_prop), "N_", "Prop_")
+missing_prop[, 2:ncol(missing_prop)] <- t(apply(missing_counts, 1, function(x) x[2:ncol(missing_counts)] / x["N"]))
+missing_prop <- round(missing_prop, 3)
 
-summary(missing_elevated)
-summary(missing_elevated2)
-summary(filter(missing_elevated2, N >= 5))
+# missing_counts["MAFB", ]  # MAFB largest elevated collection with 0 stringent
+# summary(missing_counts)
+# summary(missing_prop)
+# summary(filter(missing_prop, N >= 5))
 
 
-# Demo seeing how many interactions are exclusively found within species
-# TODO: workflow needs collapse and clean
+# How many species-specific interactions are not in the ortho set?
 
 
 common_hg <- intersect(names(rank_hg), names(rank_ortho))
