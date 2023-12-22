@@ -1,5 +1,6 @@
 ## Combine the coexpression and binding rankings to nominate TF-gene interactions
 ## with reproducible evidence across species and methods
+# TODO: name anonymous functions; consider splitting joining/re-ranking
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -7,6 +8,8 @@ library(parallel)
 library(cowplot)
 library(ggrepel)
 library(pheatmap)
+library(grid)
+library(gridExtra)
 source("R/utils/functions.R")
 source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
@@ -258,24 +261,29 @@ tiered_l <- subset_tiered_evidence(rank_ortho = rank_ortho,
 # ------------------------------------------------------------------------------
 
 
+tier_names <- colnames(n_interactions)
+
+
 # Tally the number of interactions at each tier for each TF
 
 n_interactions <- lapply(tiered_l, function(tf) {
   unlist(lapply(tf, function(x) ifelse(is.null(x), NA, nrow(x))))
 })
 
-n_interactions <- do.call(rbind, n_interactions)
+n_interactions <- do.call(rbind, n_interactions) %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "Symbol")
 
 
 # Summary of total interactions at each tier
 
-summ_tier <- lapply(colnames(n_interactions), function(x) {
+summ_tier <- lapply(tier_names, function(x) {
   list(
     N_pairs = sum(n_interactions[, x], na.rm = TRUE),
     N_TFs = sum(!is.na(n_interactions[, x]) & n_interactions[, x] > 0),
     Summ = summary(n_interactions[n_interactions[, x] > 0, x]))
 })
-names(summ_tier) <- colnames(n_interactions)
+names(summ_tier) <- tier_names
 
 
 
@@ -284,9 +292,6 @@ names(summ_tier) <- colnames(n_interactions)
 # NOTE: Pretty clunky, as generating different versions of list with 3 levels
 # (tier, TF, and gene symbols in that tier) to make summaries.
 # ------------------------------------------------------------------------------
-
-
-tier_names <- colnames(n_interactions)
 
 
 # Extract the gene symbols for each TF at each tier
@@ -385,6 +390,8 @@ colnames(missing_prop) <- str_replace(colnames(missing_prop), "N_", "Prop_")
 missing_prop[, 2:ncol(missing_prop)] <- t(apply(missing_counts, 1, function(x) x[2:ncol(missing_counts)] / x["N"]))
 missing_prop <- round(missing_prop, 3)
 
+
+# Reporting
 # missing_counts["MAFB", ]  # MAFB largest elevated collection with 0 stringent
 # summary(missing_counts)
 # summary(missing_prop)
@@ -392,120 +399,49 @@ missing_prop <- round(missing_prop, 3)
 
 
 # How many species-specific interactions are not in the ortho set?
+# ------------------------------------------------------------------------------
 
 
-common_hg <- intersect(names(rank_hg), names(rank_ortho))
 
-
-specific_hg <- lapply(names(rank_hg), function(x) {
-
-  topk <- topk_hg[[x]]$Symbol
+n_not_ortho <- lapply(names(tiered_l), function(tf) {
   
-  not_ortho <- length(setdiff(topk, pc_ortho$Symbol_hg))
-    
-  if (x %!in% names(rank_ortho)) {
-    
-    ortho <- FALSE
-    specific = length(topk)
-    
-  } else {
-    
-    ortho <- TRUE
-    specific <- length(setdiff(
-    topk,
-    # unlist(lapply(tiered_l[[x]], pluck, "Symbol_hg")))  # Including Mixed
-    unlist(lapply(tiered_l[[x]][c("Stringent", "Elevated")], pluck, "Symbol_hg"))
-    ))
+  tier_hg <- tiered_l[[tf]]$Human_specific
+  tier_mm <- tiered_l[[tf]]$Mouse_specific
+  
+  if (is.null(tier_hg) || is.null(tier_mm)) {
+    return(NA)
   }
   
-  prop_not_ortho <- not_ortho / specific
-  
-  data.frame(Symbol = x, 
-             Ortho = ortho, 
-             N_specific = specific, 
-             N_not_ortho = not_ortho,
-             Prop_not_ortho = prop_not_ortho)
-  
+  data.frame(
+    Symbol = tf,
+    N_specific_hg = nrow(tier_hg),
+    N_not_ortho_hg = length(setdiff(tier_hg$Symbol, pc_ortho$Symbol_hg)),
+    N_specific_mm = nrow(tier_mm),
+    N_not_ortho_mm = length(setdiff(tier_mm$Symbol, pc_ortho$Symbol_mm))
+  )
 })
 
-
-specific_hg <- do.call(rbind, specific_hg)
-
+n_not_ortho <- do.call(rbind, n_not_ortho[!is.na(n_not_ortho)])
 
 
 
-specific_mm <- lapply(names(rank_mm), function(x) {
-
-  topk <- topk_mm[[x]]$Symbol
-  
-  tf_ortho <- filter(pc_ortho, Symbol_mm == x)
-  
-  not_ortho <- length(setdiff(topk, pc_ortho$Symbol_mm))
-    
-  if (tf_ortho$Symbol_hg %!in% names(rank_ortho)) {
-    
-    ortho <- FALSE
-    specific = length(topk)
-    
-  } else {
-    
-    ortho <- TRUE
-    specific <- length(setdiff(
-    topk,
-    # unlist(lapply(tiered_l[[x]], pluck, "Symbol_mm")))  # Including Mixed
-    unlist(lapply(tiered_l[[tf_ortho$Symbol_hg]][c("Stringent", "Elevated")], pluck, "Symbol_mm"))
-    ))
-  }
-  
-  prop_not_ortho <- not_ortho / specific
-  
-  data.frame(Symbol = x, 
-             Ortho = ortho, 
-             N_specific = specific, 
-             N_not_ortho = not_ortho,
-             Prop_not_ortho = prop_not_ortho)
-  
-})
-
-
-specific_mm <- do.call(rbind, specific_mm)
-
-
-
-
-n_topk_hg <- left_join(specific_hg, n_topk_ortho, by = "Symbol") %>% 
-  dplyr::rename("Human_specific" = "N_specific")
-n_topk_hg[is.na(n_topk_hg)] <- 0
-
-
-n_topk_mm <- specific_mm %>%
-  left_join(pc_ortho, by = c("Symbol" = "Symbol_mm")) %>% 
-  left_join(., n_topk_ortho, by = c("Symbol_hg" = "Symbol")) %>% 
-  dplyr::rename("Mouse_specific" = "N_specific")
-n_topk_mm[is.na(n_topk_mm)] <- 0
-
-
-# TODO: make histogram plots of species-specific gains
-
-summary(filter(n_topk_hg, Ortho))
-summary(filter(n_topk_mm, Ortho))
-
-summary(filter(n_topk_hg, !Ortho))
-summary(filter(n_topk_mm, !Ortho))
-
-sum(filter(n_topk_hg, Ortho)$N_not_ortho == 0)
-sum(filter(n_topk_mm, Ortho)$N_not_ortho == 0)
-
-
-# Genes in species-specific that are not in ortho set
-
-setdiff(topk_hg$STAT1$Symbol, pc_ortho$Symbol_hg)
+# Reporting
+# plot_hist(n_not_ortho, stat_col = "N_not_ortho_hg")
+# plot_hist(n_not_ortho, stat_col = "N_not_ortho_mm")
+# summary(n_not_ortho$N_not_ortho_hg)
+# summary(n_not_ortho$N_not_ortho_mm)
+# setdiff(tiered_l$STAT1$Human_specific$Symbol, pc_ortho$Symbol_hg)
+# setdiff(tiered_l$STAT1$Mouse_specific$Symbol, pc_ortho$Symbol_mm)
 
 
 
 # Candidate evolutionary divergent interactions
+# ------------------------------------------------------------------------------
 
+
+# Select for genes that are top k in one species and bottom half in other species
 mid_ortho <- nrow(rank_ortho[[1]]) / 2
+
 
 evo_div <- lapply(rank_ortho, function(rank_df) {
 
@@ -535,8 +471,311 @@ n_evo_div <- data.frame(
 )
 
 
+# AP1 members typically have greatest similarity and size of reproducible sets.
+# Look for genes ranked favourably across all
+# ------------------------------------------------------------------------------
 
-n_evo_div %>% 
+
+ap1_genes <- c("FOS", "FOSL1", "FOSL2", "JUN", "JUNB", "JUND")
+
+ap1_hg <- lapply(ap1_genes, function(x) {
+  rank_hg[[x]] %>% 
+    arrange(match(Symbol, pc_hg$Symbol)) %>%
+    select(Symbol, Rank_bind, Rank_RSR, RP) %>% 
+    rename_with(~paste0(., "_", x), -c("Symbol")) 
+})
+
+
+ap1_hg <- plyr::join_all(ap1_hg, by = "Symbol")
+ap1_hg <- ap1_hg[order(rowSums(select_if(ap1_hg, is.integer))), ]
+
+
+# Plots
+# ------------------------------------------------------------------------------
+
+
+# Stacked barchart of tiered evidence counts
+
+
+# Using only ortho
+
+plot_df1a <- n_interactions %>% 
+  pivot_longer(cols = c("Stringent", "Elevated", "Mixed"),
+               names_to = "Scheme",
+               values_to = "Count") %>% 
+  filter(!is.na(Count)) %>% 
+  mutate(Scheme = factor(Scheme, levels = c("Mixed", "Elevated", "Stringent")))
+  
+
+plot_df1a$Symbol <- factor(plot_df1a$Symbol, levels = arrange(n_interactions, Stringent)$Symbol)
+
+
+p1a <- ggplot(
+  plot_df1a, 
+  aes(x = reorder(Symbol, Count, FUN = sum), y = Count, fill = Scheme, colour = Scheme)) +
+  # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
+  geom_bar(position = "stack", stat = "identity") +
+  ylab("Count of reproducible interactions") +
+  xlab("Transcription factor") +
+  scale_fill_manual(values = c("#1b9e77", "#d95f02", "#7570b3")) +
+  scale_colour_manual(values = c("#1b9e77", "#d95f02", "#7570b3")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 20),
+        legend.position = c(0.8, 0.8),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+# Including species specific
+
+plot_df1b <- n_interactions %>% 
+  pivot_longer(cols = c("Stringent", "Elevated", "Human_specific", "Mouse_specific", "Mixed"),
+               names_to = "Scheme",
+               values_to = "Count") %>% 
+  filter(!is.na(Count)) %>%
+  mutate(Scheme = factor(Scheme, levels = c("Mixed", "Mouse_specific", "Human_specific","Elevated", "Stringent")))
+  
+
+plot_df1b$Symbol <- factor(plot_df1b$Symbol, levels = arrange(n_interactions, Stringent)$Symbol)
+
+
+p1b <- ggplot(
+  plot_df1b, 
+  aes(x = reorder(Symbol, Count, FUN = sum), y = Count, fill = Scheme, colour = Scheme)) +
+  # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
+  geom_bar(position = "stack", stat = "identity") +
+  ylab("Count of reproducible interactions") +
+  xlab("Transcription factor") +
+  scale_fill_manual(values = c("#1b9e77", "goldenrod", "royalblue", "#d95f02", "#7570b3")) +
+  scale_colour_manual(values = c("#1b9e77", "goldenrod", "royalblue", "#d95f02", "#7570b3")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 20),
+        legend.position = c(0.8, 0.8),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+# Plotting interactions for each species grouped by ortho status
+
+
+plot_df2a <- n_interactions %>% 
+  mutate(
+    Ortho = !is.na(Mouse),
+    # Orthologous = rowSums(n_interactions[, c("Stringent", "Elevated", "Mixed")], na.rm = TRUE),
+    Orthologous = rowSums(n_interactions[, c("Stringent", "Elevated")], na.rm = TRUE),
+    Orthologous = ifelse(Orthologous == 0, NA, Orthologous),
+    Human_specific = ifelse(Ortho, Human_specific, Human)
+    ) %>% 
+  pivot_longer(cols = c("Human_specific", "Orthologous"),
+               names_to = "Scheme",
+               values_to = "Count") %>% 
+  filter(!is.na(Count))
+
+
+plot_df2b <- n_interactions %>% 
+  mutate(
+    Ortho = !is.na(Human),
+    # Orthologous = rowSums(n_interactions[, c("Stringent", "Elevated", "Mixed")], na.rm = TRUE),
+    Orthologous = rowSums(n_interactions[, c("Stringent", "Elevated")], na.rm = TRUE),
+    Orthologous = ifelse(Orthologous == 0, NA, Orthologous),
+    Mouse_specific = ifelse(Ortho, Mouse_specific, Mouse)
+    ) %>% 
+  pivot_longer(cols = c("Mouse_specific", "Orthologous"),
+               names_to = "Scheme",
+               values_to = "Count") %>% 
+  filter(!is.na(Count))
+
+
+p2a <- ggplot(
+  plot_df2a, 
+  aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Scheme, colour = Scheme)) +
+  geom_bar(position = "stack", stat = "identity") +
+  facet_wrap(~Ortho, scales = "free") +
+  ylab("Count of reproducible interactions") +
+  xlab("Transcription factor") +
+  scale_fill_manual(values = c("royalblue", "darkgrey")) +
+  scale_colour_manual(values = c("royalblue", "darkgrey")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        # axis.title = element_text(size = 20),
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 20),
+        legend.position = c(0.75, 0.7),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 15),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+p2b <- ggplot(
+  plot_df2b, 
+  aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Scheme, colour = Scheme)) +
+  geom_bar(position = "stack", stat = "identity") +
+  facet_wrap(~Ortho, scales = "free") +
+  ylab("Count of reproducible interactions") +
+  xlab("Transcription factor") +
+  scale_fill_manual(values = c("goldenrod", "darkgrey")) +
+  scale_colour_manual(values = c("goldenrod", "darkgrey")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        # axis.title = element_text(size = 20),
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 20),
+        legend.position = c(0.75, 0.7),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 15),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+# Combining species plots with common label
+# https://stackoverflow.com/questions/33114380/centered-x-axis-label-for-muliplot-using-cowplot-package
+p2 <- plot_grid(p2a, p2b, ncol = 1) 
+
+
+y_grob <- textGrob("Count of reproducible interactions", 
+                   gp = gpar(fontsize = 20), rot = 90)
+
+x_grob <- textGrob("Transcription factor", 
+                   gp = gpar(fontsize = 20))
+
+p2 <- grid.arrange(arrangeGrob(p2, left = y_grob, bottom = x_grob))
+
+
+# Combine ortho with species specific
+p3a <- plot_grid(p1a, p2, rel_widths = c(1, 0.5))
+p3b <- plot_grid(p1b, p2, rel_widths = c(1, 0.5))
+
+
+# Heatmap of tiered evidence for a given TF. For species-specific interactions,
+# join the equivalent ortho ranking
+
+plot_tf <- "ASCL1"
+
+rank_l <- tiered_l[[plot_tf]]
+
+rank_l$Human_specific <- rank_l$Human_specific %>%
+  dplyr::rename(Rank_RSR_hg = Rank_RSR, Rank_bind_hg = Rank_bind) %>%
+  mutate(Symbol_hg = Symbol) %>% 
+  left_join(pc_ortho, by = "Symbol_hg") %>% 
+  left_join(rank_mm[[str_to_title(plot_tf)]][, c("Symbol", "Rank_bind", "Rank_RSR")],
+  by = c("Symbol_mm" = "Symbol")) %>%
+  dplyr::rename(Rank_RSR_mm = Rank_RSR, Rank_bind_mm = Rank_bind)
+  
+
+rank_l$Mouse_specific <- rank_l$Mouse_specific %>%
+  dplyr::rename(Rank_RSR_mm = Rank_RSR, Rank_bind_mm = Rank_bind) %>%
+  mutate(Symbol_mm = Symbol) %>% 
+  left_join(pc_ortho, by = "Symbol_mm") %>% 
+  left_join(rank_hg[[plot_tf]][, c("Symbol", "Rank_bind", "Rank_RSR")],
+  by = c("Symbol_hg" = "Symbol")) %>%
+  dplyr::rename(Rank_RSR_hg = Rank_RSR, Rank_bind_hg = Rank_bind) %>% 
+  mutate(Symbol_hg = ifelse(is.na(Symbol_hg), Symbol_mm, Symbol_hg))
+
+
+rank_l <- rank_l[c("Stringent", "Elevated", "Human_specific", "Mouse_specific", "Mixed")]
+
+
+plot_df3 <- lapply(rank_l, `[`, c("Rank_RSR_hg", "Rank_RSR_mm", "Rank_bind_hg", "Rank_bind_mm")) %>%
+  do.call(rbind, .) %>% 
+
+  mutate(
+
+    Rank_RSR_hg = case_when(Rank_RSR_hg <= k ~ 0,
+                            Rank_RSR_hg > k & Rank_RSR_hg <= k + 500 ~ 1,
+                            is.na(Rank_RSR_hg) ~ NA_real_,
+                            TRUE ~ 2),
+
+    Rank_RSR_mm = case_when(Rank_RSR_mm <= k ~ 0,
+                            Rank_RSR_mm > k & Rank_RSR_mm <= k + 500 ~ 1,
+                            is.na(Rank_RSR_mm) ~ NA_real_,
+                            TRUE ~ 2),
+
+    Rank_bind_hg = case_when(Rank_bind_hg <= k ~ 0,
+                             Rank_bind_hg > k & Rank_bind_hg <= k + 500 ~ 1,
+                             is.na(Rank_bind_hg) ~ NA_real_,
+                             TRUE ~ 2),
+
+    Rank_bind_mm = case_when(Rank_bind_mm <= k ~ 0,
+                             Rank_bind_mm > k & Rank_bind_mm <= k + 500 ~ 1,
+                             is.na(Rank_bind_mm) ~ NA_real_,
+                             TRUE ~ 2)
+  )
+
+
+rownames(plot_df3) <- unlist(lapply(rank_l, pluck, "Symbol_hg"))
+
+
+# Padding between species and genes in evidence tiers 
+
+gap_genes <- rep(
+  head(cumsum(unlist(lapply(rank_l, nrow))), -1),
+  each = 4)
+
+gap_evidence <- rep(1:4, each = 4)
+
+
+pheatmap(t(plot_df3),
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = rev(c('white', "#a6bddb",'#045a8d')),
+         border_color = "black",
+         na_col = "grey",
+         gaps_col = gap_genes,
+         gaps_row = gap_evidence,
+         # cellwidth = 10,
+         cellheight = 10,
+         legend = FALSE,
+         angle_col = 90
+         # filename = file.path(plot_dir, "demo_rp_order_step_heatmap.png")
+)
+
+
+# Binary heatmap of curation status
+
+labels_curated <- get_curated_labels(tf = plot_tf, 
+                                     curated_df = curated, 
+                                     ortho_df = pc_ortho,
+                                     pc_df = pc_hg, 
+                                     species = "Human", 
+                                     remove_self = TRUE)
+
+
+curated_vec <- setNames(as.integer(rownames(plot_df3) %in% labels_curated), rownames(plot_df3))
+
+
+pheatmap(t(curated_vec),
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = c("white", "black"),
+         border_color = "black",
+         gaps_col = gap_genes,
+         # cellwidth = 20,
+         cellheight = 10,
+         legend = FALSE,
+         angle_col = 90
+)
+
+
+
+# Barchart of count of candidate evo divergent interactions
+
+p4 <- 
+  n_evo_div %>% 
   pivot_longer(cols = c("Human", "Mouse"),
                names_to = "Species",
                values_to = "Count") %>% 
@@ -556,644 +795,3 @@ n_evo_div %>%
         axis.ticks.x = element_blank(),
         plot.title = element_text(size = 20),
         plot.margin = margin(c(10, 20, 10, 10)))
-
-
-
-# Plotting interactions grouped by ortho collection
-
-
-p_dfx <- pivot_longer(n_topk_hg,
-                      cols = c("Human_specific", "Stringent", "Elevated", "Mixed"),
-                      names_to = "Scheme",
-                      values_to = "Count") %>% 
-  mutate(Scheme = factor(Scheme, levels = c("Mixed", "Human_specific", "Elevated", "Stringent")))
-  
-
-
-p_dfx$Symbol <- factor(p_dfx$Symbol, levels = arrange(n_topk_hg, Stringent)$Symbol)
-# p_dfx$Symbol <- factor(p_dfx$Symbol, levels = arrange(n_topk_hg, Human_specific)$Symbol)
-  
-
-# https://github.com/dgrtwo/drlib/blob/master/R/reorder_within.R
-ggplot(
-  p_dfx, 
-  # aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Scheme, colour = Scheme)) +
-  aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
-  geom_bar(position = "stack", stat = "identity") +
-  facet_wrap(~ Ortho, scales = "free") +
-  ylab("Count of reproducible interactions") +
-  xlab("Transcription factor") +
-  ggtitle(paste0("N=", n_distinct(p_dfx$Symbol))) +
-  scale_fill_manual(values = c("#1b9e77", "#d95f02", "#7570b3", "#e7298a")) +
-  scale_colour_manual(values = c("#1b9e77", "#d95f02", "#7570b3", "#e7298a")) +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        plot.title = element_text(size = 20),
-        plot.margin = margin(c(10, 20, 10, 10)))
-
-
-
-p_dfx2a <- n_topk_hg %>% 
-  # mutate(N_ortho = rowSums(n_topk_hg[, c("Stringent", "Elevated", "Mixed")])) %>% 
-  mutate(N_ortho = rowSums(n_topk_hg[, c("Stringent", "Elevated")])) %>% 
-  select(-c(Stringent, Elevated, Mixed)) %>% 
-  pivot_longer(cols = c("Human_specific", "N_ortho"),
-               names_to = "Scheme",
-               values_to = "Count")
-
-
-
-p_dfx2b <- n_topk_mm %>% 
-  # mutate(N_ortho = rowSums(n_topk_mm[, c("Stringent", "Elevated", "Mixed")])) %>% 
-  mutate(N_ortho = rowSums(n_topk_mm[, c("Stringent", "Elevated")])) %>% 
-  select(-c(Stringent, Elevated, Mixed)) %>% 
-  pivot_longer(cols = c("Mouse_specific", "N_ortho"),
-               names_to = "Scheme",
-               values_to = "Count")
-
-
-p2a <- ggplot(
-  p_dfx2a, 
-  aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Scheme, colour = Scheme)) +
-  # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
-  geom_bar(position = "stack", stat = "identity") +
-  facet_wrap(~Ortho, scales = "free") +
-  ylab("Count of reproducible interactions") +
-  xlab("Transcription factor") +
-  # ggtitle(paste0("N=", nrow(p_dfx))) +
-  scale_fill_manual(values = c("royalblue", "darkgrey")) +
-  scale_colour_manual(values = c("royalblue", "darkgrey")) +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        # axis.title = element_text(size = 20),
-        axis.title = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        plot.title = element_text(size = 20),
-        legend.position = c(0.75, 0.75),
-        plot.margin = margin(c(10, 20, 10, 10)))
-
-
-p2b <- ggplot(
-  p_dfx2b, 
-  aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Scheme, colour = Scheme)) +
-  # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
-  geom_bar(position = "stack", stat = "identity") +
-  facet_wrap(~Ortho, scales = "free") +
-  ylab("Count of reproducible interactions") +
-  xlab("Transcription factor") +
-  # ggtitle(paste0("N=", nrow(p_dfx))) +
-  scale_fill_manual(values = c("goldenrod", "darkgrey")) +
-  scale_colour_manual(values = c("goldenrod", "darkgrey")) +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        # axis.title = element_text(size = 20),
-        axis.title = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        plot.title = element_text(size = 20),
-        legend.position = c(0.75, 0.75),
-        plot.margin = margin(c(10, 20, 10, 10)))
-
-
-# https://stackoverflow.com/questions/33114380/centered-x-axis-label-for-muliplot-using-cowplot-package
-p2 <- plot_grid(p2a, p2b, ncol = 1) 
-
-library(grid)
-library(gridExtra)
-
-y.grob <- textGrob("Count of reproducible interactions", 
-                   gp = gpar(fontsize = 20), rot = 90)
-
-x.grob <- textGrob("Transcription factor", 
-                   gp = gpar(fontsize = 20))
-
-#add to plot
-
-p2 <- grid.arrange(arrangeGrob(p2, left = y.grob, bottom = x.grob))
-  
-
-
-
-
-
-# Demo overlap of AP1 members
-
-
-ap1_genes <- c("FOS", "FOSL1", "FOSL2", "JUN", "JUNB", "JUND")
-
-ap1_hg <- lapply(ap1_genes, function(x) {
-  rank_hg[[x]] %>% 
-    arrange(match(Symbol, pc_hg$Symbol)) %>%
-    select(Symbol, Rank_bind, Rank_RSR, RP) %>% 
-    rename_with(~paste0(., "_", x), -c("Symbol")) 
-})
-
-
-ap1_hg <- plyr::join_all(ap1_hg, by = "Symbol")
-
-
-
-# Plots
-# ------------------------------------------------------------------------------
-
-
-# Stacked barchart of tiered evidence counts
-
-plot_df1 <- pivot_longer(n_topk_ortho,
-                         cols = c("Stringent", "Elevated", "Mixed"),
-                         names_to = "Scheme",
-                         values_to = "Count") %>% 
-  mutate(Scheme = factor(Scheme, levels = c("Mixed", "Elevated", "Stringent")))
-  
-
-plot_df1$Symbol <- factor(plot_df1$Symbol, levels = arrange(n_topk_ortho, Stringent)$Symbol)
-
-
-p1 <- ggplot(
-  plot_df1, 
-  aes(x = reorder(Symbol, Count, FUN = sum), y = Count, fill = Scheme, colour = Scheme)) +
-  # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
-  geom_bar(position = "stack", stat = "identity") +
-  ylab("Count of reproducible interactions") +
-  xlab("Transcription factor") +
-  # ggtitle(paste0("N=", nrow(n_topk_ortho))) +
-  scale_fill_manual(values = c("#1b9e77", "#d95f02", "#7570b3")) +
-  scale_colour_manual(values = c("#1b9e77", "#d95f02", "#7570b3")) +
-  theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        plot.title = element_text(size = 20),
-        legend.position = c(0.75, 0.75),
-        plot.margin = margin(c(10, 20, 10, 10)))
-
-
-plot_grid(p1, p2, rel_widths = c(1, 0.5))
-
-
-
-# Heatmap of tiered evidence for a given TF
-
-plot_tf <- "ASCL1"
-
-scale01 <- function(x) (x - min(x)) / (max(x) - min(x))
-
-
-genes <- c(tiered_l[[plot_tf]]$Stringent$Symbol_hg,
-           tiered_l[[plot_tf]]$Elevated$Symbol_hg,
-           tiered_l[[plot_tf]]$Mixed$Symbol_hg)
-
-
-plot_df2 <- rank_ortho[[plot_tf]] %>% 
-  mutate(Avg_RSR_hg = scale01(Avg_RSR_hg),
-         Avg_RSR_mm = scale01(Avg_RSR_mm),
-         Bind_score_hg = scale01(Bind_score_hg),
-         Bind_score_mm = scale01(Bind_score_mm),
-         Rank_RSR_hg = as.integer(Rank_RSR_hg <= k), 
-         Rank_RSR_mm = as.integer(Rank_RSR_mm <= k), 
-         Rank_bind_hg = as.integer(Rank_bind_hg <= k), 
-         Rank_bind_mm = as.integer(Rank_bind_mm <= k)) %>%  
-  filter(Symbol_hg %in% genes) %>% 
-  arrange(match(Symbol_hg, genes))
-
-rownames(plot_df2) <- plot_df2$Symbol_hg
-
-
-# Padding between species (columns) and genes in evidence tiers (rows)
-
-ns <- nrow(tiered_l[[plot_tf]]$Stringent)
-nm <- nrow(tiered_l[[plot_tf]]$Elevated)
-
-gaps_row <- rep(c(ns, nm + ns), each = 4)
-gaps_col <- rep(1, 4)
-
-
-pheatmap(plot_df2[, c("Avg_RSR_hg", "Avg_RSR_mm")],
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = c('#fff7ec','#fee8c8','#fdd49e','#fdbb84','#fc8d59','#ef6548','#d7301f','#b30000','#7f0000'),
-         breaks = seq(0, 1, length.out = 9),
-         border_color = "black",
-         gaps_row = gaps_row,
-         gaps_col = gaps_col,
-         cellwidth = 10,
-         cellheight = 10,
-         filename = file.path(plot_dir, "demo_stringent_coexpr_heatmap.png")
-)
-
-
-pheatmap(plot_df2[, c("Bind_score_hg", "Bind_score_mm")],
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = c('#fff7fb','#ece7f2','#d0d1e6','#a6bddb','#74a9cf','#3690c0','#0570b0','#045a8d','#023858'),
-         breaks = seq(0, 1, length.out = 9),
-         border_color = "black",
-         gaps_row = gaps_row,
-         gaps_col = gaps_col,
-         cellwidth = 10,
-         cellheight = 10,
-         filename = file.path(plot_dir, "demo_stringent_binding_heatmap.png")
-)
-
-
-# Binarizing status
-
-
-pheatmap(plot_df2[, c("Rank_RSR_hg", "Rank_RSR_mm")],
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = c('white', '#7f0000'),
-         border_color = "black",
-         gaps_row = gaps_row,
-         gaps_col = gaps_col,
-         cellwidth = 10,
-         cellheight = 10,
-         filename = file.path(plot_dir, "demo_stringent_coexpr_binary_heatmap.png")
-)
-
-
-pheatmap(plot_df2[, c("Rank_bind_hg", "Rank_bind_mm")],
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = c('white', '#045a8d'),
-         border_color = "black",
-         gaps_row = gaps_row,
-         gaps_col = gaps_col,
-         cellwidth = 10,
-         cellheight = 10,
-         filename = file.path(plot_dir, "demo_stringent_binding_binary_heatmap.png")
-)
-
-
-# Bin status
-
-
-plot_df2 <- rank_ortho[[plot_tf]] %>% 
-  
-  mutate(
-    
-    Avg_RSR_hg = scale01(Avg_RSR_hg),
-    Avg_RSR_mm = scale01(Avg_RSR_mm),
-    Bind_score_hg = scale01(Bind_score_hg),
-    Bind_score_mm = scale01(Bind_score_mm), 
-    
-    Rank_RSR_hg = case_when(Rank_RSR_hg <= k ~ 0,
-                            Rank_RSR_hg > k & Rank_RSR_hg <= k + 500 ~ 1,
-                            TRUE ~ 2), 
-    
-    Rank_RSR_mm = case_when(Rank_RSR_mm <= k ~ 0,
-                            Rank_RSR_mm > k & Rank_RSR_mm <= k + 500 ~ 1,
-                            TRUE ~ 2),
-    
-    Rank_bind_hg = case_when(Rank_bind_hg <= k ~ 0,
-                             Rank_bind_hg > k & Rank_bind_hg <= k + 500 ~ 1,
-                             TRUE ~ 2),
-    
-    Rank_bind_mm = case_when(Rank_bind_mm <= k ~ 0,
-                             Rank_bind_mm > k & Rank_bind_mm <= k + 500 ~ 1,
-                             TRUE ~ 2)
-    ) %>% 
- 
-  filter(Symbol_hg %in% genes) %>% 
-  arrange(match(Symbol_hg, genes))
-
-rownames(plot_df2) <- plot_df2$Symbol_hg
-
-
-
-pheatmap(plot_df2[, c("Rank_RSR_hg", "Rank_RSR_mm")],
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = rev(c('white', "#fc8d59", '#7f0000')),
-         border_color = "black",
-         gaps_row = gaps_row,
-         gaps_col = gaps_col,
-         cellwidth = 10,
-         cellheight = 10,
-         filename = file.path(plot_dir, "demo_stringent_coexpr_step_heatmap.png")
-)
-
-
-pheatmap(plot_df2[, c("Rank_bind_hg", "Rank_bind_mm")],
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = rev(c('white', "#a6bddb",'#045a8d')),
-         border_color = "black",
-         gaps_row = gaps_row,
-         gaps_col = gaps_col,
-         cellwidth = 10,
-         cellheight = 10,
-         filename = file.path(plot_dir, "demo_stringent_binding_step_heatmap.png")
-)
-
-
-# Binary curated status
-
-
-labels_curated <- get_curated_labels(tf = plot_tf, 
-                                     curated_df = curated, 
-                                     ortho_df = pc_ortho,
-                                     pc_df = pc_hg, 
-                                     species = "Human", 
-                                     remove_self = TRUE)
-
-curated_vec <- setNames(as.integer(genes %in% labels_curated), genes)
-
-
-pheatmap(curated_vec,
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = c("white", "black"),
-         border_color = "black",
-         gaps_row = gaps_row,
-         cellwidth = 10,
-         cellheight = 10,
-         filename = file.path(plot_dir, "demo_curated_heatmap.png")
-)
-
-
-# Using RP as order, take the top whatever, and show the evidence of the 
-# other groups as blocked colours
-
-
-
-plot_df3 <- rank_ortho[[plot_tf]] %>% 
-  
-  slice_min(RP, n = 40) %>% 
-  
-  mutate(
-    
-    Rank_RSR_hg = case_when(Rank_RSR_hg <= k ~ 0,
-                            Rank_RSR_hg > k & Rank_RSR_hg <= k + 500 ~ 1,
-                            TRUE ~ 2), 
-    
-    Rank_RSR_mm = case_when(Rank_RSR_mm <= k ~ 0,
-                            Rank_RSR_mm > k & Rank_RSR_mm <= k + 500 ~ 1,
-                            TRUE ~ 2),
-    
-    Rank_bind_hg = case_when(Rank_bind_hg <= k ~ 0,
-                             Rank_bind_hg > k & Rank_bind_hg <= k + 500 ~ 1,
-                             TRUE ~ 2),
-    
-    Rank_bind_mm = case_when(Rank_bind_mm <= k ~ 0,
-                             Rank_bind_mm > k & Rank_bind_mm <= k + 500 ~ 1,
-                             TRUE ~ 2)
-    )
-
-rownames(plot_df3) <- plot_df3$Symbol_hg
-
-
-pheatmap(plot_df3[, c("Rank_RSR_hg", "Rank_RSR_mm", "Rank_bind_hg", "Rank_bind_mm")],
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = rev(c('white', "#a6bddb",'#045a8d')),
-         border_color = "black",
-         gaps_col = rep(1:4, each = 4),
-         cellwidth = 20,
-         cellheight = 20,
-         legend = FALSE,
-         filename = file.path(plot_dir, "demo_rp_order_step_heatmap.png")
-)
-
-
-
-curated_vec <- setNames(as.integer(plot_df3$Symbol_hg %in% labels_curated), plot_df3$Symbol_hg)
-
-
-pheatmap(curated_vec,
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = c("white", "black"),
-         border_color = "black",
-         cellwidth = 20,
-         cellheight = 20,
-         legend = FALSE,
-         filename = file.path(plot_dir, "demo_curated_heatmap.png")
-)
-
-
-
-# Join species specific and tiered
-
-
-plot_tf <- "PAX6"
-
-rank_l <- tiered_l[[plot_tf]]
-
-
-rm_genes <- filter(pc_ortho, Symbol_hg %in% c(rank_l$Stringent$Symbol_hg, rank_l$Elevated$Symbol_hg))
-
-
-gain_hg <- topk_hg[[plot_tf]] %>%
-  filter(Symbol %!in% rm_genes$Symbol_hg) %>%
-  dplyr::rename(Rank_RSR_hg = Rank_RSR, Rank_bind_hg = Rank_bind) %>%
-  mutate(Symbol_hg = Symbol) %>% 
-  left_join(pc_ortho, by = "Symbol_hg")
-
-
-gain_mm <- topk_mm[[str_to_title(plot_tf)]] %>%
-  filter(Symbol %!in% rm_genes$Symbol_mm) %>%
-  dplyr::rename(Rank_RSR_mm = Rank_RSR, Rank_bind_mm = Rank_bind) %>%
-  mutate(Symbol_mm = Symbol) %>% 
-  left_join(pc_ortho, by = "Symbol_mm")
-
-
-
-gain_hg <- left_join(
-  gain_hg,
-  rank_mm[[str_to_title(plot_tf)]][, c("Symbol", "Rank_bind", "Rank_RSR", "RP")],
-  by = c("Symbol_mm" = "Symbol")) %>%
-  dplyr::rename(Rank_RSR_mm = Rank_RSR, Rank_bind_mm = Rank_bind)
-
-
-gain_mm <- left_join(
-  gain_mm,
-  rank_hg[[plot_tf]][, c("Symbol", "Rank_bind", "Rank_RSR", "RP")],
-  by = c("Symbol_hg" = "Symbol")) %>%
-  dplyr::rename(Rank_RSR_hg = Rank_RSR, Rank_bind_hg = Rank_bind) %>% 
-  mutate(Symbol_hg = ifelse(is.na(Symbol_hg), Symbol_mm, Symbol_hg))
-
-
-
-demo_tiered <- list(
-  Stringent = tiered_l[[plot_tf]]$Stringent,
-  Elevated = tiered_l[[plot_tf]]$Elevated,
-  Human = gain_hg,
-  Mouse = gain_mm,
-  Mixed = filter(rank_l$Mixed, Symbol_hg %!in% c(gain_hg$Symbol_hg, gain_mm$Symbol_hg))
-)
-
-
-
-plot_df4 <- lapply(demo_tiered, `[`, c("Rank_RSR_hg", "Rank_RSR_mm", "Rank_bind_hg", "Rank_bind_mm")) %>%
-  do.call(rbind, .) %>% 
-
-  mutate(
-
-    Rank_RSR_hg = case_when(Rank_RSR_hg <= k ~ 0,
-                            Rank_RSR_hg > k & Rank_RSR_hg <= k + 500 ~ 1,
-                            is.na(Rank_RSR_hg) ~ NA_real_,
-                            TRUE ~ 2),
-
-    Rank_RSR_mm = case_when(Rank_RSR_mm <= k ~ 0,
-                            Rank_RSR_mm > k & Rank_RSR_mm <= k + 500 ~ 1,
-                            is.na(Rank_RSR_mm) ~ NA_real_,
-                            TRUE ~ 2),
-
-    Rank_bind_hg = case_when(Rank_bind_hg <= k ~ 0,
-                             Rank_bind_hg > k & Rank_bind_hg <= k + 500 ~ 1,
-                             is.na(Rank_bind_hg) ~ NA_real_,
-                             TRUE ~ 2),
-
-    Rank_bind_mm = case_when(Rank_bind_mm <= k ~ 0,
-                             Rank_bind_mm > k & Rank_bind_mm <= k + 500 ~ 1,
-                             is.na(Rank_bind_mm) ~ NA_real_,
-                             TRUE ~ 2)
-  )
-
-
-
-
-rownames(plot_df4) <- unlist(lapply(demo_tiered, pluck, "Symbol_hg"))
-
-
-# Padding between species and genes in evidence tiers 
-
-
-gap_genes <- rep(
-  head(cumsum(unlist(lapply(demo_tiered, nrow))), -1),
-  each = 4)
-
-
-gap_evidence <- rep(1:4, each = 4)
-
-
-pheatmap(t(plot_df4),
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = rev(c('white', "#a6bddb",'#045a8d')),
-         border_color = "black",
-         na_col = "black",
-         gaps_col = gap_genes,
-         gaps_row = gap_evidence,
-         # cellwidth = 10,
-         cellheight = 10,
-         legend = FALSE,
-         angle_col = 90
-         # filename = file.path(plot_dir, "demo_rp_order_step_heatmap.png")
-)
-
-
-# Versus just using the ortho list
-
-plot_tf <- "PAX6"
-
-rank_l <- tiered_l[[plot_tf]]
-
-rm_genes <- filter(pc_ortho, Symbol_hg %in% c(rank_l$Stringent$Symbol_hg, rank_l$Elevated$Symbol_hg))
-
-
-gain_hg2 <- rank_ortho[[plot_tf]] %>%
-  filter(Rank_RSR_hg <= k & Rank_bind_hg <= k) %>% 
-  filter(Symbol_hg %!in% rm_genes$Symbol_hg)
-
-
-gain_mm2 <- rank_ortho[[plot_tf]] %>%
-  filter(Rank_RSR_mm <= k & Rank_bind_mm <= k) %>% 
-  filter(Symbol_hg %!in% rm_genes$Symbol_hg)
-
-
-demo_tiered2 <- list(
-  Stringent = tiered_l[[plot_tf]]$Stringent,
-  Elevated = tiered_l[[plot_tf]]$Elevated,
-  Human = gain_hg2,
-  Mouse = gain_mm2,
-  Mixed = filter(rank_l$Mixed, Symbol_hg %!in% c(gain_hg2$Symbol_hg, gain_mm2$Symbol_hg))
-)
-
-
-plot_df5 <- lapply(demo_tiered2, `[`, c("Rank_RSR_hg", "Rank_RSR_mm", "Rank_bind_hg", "Rank_bind_mm")) %>%
-  do.call(rbind, .) %>% 
-
-  mutate(
-
-    Rank_RSR_hg = case_when(Rank_RSR_hg <= k ~ 0,
-                            Rank_RSR_hg > k & Rank_RSR_hg <= k + 500 ~ 1,
-                            is.na(Rank_RSR_hg) ~ NA_real_,
-                            TRUE ~ 2),
-
-    Rank_RSR_mm = case_when(Rank_RSR_mm <= k ~ 0,
-                            Rank_RSR_mm > k & Rank_RSR_mm <= k + 500 ~ 1,
-                            is.na(Rank_RSR_mm) ~ NA_real_,
-                            TRUE ~ 2),
-
-    Rank_bind_hg = case_when(Rank_bind_hg <= k ~ 0,
-                             Rank_bind_hg > k & Rank_bind_hg <= k + 500 ~ 1,
-                             is.na(Rank_bind_hg) ~ NA_real_,
-                             TRUE ~ 2),
-
-    Rank_bind_mm = case_when(Rank_bind_mm <= k ~ 0,
-                             Rank_bind_mm > k & Rank_bind_mm <= k + 500 ~ 1,
-                             is.na(Rank_bind_mm) ~ NA_real_,
-                             TRUE ~ 2)
-  )
-
-
-rownames(plot_df5) <- unlist(lapply(demo_tiered2, pluck, "Symbol_hg"))
-
-
-# Padding between species and genes in evidence tiers 
-
-
-gap_genes <- rep(
-  head(cumsum(unlist(lapply(demo_tiered2, nrow))), -1),
-  each = 4)
-
-
-gap_evidence <- rep(1:4, each = 4)
-
-
-pheatmap(t(plot_df5),
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = rev(c('white', "#a6bddb",'#045a8d')),
-         border_color = "black",
-         na_col = "black",
-         gaps_col = gap_genes,
-         gaps_row = gap_evidence,
-         # cellwidth = 10,
-         cellheight = 10,
-         legend = FALSE,
-         angle_col = 90
-)
-
-
-
-labels_curated <- get_curated_labels(tf = plot_tf, 
-                                     curated_df = curated, 
-                                     ortho_df = pc_ortho,
-                                     pc_df = pc_hg, 
-                                     species = "Human", 
-                                     remove_self = TRUE)
-
-
-curated_vec <- setNames(as.integer(rownames(plot_df5) %in% labels_curated), rownames(plot_df5))
-
-
-pheatmap(t(curated_vec),
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         color = c("white", "black"),
-         border_color = "black",
-         gaps_col = gap_genes,
-         # cellwidth = 20,
-         cellheight = 10,
-         legend = FALSE,
-         angle_col = 90
-)
-
