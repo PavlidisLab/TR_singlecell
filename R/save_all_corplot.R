@@ -85,7 +85,6 @@ dat <- load_data(species, gene1, gene2)
 
 if (!file.exists(dat$cor_path)) {
   cor_l <- get_all_cor_l(ids = dat$ids, gene1 = dat$gene1, dat$gene2)
-  # cor_l <- get_all_cor_l(ids = dat$ids, gene1 = dat$gene1, dat$gene2, cor_method = "spearman")
   saveRDS(cor_l, dat$cor_path)
 } else {
   cor_l <- readRDS(dat$cor_path)
@@ -110,7 +109,7 @@ all_corplot <- function(cor_l) {
   )
   
   ggplot(cor_df, aes(x = Cor, y = reorder(ID, Cor, FUN = median))) +
-    geom_point(alpha = 0.4, shape = 21) +
+    geom_point(alpha = 0.4, shape = 21, size = 2.4) +
     geom_boxplot(outlier.shape = NA, coef = 0, fill = "slategrey") +
     geom_vline(xintercept = 0, colour = "black") +
     xlab("Pearson's correlation across cell types") +
