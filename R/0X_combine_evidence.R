@@ -261,7 +261,7 @@ tiered_l <- subset_tiered_evidence(rank_ortho = rank_ortho,
 # ------------------------------------------------------------------------------
 
 
-tier_names <- colnames(n_interactions)
+tier_names <- names(tiered_l[[1]])
 
 
 # Tally the number of interactions at each tier for each TF
@@ -617,6 +617,7 @@ p2a <- ggplot(
         legend.position = c(0.75, 0.7),
         legend.title = element_blank(),
         legend.text = element_text(size = 15),
+        strip.text = element_text(size = 15),
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
@@ -639,6 +640,7 @@ p2b <- ggplot(
         legend.position = c(0.75, 0.7),
         legend.title = element_blank(),
         legend.text = element_text(size = 15),
+         strip.text = element_text(size = 15),
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
@@ -659,6 +661,13 @@ p2 <- grid.arrange(arrangeGrob(p2, left = y_grob, bottom = x_grob))
 # Combine ortho with species specific
 p3a <- plot_grid(p1a, p2, rel_widths = c(1, 0.5))
 p3b <- plot_grid(p1b, p2, rel_widths = c(1, 0.5))
+
+
+ggsave(p3a, height = 8, width = 20, device = "png", dpi = 300, bg = "white",
+       filename = file.path(plot_dir, "ortho_reproducible_interaction_counts.png"))
+
+
+
 
 
 # Heatmap of tiered evidence for a given TF. For species-specific interactions,
@@ -726,9 +735,11 @@ gap_genes <- rep(
   head(cumsum(unlist(lapply(rank_l, nrow))), -1),
   each = 4)
 
-gap_evidence <- rep(1:4, each = 4)
+# gap_evidence <- rep(1:4, each = 4)
+gap_evidence <- c(rep(1, 4), rep(2, 8), rep(3, 4), rep(4, 2))
 
 
+# With data types/species labels
 pheatmap(t(plot_df3),
          cluster_rows = FALSE,
          cluster_cols = FALSE,
@@ -737,11 +748,29 @@ pheatmap(t(plot_df3),
          na_col = "grey",
          gaps_col = gap_genes,
          gaps_row = gap_evidence,
-         # cellwidth = 10,
          cellheight = 10,
          legend = FALSE,
-         angle_col = 90
-         # filename = file.path(plot_dir, "demo_rp_order_step_heatmap.png")
+         angle_col = 90,
+         width = 14,
+         filename = file.path(plot_dir, paste0(plot_tf, "_tiered_evidence_targets_heatmap_label.png"))
+)
+
+
+# Without data types/species labels (for matching curated heatmap in illustrator)
+pheatmap(t(plot_df3),
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = rev(c('white', "#a6bddb",'#045a8d')),
+         border_color = "black",
+         na_col = "grey",
+         gaps_col = gap_genes,
+         gaps_row = gap_evidence,
+         show_rownames = FALSE,
+         cellheight = 10,
+         legend = FALSE,
+         angle_col = 90,
+         width = 14,
+         filename = file.path(plot_dir, paste0(plot_tf, "_tiered_evidence_targets_heatmap_nolabel.png"))
 )
 
 
@@ -758,16 +787,34 @@ labels_curated <- get_curated_labels(tf = plot_tf,
 curated_vec <- setNames(as.integer(rownames(plot_df3) %in% labels_curated), rownames(plot_df3))
 
 
+# With gene symbols
 pheatmap(t(curated_vec),
          cluster_rows = FALSE,
          cluster_cols = FALSE,
          color = c("white", "black"),
          border_color = "black",
          gaps_col = gap_genes,
-         # cellwidth = 20,
          cellheight = 10,
          legend = FALSE,
-         angle_col = 90
+         angle_col = 90,
+         width = 14,
+         filename = file.path(plot_dir, paste0(plot_tf, "_curation_heatmap_label.png"))
+)
+
+
+# Without gene symbols (for matching tiered evidence heatmap in illustrator)
+pheatmap(t(curated_vec),
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = c("white", "black"),
+         border_color = "black",
+         gaps_col = gap_genes,
+         show_colnames = FALSE,
+         cellheight = 10,
+         legend = FALSE,
+         angle_col = 90,
+         width = 14,
+         filename = file.path(plot_dir, paste0(plot_tf, "_curation_heatmap_nolabel.png"))
 )
 
 
