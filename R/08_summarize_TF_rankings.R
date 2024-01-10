@@ -385,20 +385,50 @@ rank_heatmap(ascl_rank_mm)
 
 # Barchart of count of ribo top-ranked partners that are also ribo
 
-ggplot(count_ribo_hg, aes(x = reorder(Symbol, Count), y = Count)) +
+pxa <- 
+  ggplot(count_ribo_hg, aes(x = reorder(Symbol, Count), y = Count)) +
   geom_bar(stat = "identity", colour = "black", fill = "slategrey") +
-  ylab("Count of top coexpression partners that are also ribosomal") +
+  ylab("Count of top 82 coexpression partners that are also ribosomal") +
+  ggtitle("Human") +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
-        axis.title = element_text(size = 20),
+        axis.title = element_text(size = 25),
         axis.title.x = element_blank(),
-        plot.title = element_text(size = 20),
+        plot.title = element_text(size = 25),
         plot.margin = margin(c(10, 10, 10, 10)))
 
 
 
-plot_hist(count_ribo_hg, stat_col = "Count")
+pxb <- 
+  ggplot(count_ribo_mm, aes(x = reorder(Symbol, Count), y = Count)) +
+  geom_bar(stat = "identity", colour = "black", fill = "slategrey") +
+  ylab("Count of top 82 coexpression partners that are also ribosomal") +
+  ggtitle("Mouse") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        axis.title = element_text(size = 25),
+        axis.title.x = element_blank(),
+        plot.title = element_text(size = 25),
+        plot.margin = margin(c(10, 10, 10, 10)))
+
+
+
+px <- plot_grid(pxa, pxb, ncol = 1)
+
+
+ggsave(pxa, height = 12, width = 18, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "ribosomal_top_rank_overlap_human.png"))
+
+
+ggsave(pxb, height = 12, width = 18, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "ribosomal_top_rank_overlap_mouse.png"))
+
+
+# plot_hist(count_ribo_hg, stat_col = "Count")
+
+
 
 
 
