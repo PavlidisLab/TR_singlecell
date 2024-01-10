@@ -1,5 +1,6 @@
 ## Organize and describe the ability of the coexpression and binding rankings
 ## to recover literature curated targets
+# TODO: smarter organization of aggregate tables
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -197,22 +198,24 @@ ext_agg_common_mm <- extreme_proportions(agg_df_common_mm, agg_cols)
 
 # Difference of coexpression aggregate AUCs to binding AUCs
 
-# agg_auc_delta <- list(
-#   AUPRC_human = agg_df_common_hg$AUPRC_coexpr - agg_df_common_hg$AUPRC_unibind,
-#   AUPRC_mouse = agg_df_common_mm$AUPRC_coexpr - agg_df_common_mm$AUPRC_unibind,
-#   AUROC_human = agg_df_common_hg$AUROC_coexpr - agg_df_common_hg$AUROC_unibind,
-#   AUROC_mouse = agg_df_common_mm$AUROC_coexpr - agg_df_common_mm$AUROC_unibind
-# )
 
-
-
+# # More positive values mean that coexpression AUC was more performant
 agg_auc_delta <- list(
-  AUPRC_human = agg_df_common_hg$AUPRC_diff_coexpr - agg_df_common_hg$AUPRC_diff_unibind,
-  AUPRC_mouse = agg_df_common_mm$AUPRC_diff_coexpr - agg_df_common_mm$AUPRC_diff_unibind,
-  AUROC_human = agg_df_common_hg$AUROC_diff_coexpr - agg_df_common_hg$AUROC_diff_unibind,
-  AUROC_mouse = agg_df_common_mm$AUROC_diff_coexpr - agg_df_common_mm$AUROC_diff_unibind
+  AUPRC_human = agg_df_common_hg$AUPRC_coexpr - agg_df_common_hg$AUPRC_unibind,
+  AUPRC_mouse = agg_df_common_mm$AUPRC_coexpr - agg_df_common_mm$AUPRC_unibind,
+  AUROC_human = agg_df_common_hg$AUROC_coexpr - agg_df_common_hg$AUROC_unibind,
+  AUROC_mouse = agg_df_common_mm$AUROC_coexpr - agg_df_common_mm$AUROC_unibind
 )
 
+
+
+# More positive values mean that coexpression better separated from its null than binding
+# agg_auc_delta <- list(
+#   AUPRC_human = agg_df_common_hg$AUPRC_diff_coexpr - agg_df_common_hg$AUPRC_diff_unibind,
+#   AUPRC_mouse = agg_df_common_mm$AUPRC_diff_coexpr - agg_df_common_mm$AUPRC_diff_unibind,
+#   AUROC_human = agg_df_common_hg$AUROC_diff_coexpr - agg_df_common_hg$AUROC_diff_unibind,
+#   AUROC_mouse = agg_df_common_mm$AUROC_diff_coexpr - agg_df_common_mm$AUROC_diff_unibind
+# )
 
 
 delta_auc_summ <- lapply(agg_auc_delta, summary)
@@ -353,9 +356,10 @@ check_binding_auroc <- agg_df_hg %>%
 
 
 # Summarize and order null AUROCs
+# TODO: function
 
 
-null_coexpr_auroc <- 
+null_coexpr_auroc_hg <- 
   lapply(coexpr_auc_hg, function(x) summary(unlist(lapply(x$Null, `[[`, "AUROC")))) %>% 
   do.call(rbind, .) %>%
   as.data.frame() %>% 
@@ -364,13 +368,30 @@ null_coexpr_auroc <-
   arrange(desc(Median))
 
 
+null_coexpr_auroc_mm <- 
+  lapply(coexpr_auc_mm, function(x) summary(unlist(lapply(x$Null, `[[`, "AUROC")))) %>% 
+  do.call(rbind, .) %>%
+  as.data.frame() %>% 
+  rownames_to_column(var = "Symbol") %>% 
+  filter(Symbol %in% agg_df_mm$Symbol) %>% 
+  arrange(desc(Median))
 
-null_binding_auroc <- 
+
+null_binding_auroc_hg <- 
   lapply(unibind_auc_hg, function(x) summary(unlist(lapply(x$Null, `[[`, "AUROC")))) %>% 
   do.call(rbind, .) %>%
   as.data.frame() %>% 
   rownames_to_column(var = "Symbol") %>% 
   filter(Symbol %in% agg_df_hg$Symbol) %>% 
+  arrange(desc(Median))
+
+
+null_binding_auroc_mm <- 
+  lapply(unibind_auc_mm, function(x) summary(unlist(lapply(x$Null, `[[`, "AUROC")))) %>% 
+  do.call(rbind, .) %>%
+  as.data.frame() %>% 
+  rownames_to_column(var = "Symbol") %>% 
+  filter(Symbol %in% agg_df_mm$Symbol) %>% 
   arrange(desc(Median))
 
 
@@ -464,12 +485,14 @@ check_tf <- "LEF1"
 
 targets <- get_curated_labels(tf = check_tf,
                               curated_df = curated,
+                              ortho_df = pc_ortho,
                               pc_df = pc_hg,
                               species = "Human",
                               remove_self = TRUE)
 
 
 filter(agg_df_common_hg, Symbol == check_tf)
+filter(agg_df_common_mm, Symbol == str_to_title(check_tf))
 
 
 targets_rank_coexpr <- rank_tf_hg[[check_tf]] %>% 
@@ -485,6 +508,9 @@ targets_rank_binding <-
   arrange(Rank_bind)
 
 
+sum(targets_rank_coexpr$Rank_RSR <= 500)
+sum(targets_rank_binding$Rank_bind <= 500)
+
 
 
 # Plotting
@@ -493,10 +519,10 @@ targets_rank_binding <-
 
 # Histograms of Average versus individual AUCs
 
-p1a <- plot_hist(avi_df_hg, stat_col = paste0("AUPRC", "_percentile"), xlab = "Percentile AUPRC")
-p1b <- plot_hist(avi_df_hg, stat_col = paste0("AUROC", "_percentile"), xlab = "Percentile AUROC")
-p1c <- plot_hist(avi_df_mm, stat_col = paste0("AUPRC", "_percentile"), xlab = "Percentile AUPRC")
-p1d <- plot_hist(avi_df_mm, stat_col = paste0("AUROC", "_percentile"), xlab = "Percentile AUROC")
+p1a <- plot_hist(avi_df_hg, stat_col = paste0("AUPRC", "_percentile"), xlab = "Percentile AUPRC", title = "Human")
+p1b <- plot_hist(avi_df_hg, stat_col = paste0("AUROC", "_percentile"), xlab = "Percentile AUROC", title = "Human")
+p1c <- plot_hist(avi_df_mm, stat_col = paste0("AUPRC", "_percentile"), xlab = "Percentile AUPRC", title = "Mouse")
+p1d <- plot_hist(avi_df_mm, stat_col = paste0("AUROC", "_percentile"), xlab = "Percentile AUROC", title = "Mouse")
 
 p1 <- plot_grid(p1a, p1b, p1c, p1d, nrow = 2)
 
@@ -522,7 +548,7 @@ plot_auc_density <- function(plot_df, vline, stat, tf) {
     theme(axis.text = element_text(size = 25),
           axis.title = element_text(size = 25),
           plot.title = element_text(size = 25),
-          plot.margin = margin(c(10, 10, 10, 10)))
+          plot.margin = margin(c(10, 20, 10, 10)))
 }
 
 
@@ -565,12 +591,35 @@ p3g <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_unibind"), xla
 p3h <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_unibind"), xlab = "AUROC percentile binding", title = "Mouse")
 
 
-# Focus on AUPRC, showing both species and both aggregations
-p3 <- plot_grid(p3a, p3b, p3e, p3f, ncol = 1)
+# TODO: fussing with fit in figure. when finalized clean up save 
+# # Focus on AUPRC, showing both species and both aggregations
+# p3 <- plot_grid(p3a, p3b, p3e, p3f, ncol = 1)
 
 
-ggsave(p3, height = 12, width = 6, device = "png", dpi = 300,
-       filename = file.path(paste0(plot_dir, "aggregate_vs_null_hists.png")))
+ggsave(p3a, height = 6, width = 6, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "coexpr_perc_auprc_human.png")))
+
+ggsave(p3b, height = 6, width = 6, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "coexpr_perc_auprc_mouse.png")))
+
+ggsave(p3c, height = 6, width = 6, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "coexpr_perc_auroc_human.png")))
+
+ggsave(p3d, height = 6, width = 6, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "coexpr_perc_auroc_mouse.png")))
+
+ggsave(p3e, height = 6, width = 6, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "binding_perc_auprc_human.png")))
+
+ggsave(p3f, height = 6, width = 6, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "binding_perc_auprc_mouse.png")))
+
+ggsave(p3g, height = 6, width = 6, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "binding_perc_auroc_human.png")))
+
+ggsave(p3h, height = 6, width = 6, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "binding_perc_auroc_mouse.png")))
+
 
 
 
@@ -591,11 +640,15 @@ ggsave(p4, height = 6, width = 9, device = "png", dpi = 300,
 
 # Scatterplot of coexpression versus binding percentile
 
+
+p5_stat <- "AUROC"
+
+
 p5 <- 
   ggplot(
   agg_df_common_hg,
-  aes(x = AUPRC_percentile_coexpr,
-      y = AUPRC_percentile_unibind)
+  aes(x = !!sym(paste0(p5_stat, "_percentile_coexpr")),
+      y = !!sym(paste0(p5_stat, "_percentile_unibind")))
 ) +
   
   # geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = 0.9, ymax = 1.05), fill = NA, colour = "forestgreen") +
@@ -609,8 +662,8 @@ p5 <-
   geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = "firebrick", colour = NA, alpha = 0.006) +
 
   geom_point(shape = 21, size = 3.4) +
-  xlab("AUPRC percentile coexpression") +
-  ylab("AUPRC percentile binding") +
+  xlab(paste0(p5_stat, " percentile coexpression")) +
+  ylab(paste0(p5_stat, " percentile binding")) +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         axis.title = element_text(size = 20),
@@ -619,7 +672,7 @@ p5 <-
 
 
 ggsave(p5, height = 9, width = 9, device = "png", dpi = 300,
-       filename = file.path(paste0(plot_dir, "coexpr_vs_binding_scatter.png")))
+       filename = file.path(paste0(plot_dir, "coexpr_vs_binding_", p5_stat, "_perc_scatter_human.png")))
 
 
 
@@ -654,88 +707,105 @@ p_auroc_n <- plot_grid(plotlist = pl_auroc_n, nrow = 2)
 
 
 # Vbplot of AUC percentiles for coexpression and binding aggregations 
+# TODO: better joining, function and save
 
-plot_df6 <- agg_df_common_hg
+# plot_df6 <- filter(rev_coexpr_hg, Symbol %in% agg_df_common_hg$Symbol)
+plot_df6 <- filter(rev_coexpr_mm, Symbol %in% agg_df_common_mm$Symbol)
+
 
 plot_df6 <- data.frame(
   Percentile = c(
     plot_df6$AUPRC_percentile_coexpr,
     plot_df6$AUPRC_percentile_unibind,
+    plot_df6$AUPRC_percentile_reverse_coexpr,
     plot_df6$AUROC_percentile_coexpr,
-    plot_df6$AUROC_percentile_unibind
+    plot_df6$AUROC_percentile_unibind,
+    plot_df6$AUROC_percentile_reverse_coexpr
   ),
-  Group = c(
-    rep("Coexpression AUPRC", length(plot_df6$AUPRC_percentile_coexpr)),
-    rep("Binding AUPRC", length(plot_df6$AUPRC_percentile_unibind)),
-    rep("Coexpression AUROC", length(plot_df6$AUROC_percentile_coexpr)),
-    rep("Binding AUROC", length(plot_df6$AUROC_percentile_unibind))
+  Group1 = c(
+    rep("(+) Coexpression", length(plot_df6$AUPRC_percentile_coexpr)),
+    rep("Binding", length(plot_df6$AUPRC_percentile_unibind)),
+    rep("(-) Coexpression", length(plot_df6$AUPRC_percentile_unibind)),
+    rep("(+) Coexpression", length(plot_df6$AUROC_percentile_coexpr)),
+    rep("Binding", length(plot_df6$AUROC_percentile_unibind)),
+    rep("(-) Coexpression", length(plot_df6$AUROC_ratio_reverse_coexpr))
   )
 )
 
-plot_df6$Group <- factor(plot_df6$Group, levels = unique(plot_df6$Group))
+plot_df6$Group2 <- c(rep("AUPRC", nrow(plot_df6) / 2), rep("AUROC", nrow(plot_df6) / 2))
+plot_df6$Group1 <- factor(plot_df6$Group1, levels = unique(plot_df6$Group1))
 
 
-p6 <- ggplot(plot_df6, aes(y = Group, x = Percentile)) +
+p6 <- ggplot(plot_df6, aes(x = Group1, y = Percentile)) +
+  facet_wrap(~Group2, scales = "free") +
   geom_violin(fill = "slategrey") +
   geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
-  xlab("Percentile observed") +
+  ylab("AUC Percentile") +
   theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        axis.title.y = element_blank(),
-        plot.title = element_text(size = 20))
+  theme(axis.text = element_text(size = 25),
+        axis.title.x = element_blank(),
+        axis.title = element_text(size = 25),
+        strip.text = element_text(size = 25),
+        plot.title = element_text(size = 25))
 
 
-ggsave(p6, height = 6, width = 9, device = "png", dpi = 300,
-       filename = file.path(paste0(plot_dir, "coexpr_vs_binding_percentile_vbplot.png")))
-
-
-
-pl_delta_auc_hist <- list(
-  plot_hist(data.frame(AUPRC_human = agg_auc_delta$AUPRC_human), stat_col = "AUPRC_human"),
-  plot_hist(data.frame(AUPRC_mouse = agg_auc_delta$AUPRC_mouse), stat_col = "AUPRC_mouse"),
-  plot_hist(data.frame(AUROC_human = agg_auc_delta$AUROC_human), stat_col = "AUROC_human"),
-  plot_hist(data.frame(AUROC_mouse = agg_auc_delta$AUROC_mouse), stat_col = "AUROC_mouse")
-)
-
-
-p_delta_auc_hist <- plot_grid(plotlist = pl_delta_auc_hist, nrow = 2)
+ggsave(p6, height = 9, width = 18, device = "png", dpi = 300,
+       # filename = file.path(paste0(plot_dir, "coexpr_vs_binding_percentile_vbplot_human.png")))
+       filename = file.path(paste0(plot_dir, "coexpr_vs_binding_percentile_vbplot_mouse.png")))
 
 
 
-# diff from null
-pl_diff_auc_hist <- list(
-  plot_hist(plot_df3_hg, stat_col = paste0("AUROC_diff_coexpr"), xlab = "AUROC diff coexpression", title = "Human") + geom_vline(xintercept = 0),
-  plot_hist(plot_df3_mm, stat_col = paste0("AUROC_diff_coexpr"), xlab = "AUROC diff coexpression", title = "Mouse") + geom_vline(xintercept = 0),
-  plot_hist(plot_df3_hg, stat_col = paste0("AUROC_diff_unibind"), xlab = "AUROC diff binding", title = "Human") + geom_vline(xintercept = 0),
-  plot_hist(plot_df3_mm, stat_col = paste0("AUROC_diff_unibind"), xlab = "AUROC diff binding", title = "Mouse") + geom_vline(xintercept = 0)
-)
-
-p_diff_auc_hist <- plot_grid(plotlist = pl_diff_auc_hist, nrow = 2)
+# Plotting distribution of the median null versus observed AUROCs
 
 
-
-# Plotting null versus observed AUROCs
-
-p_null_coexpr_auroc_density <- 
+p7a <- 
   data.frame(
-  AUROC = c(agg_df_hg$AUROC_coexpr, null_coexpr_auroc$Median),
+  AUROC = c(agg_df_hg$AUROC_coexpr, null_coexpr_auroc_hg$Median),
   Group = c(rep("Aggregate", nrow(agg_df_hg)), 
-            rep("Median null", nrow(agg_df_hg)))
-) %>% 
+            rep("Median null", nrow(agg_df_hg)))) %>% 
   ggplot(., aes(x = AUROC, fill = Group)) +
   geom_density() +
   ylab("Density") +
   ggtitle("Human coexpression") +
-  scale_fill_manual(values = c("#8856a7", "lightgrey")) +
+  scale_fill_manual(values = c("royalblue", "lightgrey")) +
+  scale_x_continuous(breaks = seq(0, 1, 0.25)) +
   theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
-        plot.title = element_text(size = 20),
+  theme(axis.text = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        plot.title = element_text(size = 25),
         legend.position = c(0.8, 0.8),
         legend.title = element_blank(),
-        legend.text = element_text(size = 20),
+        legend.text = element_text(size = 25),
         plot.margin = margin(c(10, 10, 10, 10)))
+
+
+p7b <- 
+  data.frame(
+  AUROC = c(agg_df_mm$AUROC_coexpr, null_coexpr_auroc_mm$Median),
+  Group = c(rep("Aggregate", nrow(agg_df_mm)), 
+            rep("Median null", nrow(agg_df_mm)))) %>% 
+  ggplot(., aes(x = AUROC, fill = Group)) +
+  geom_density() +
+  ylab("Density") +
+  ggtitle("Mouse coexpression") +
+  scale_fill_manual(values = c("goldenrod", "lightgrey")) +
+  scale_x_continuous(breaks = seq(0, 1, 0.25)) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        plot.title = element_text(size = 25),
+        legend.position = c(0.8, 0.8),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 25),
+        plot.margin = margin(c(10, 10, 10, 10)))
+
+
+p7 <- plot_grid(p7a, p7b, ncol = 1)
+
+
+
+ggsave(p7, height = 12, width = 9, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "coexpr_obs_vs_median_null_density.png"))
 
 
 
@@ -757,7 +827,6 @@ p_null_coexpr_perc_auroc_scatter <-
 
 
 
-
 p_null_binding_auroc_scatter <-
   left_join(agg_df_hg, null_binding_auroc, by = "Symbol") %>%
   qplot(., xvar = "Median", yvar = "AUROC_unibind") +
@@ -765,6 +834,35 @@ p_null_binding_auroc_scatter <-
   geom_vline(xintercept = 0.5, col = "red") +
   ylab("Aggregate binding AUROC") +
   xlab("Median null binding AUROC")
+
+
+
+pl_delta_auc_hist <- list(
+  plot_hist(data.frame(AUPRC_human = agg_auc_delta$AUPRC_human), stat_col = "AUPRC_human", xlab = "Coexpression - Binding AUPRC", title = "Human"),
+  plot_hist(data.frame(AUROC_human = agg_auc_delta$AUROC_human), stat_col = "AUROC_human", xlab = "Coexpression - Binding AUROC", title = "Human"),
+  plot_hist(data.frame(AUPRC_mouse = agg_auc_delta$AUPRC_mouse), stat_col = "AUPRC_mouse", xlab = "Coexpression - Binding AUPRC", title = "Mouse"),
+  plot_hist(data.frame(AUROC_mouse = agg_auc_delta$AUROC_mouse), stat_col = "AUROC_mouse", xlab = "Coexpression - Binding AUROC", title = "Mouse")
+)
+
+
+p_delta_auc_hist <- plot_grid(plotlist = pl_delta_auc_hist, nrow = 2)
+
+
+
+ggsave(p_delta_auc_hist, height = 9, width = 12, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "delta_coexpr_bind_histograms.png")))
+
+
+# diff from null
+pl_diff_auc_hist <- list(
+  plot_hist(plot_df3_hg, stat_col = paste0("AUROC_diff_coexpr"), xlab = "AUROC diff coexpression", title = "Human") + geom_vline(xintercept = 0),
+  plot_hist(plot_df3_hg, stat_col = paste0("AUROC_diff_unibind"), xlab = "AUROC diff binding", title = "Human") + geom_vline(xintercept = 0),
+  plot_hist(plot_df3_mm, stat_col = paste0("AUROC_diff_coexpr"), xlab = "AUROC diff coexpression", title = "Mouse") + geom_vline(xintercept = 0),
+  plot_hist(plot_df3_mm, stat_col = paste0("AUROC_diff_unibind"), xlab = "AUROC diff binding", title = "Mouse") + geom_vline(xintercept = 0)
+)
+
+
+p_diff_auc_hist <- plot_grid(plotlist = pl_diff_auc_hist, nrow = 2)
 
 
 
