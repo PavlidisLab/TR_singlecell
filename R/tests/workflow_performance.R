@@ -78,6 +78,7 @@ species <- "Human"
 
 labels_curated <- get_curated_labels(tf = tf, 
                                      curated_df = curated, 
+                                     ortho_df = pc_ortho,
                                      pc_df = pc_df, 
                                      species = species, 
                                      remove_self = TRUE)
@@ -95,7 +96,7 @@ score_mat_noties <- colrank_mat(-score_mat, ties_arg = "random")
 ## TODO: Looking at effect of imputation
 
 score_mat_raw <- score_mat
-rm(score_mat)
+
 
 score_mat <- gene_vec_to_mat(agg_l, tf)
 score_mat[tf, ] <- NA
@@ -277,8 +278,25 @@ plot_df_noties$ID <- factor(plot_df_noties$ID, levels = rev(unique(names(cols)))
 p_avi_roc <- plot_perf(df = plot_df, measure = "ROC", cols = cols, title = tf)
 p_avi_noties_roc <- plot_perf(df = plot_df_noties, measure = "ROC", cols = cols, title = tf)
 
-p_avi_roc <- plot_perf(df = plot_df, measure = "PR", cols = cols, title = tf)
-p_avi_noties_roc <- plot_perf(df = plot_df_noties, measure = "PR", cols = cols, title = tf)
+p_avi_auprc <- plot_perf(df = plot_df, measure = "PR", cols = cols, title = tf)
+p_avi_noties_auprc <- plot_perf(df = plot_df_noties, measure = "PR", cols = cols, title = tf)
+
+
+
+## TODO: saving out a single ROC plot as demo
+
+plot_df2 <- filter(plot_df, ID == "Average")
+
+p_roc <- plot_perf(df = plot_df2, measure = "ROC", cols = cols, title = tf) +
+  geom_abline(intercept = 0, col = "grey") +
+  theme(legend.position = "none",
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+ggsave(p_roc, height = 6, width = 6, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "ascl1_average_auroc.png")))
+
+
+##
 
 
 
