@@ -6,6 +6,7 @@
 # TODO: binarize top/bottom k needs to use check k arg
 
 source("R/utils/functions.R")
+library(ROCR)
 
 
 
