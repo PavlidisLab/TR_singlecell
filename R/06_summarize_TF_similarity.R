@@ -14,7 +14,8 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-k <- 1000
+k <- 200
+min_exp <- 5
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -74,7 +75,7 @@ get_summary_df <- function(sim_l, msr_mat = NULL, add_nexp = TRUE) {
       do.call(rbind, .) %>%
       as.data.frame() %>% 
       rownames_to_column(var = "Symbol") %>% 
-      arrange(desc(Median)) %>% 
+      arrange(desc(Mean)) %>% 
       mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
     
     if (add_nexp) df[["N_exp"]] <-  rowSums(msr_mat[as.character(df$Symbol), ])
@@ -101,8 +102,8 @@ summ_tf_mm <- lapply(summ_tf_mm, left_join, tfs_mm[, c("Symbol", "Family")], by 
 
 
 # Require a minimum count of measured experiments for global trends
-summ_sub_tf_hg <- lapply(summ_tf_hg, filter, N_exp >= 5)
-summ_sub_tf_mm <- lapply(summ_tf_mm, filter, N_exp >= 5)
+summ_sub_tf_hg <- lapply(summ_tf_hg, filter, N_exp >= min_exp)
+summ_sub_tf_mm <- lapply(summ_tf_mm, filter, N_exp >= min_exp)
 
 
 # Summarize ribo similarity and organize into a df
@@ -279,8 +280,14 @@ ortho_rank_sim <- lapply(names(summ_sub_tf_hg), function(x) {
     filter(Symbol %in% pc_ortho$Symbol_mm) %>% 
     left_join(., pc_ortho, by = c("Symbol" = "Symbol_mm"))
   
-  left_join(df_hg, df_mm, by = "ID", suffix = c("_human", "_mouse"))
+  df_ortho <- left_join(df_hg, df_mm, 
+                        by = "ID", 
+                        suffix = c("_human", "_mouse")) %>% 
+    filter(!is.na(Mean_human) & !is.na(Mean_mouse) & 
+          N_exp_human >= min_exp & N_exp_mouse >= min_exp)
+  
 })
+
 names(ortho_rank_sim) <- names(summ_sub_tf_hg)
 
 
@@ -375,7 +382,7 @@ qplot(sim_tf_mm[[gene_mm]], xvar = "Scor", yvar = "Jaccard")
 # Labels to the left
 point_plot_similarity1 <- function(summary_df,
                                    null_df,
-                                   topn_label = 30,
+                                   topn_label = 35,
                                    plot_title,
                                    ylabel) {
   
@@ -418,51 +425,6 @@ point_plot_similarity1 <- function(summary_df,
 
 
 
-# # Labels to the right
-# point_plot_similarity2 <- function(summary_df,
-#                                    null_df,
-#                                    topn_label = 30,
-#                                    plot_title,
-#                                    ylabel) {
-#   
-#   null_expected <- mean(null_df[, "Mean"])
-#   
-#   topn_genes <- slice_max(summary_df, Mean, n = topn_label)$Symbol
-#   
-#   summary_df <- summary_df %>%
-#     arrange(Mean) %>% 
-#     mutate(
-#       Group = Symbol %in% topn_genes,
-#       Symbol = factor(Symbol, levels = unique(Symbol)))
-#   
-#   ggplot(summary_df, aes(y = Mean, x = Symbol)) +
-#     geom_point() +
-#     geom_text_repel(data = filter(summary_df, Group),
-#                     aes(x = Symbol, y = Mean, label = Symbol, fontface = "italic"),
-#                     max.overlaps = topn_label, 
-#                     force = 0.5,
-#                     nudge_x = 300,
-#                     hjust = 0,
-#                     direction = "y",
-#                     size = 5,
-#                     segment.size = 0.1,
-#                     segment.color = "grey50") +
-#     geom_hline(yintercept = null_expected, colour = "firebrick") +
-#     annotate("text", x = 60, y = null_expected + 1, label = "Null", colour = "firebrick", size = 5) +
-#     ggtitle(plot_title) +
-#     ylab(ylabel) +
-#     expand_limits(x = nrow(summary_df) + 300) +  # prevent point cut off
-#     theme_classic() +
-#     theme(axis.text = element_text(size = 20),
-#           axis.text.x = element_blank(),
-#           axis.ticks.x = element_blank(),
-#           axis.title = element_text(size = 20),
-#           plot.title = element_text(size = 20),
-#           plot.margin = margin(c(10, 10, 10, 10)))
-# }
-
-
-
 # Using text labels to the left
 px_hg1 <- point_plot_similarity1(summ_tf_hg$Topk,
                                  null_df = summ_null_hg$Topk,
@@ -474,20 +436,6 @@ px_mm1 <- point_plot_similarity1(summ_tf_mm$Topk,
                                  null_df = summ_null_mm$Topk,
                                  plot_title = "Mouse",
                                  ylabel = paste0("Mean Top k (k=", k, ")"))
-
-
-# Using text labels to the right
-# px_hg2 <- point_plot_similarity2(summ_tf_hg$Topk,
-#                                  null_df = summ_null_hg$Topk,
-#                                  plot_title = "Human",
-#                                  ylabel = paste0("Mean Top k (k=", k, ")"))
-# 
-# 
-# px_mm2 <- point_plot_similarity2(summ_tf_mm$Topk,
-#                                  null_df = summ_null_mm$Topk,
-#                                  plot_title = "Mouse",
-#                                  ylabel = paste0("Mean Top k (k=", k, ")"))
-
 
 
 # Histogram of expected values for TF, null, and ribosomal
@@ -508,7 +456,7 @@ hist_expected <- function(summary_df, null_df, ribo_df, xlabel) {
     geom_histogram(bins = 30, fill = "slategrey", colour = "slategrey") +
     xlab(xlabel) +
     ylab("Count") +
-    scale_x_continuous(breaks = pretty_breaks()) +
+    scale_x_continuous(breaks = scales::pretty_breaks()) +
     theme_classic() +
     theme(axis.text = element_text(size = 15),
           axis.title = element_text(size = 18),
@@ -537,18 +485,54 @@ py_mm <- hist_expected(summary_df = summ_tf_mm$Topk,
 pxy_hg1 <- plot_grid(py_hg, px_hg1, rel_widths = c(0.5, 1))
 pxy_mm1 <- plot_grid(py_mm, px_mm1, rel_widths = c(0.5, 1))
 
-# # Combining point plot and hist of expected (labels right)
-# pxy_hg2 <- plot_grid(py_hg, px_hg2, rel_widths = c(0.5, 1))
-# pxy_mm2 <- plot_grid(py_mm, px_mm2, rel_widths = c(0.5, 1))
 
 # Flip mouse histogram for combining with human panels
 pxy_mm3 <- plot_grid(px_mm1, py_mm, rel_widths = c(1, 0.5))
 pxy_both <- plot_grid(pxy_hg1, pxy_mm3, nrow = 1)
 
 
-# ggsave(pxy_both, height = 11, width = 22, device = "png", dpi = 600,
-ggsave(pxy_both, height = 10, width = 20, device = "png", dpi = 600,
+ggsave(pxy_both, height = 11, width = 22, device = "png", dpi = 600,
+# ggsave(pxy_both, height = 10, width = 20, device = "png", dpi = 600,
        filename = file.path(paste0(plot_dir, "mean_topk=", k, "_human_and_mouse.png")))
+
+
+# Again for bottomk
+
+pv_hg <- point_plot_similarity1(summ_tf_hg$Bottomk,
+                                null_df = summ_null_hg$Bottomk,
+                                plot_title = "Human",
+                                ylabel = paste0("Mean Bottom k (k=", k, ")"))
+
+
+pv_mm <- point_plot_similarity1(summ_tf_mm$Bottomk,
+                                null_df = summ_null_mm$Bottomk,
+                                plot_title = "Mouse",
+                                ylabel = paste0("Mean Bottom k (k=", k, ")"))
+
+
+
+pw_hg <- hist_expected(summary_df = summ_tf_hg$Bottomk,
+                       null_df = summ_null_hg$Bottomk,
+                       ribo_df = summ_ribo_hg$Bottomk,
+                       xlabel = paste0("Mean Bottom k (k=", k, ")"))
+
+
+pw_mm <- hist_expected(summary_df = summ_tf_mm$Bottomk,
+                       null_df = summ_null_mm$Bottomk,
+                       ribo_df = summ_ribo_mm$Bottomk,
+                       xlabel = paste0("Mean Bottom k (k=", k, ")"))
+
+
+
+# Combining point plot and hist of expected (labels left)
+pvw_hg <- plot_grid(pw_hg, pv_hg, rel_widths = c(0.5, 1))
+pvw_mm <- plot_grid(pv_mm, pw_mm, rel_widths = c(1, 0.5))
+pvw_both <- plot_grid(pvw_hg, pvw_mm, nrow = 1)
+
+
+ggsave(pvw_both, height = 11, width = 22, device = "png", dpi = 600,
+# ggsave(pxy_both, height = 10, width = 20, device = "png", dpi = 600,
+       filename = file.path(paste0(plot_dir, "mean_bottomk=", k, "_human_and_mouse.png")))
 
 
 
@@ -596,7 +580,7 @@ pzb <- boxplot_topk_median(summary_df = summ_tf_mm$Topk,
 # Plot divergent: mean bottom k versus null of TFs with expected topk below null
 
 
-plot_divergent <- function(divergent_l, null_df, k, plot_title, nlabel = 30) {
+plot_divergent <- function(divergent_l, null_df, k, plot_title, nlabel = 10) {
   
   plot_df <- data.frame(
     
@@ -669,22 +653,78 @@ pmb <- plot_divergent(divergent_l = divergent_mm,
 pm <- plot_grid(pma, pmb, nrow = 1)
 
 
+ggsave(pm, height = 10, width = 20, device = "png", dpi = 600,
+       filename = file.path(paste0(plot_dir, "divergent_similarity_topk=", k, "_.png")))
+
+
+
+# Scatter plot of ratio of topk to null and bottomk to null
+
+plot_df_na <- mutate(ratio_hg, Group = Topk_ratio < 1 & Btmk_ratio > 1)
+plot_df_nb <- mutate(ratio_mm, Group = Topk_ratio < 1 & Btmk_ratio > 1)
+
+
+pna <- 
+  ggplot() +
+  geom_point(aes(x = Topk_ratio, y = Btmk_ratio), 
+             data = filter(plot_df_na, !Group),
+             shape = 21, size = 1, alpha = 0.2) +
+  geom_point(aes(x = Topk_ratio, y = Btmk_ratio), 
+             data = filter(plot_df_na, Group),
+             shape = 21, size = 3, colour = "firebrick") +
+  geom_hline(yintercept = 1) +
+  geom_vline(xintercept = 1) +
+  ggtitle("Human") +
+  xlab(paste0("Top K=", k, " ratio observed to null")) +
+  ylab(paste0("Bottom K=", k, " ratio observed to null")) +
+  theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20),
+          plot.title = element_text(size = 20))
+
+
+pnb <- 
+  ggplot() +
+  geom_point(aes(x = Topk_ratio, y = Btmk_ratio), 
+             data = filter(plot_df_nb, !Group),
+             shape = 21, size = 1, alpha = 0.2) +
+  geom_point(aes(x = Topk_ratio, y = Btmk_ratio), 
+             data = filter(plot_df_nb, Group),
+             shape = 21, size = 3, colour = "firebrick") +
+  geom_hline(yintercept = 1) +
+  geom_vline(xintercept = 1) +
+  ggtitle("Mouse") +
+  xlab(paste0("Top K=", k, " ratio observed to null")) +
+  ylab(paste0("Bottom K=", k, " ratio observed to null")) +
+  theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20),
+          plot.title = element_text(size = 20))
+
+
+pn <- plot_grid(pna, pnb, nrow = 1)
+
+
+ggsave(pn, height = 7, width = 14, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "ratio_similarity_topk=", k, "_.png")))
+
 
 # Density plot of topk intersect for select genes + null
 
 
-density_topk <- function(plot_df, k) {
+density_topk <- function(plot_df, k, plot_title) {
   
   ggplot(plot_df, aes(x = Topk, fill = Group)) +
     geom_density(alpha = 0.6) +
     theme_classic() +
     ylab("Density") +
     xlab(paste0("Top k=", k)) +
+    ggtitle(plot_title) +
     scale_fill_manual(values = c("lightgrey", "#7570b3", "#d95f02", "#1b9e77")) +
     theme(
       axis.text = element_text(size = 30),
       axis.title = element_text(size = 30),
-      plot.title = element_text(hjust = 0.5, size = 30),
+      plot.title = element_text(size = 30),
       legend.position = c(0.75, 0.90),
       legend.text = element_text(size = 20),
       legend.title = element_blank(),
@@ -744,39 +784,44 @@ plot_df_mm <- data.frame(
 
 plot_df_mm$Group <- factor(plot_df_mm$Group, levels = unique(plot_df_mm$Group))
 
-p4a <- density_topk(plot_df_hg, k = k)
-p4b <- density_topk(plot_df_mm, k = k)
+p4a <- density_topk(plot_df_hg, k = k, plot_title = "Human")
+p4b <- density_topk(plot_df_mm, k = k, plot_title = "Mouse")
 p4 <- plot_grid(p4a, p4b)
 
 
-boxplot(plot_df_hg$Topk ~ plot_df_hg$Group)
-boxplot(plot_df_mm$Topk ~ plot_df_mm$Group)
-
+# boxplot(plot_df_hg$Topk ~ plot_df_hg$Group)
+# boxplot(plot_df_mm$Topk ~ plot_df_mm$Group)
 # boxplot(log10(plot_df_hg$Topk+1) ~ plot_df_hg$Group)
 # boxplot(log10(plot_df_mm$Topk+1) ~ plot_df_mm$Group)
 
-# ggsave(p4, height = 9, width = 18, device = "png", dpi = 300,
-#        filename = file.path(plot_dir, "density_topk_example.png"))
+
+ggsave(p4, height = 9, width = 18, device = "png", dpi = 300,
+       filename = file.path(plot_dir, paste0("density_topk=", k, "_example.png")))
 
 
 
 # Scatterplot of expected similarity of ortho TFs
 
 
-qplot(ortho_rank_sim$Topk, xvar = "Mean_human", yvar = "Mean_mouse") +
-  geom_smooth() +
+pxa <- qplot(ortho_rank_sim$Topk, xvar = "Mean_human", yvar = "Mean_mouse") +
+  geom_smooth(method = "lm", colour = "red") +
   xlab(paste0("Human Mean Top k=", k)) +
   ylab(paste0("Mouse Mean Top k=", k)) +
-  ggtitle("Top")
+  ggtitle("Consistency of positive profiles")
 
-qplot(ortho_rank_sim$Bottomk, xvar = "Mean_human", yvar = "Mean_mouse") +
-  geom_smooth() +
+pxb <- qplot(ortho_rank_sim$Bottomk, xvar = "Mean_human", yvar = "Mean_mouse") +
+  geom_smooth(method = "lm", colour = "red") +
   xlab(paste0("Human Mean Bottom k=", k)) +
   ylab(paste0("Mouse Mean Bottom k=", k)) +
-  ggtitle("Bottom")
+  ggtitle("Consistency of negative profiles")
 
 
-qplot(ortho_rank_sim$Jaccard, xvar = "Mean_human", yvar = "Mean_mouse")
+px <- plot_grid(pxa, pxb, nrow = 1)
+
+
+ggsave(px, height = 6, width = 12, device = "png", dpi = 300,
+       filename = file.path(plot_dir, paste0("ortho_cor_consistencty_k=", k, ".png")))
+
 
 
 # Relationship between topk and count of experiments
