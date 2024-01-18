@@ -367,6 +367,52 @@ most_specific <- list(
 )
 
 
+# Looking at the correlation between topk across and within species
+
+topk_l <- readRDS(paste0("/space/scratch/amorin/R_objects/human_mouse_topk=", k, "_similarity_df.RDS"))
+topk_l$Mouse <- left_join(topk_l$Mouse, pc_ortho, by = c("Symbol" = "Symbol_mm"))
+
+sim_df2 <- sim_df %>% 
+  left_join(., topk_l$Human, by = "Symbol") %>% 
+  left_join(., topk_l$Mouse[, c("Symbol_hg", "Mean")], 
+            by = c("Symbol" = "Symbol_hg"),
+            suffix = c("_human", "_mouse"))
+
+
+ggplot(sim_df2, 
+         aes(x = fct_reorder(Family, desc(Topk_Count), .fun = mean), 
+             y = Topk_Count)) +
+    geom_boxplot(fill = "slategrey", outlier.shape = NA) +
+    geom_jitter(width = 0.25, height = 0.1, shape = 21) +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20),
+          axis.title.x = element_blank(),
+          plot.title = element_text(size = 20),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          plot.margin = margin(c(10, 20, 10, 10)))
+
+
+p10a <- qplot(sim_df2, xvar = "Topk_Count", yvar = "Mean_human") +
+  geom_smooth(method = "lm", colour = "red") +
+  xlab(paste0("Cross-species top k = ", k)) +
+  ylab(paste0("Mean Top k = ", k, " within species")) +
+  ggtitle("Human")
+
+p10b <- qplot(sim_df2, xvar = "Topk_Count", yvar = "Mean_mouse") +
+  geom_smooth(method = "lm", colour = "red") +
+  xlab(paste0("Cross-species top k = ", k)) +
+  ylab(paste0("Mean Top k = ", k, " within species")) +
+  ggtitle("Mouse")
+
+
+p10 <- plot_grid(p10a, p10b, nrow = 1)
+
+
+ggsave(p10, height = 6, width = 12, device = "png", dpi = 300,
+       filename = file.path(plot_dir, paste0("within_vs_across_species_topk_k=", k, ".png")))
+
+
 # Plots
 # ------------------------------------------------------------------------------
 
@@ -412,6 +458,15 @@ px3c <- qplot(sim_df, xvar = "Bottomk_Perc_ortho", yvar = "Topk_Perc_ortho") +
 
 ggsave(px3a, height = 7, width = 7, device = "png", dpi = 300,
        filename = file.path(plot_dir, "topk_percentile_between_species.png"))
+
+
+ggsave(px3b, height = 7, width = 7, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "bottomk_percentile_between_species.png"))
+
+
+ggsave(px3c, height = 7, width = 7, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "topk_vs_bottomk_percentile_between_species.png"))
+
 
 
 # Plots of the raw overlap counts
@@ -478,15 +533,15 @@ ggsave(px6a, height = 7, width = 7, device = "png", dpi = 300,
 
 px6b <- plot_grid(
   
-  plot_hist(plot_df6, stat_col = "Topk_hg_in_mm") + 
+  plot_hist(plot_df6, stat_col = "Topk_hg_in_mm", title = check_tf) + 
     geom_vline(xintercept = filter(plot_df6, Symbol == check_tf)$Topk_hg_in_mm,
-               # width = 1.6,
+               linewidth = 1.6,
                col = "royalblue") +
     xlab("Human in mouse"),
   
-  plot_hist(plot_df6, stat_col = "Topk_mm_in_hg") + 
+  plot_hist(plot_df6, stat_col = "Topk_mm_in_hg", title = check_tf) + 
     geom_vline(xintercept = filter(plot_df6, Symbol == check_tf)$Topk_mm_in_hg, 
-               # width = 1.6,
+               linewidth = 1.6,
                col = "goldenrod") +
     xlab("Mouse in human"),
   
@@ -568,15 +623,20 @@ p9a <- ggplot(plot_df9, aes(x = reorder(Symbol, Count, FUN = median), y = Count,
   scale_fill_manual(values = p9_cols) +
   scale_colour_manual(values = p9_cols) +
   theme_classic() +
-  theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
+  theme(axis.text = element_text(size = 25),
+        axis.title = element_text(size = 25),
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
-        plot.title = element_text(size = 20),
+        plot.title = element_text(size = 25),
         legend.position = c(0.85, 0.85),
-        legend.text = element_text(size = 20),
-        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 25),
+        legend.title = element_text(size = 25),
         plot.margin = margin(c(10, 20, 10, 10)))
+
+
+ggsave(p9a, height = 8, width = 12, device = "png", dpi = 300,
+       filename = file.path(plot_dir, paste0("ortho_topk_counts_all_tf.png")))
+
 
 
 # Null distn of overlap
