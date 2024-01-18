@@ -338,6 +338,12 @@ family_sim_mm <- summarize_family_similarity(summ_sub_tf_mm, tfs_mm)
 
 
 
+# Saving out similarity for joining with cross-species comparison
+
+out_l <- list(Human = summ_tf_hg$Topk, Mouse = summ_tf_mm$Topk)
+saveRDS(out_l, paste0("/space/scratch/amorin/R_objects/human_mouse_topk=", k, "_similarity_df.RDS"))
+
+
 
 # Plotting
 # ------------------------------------------------------------------------------
