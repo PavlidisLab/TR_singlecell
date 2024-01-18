@@ -402,8 +402,7 @@ missing_prop <- round(missing_prop, 3)
 # ------------------------------------------------------------------------------
 
 
-
-n_not_ortho <- lapply(names(tiered_l), function(tf) {
+not_ortho <- lapply(names(tiered_l), function(tf) {
   
   tier_hg <- tiered_l[[tf]]$Human_specific
   tier_mm <- tiered_l[[tf]]$Mouse_specific
@@ -412,16 +411,26 @@ n_not_ortho <- lapply(names(tiered_l), function(tf) {
     return(NA)
   }
   
+  n_specific_hg <- nrow(tier_hg)
+  n_not_ortho_hg <- length(setdiff(tier_hg$Symbol, pc_ortho$Symbol_hg))
+  n_specific_mm <- nrow(tier_mm)
+  n_not_ortho_mm <- length(setdiff(tier_mm$Symbol, pc_ortho$Symbol_mm))
+  
   data.frame(
     Symbol = tf,
-    N_specific_hg = nrow(tier_hg),
-    N_not_ortho_hg = length(setdiff(tier_hg$Symbol, pc_ortho$Symbol_hg)),
-    N_specific_mm = nrow(tier_mm),
-    N_not_ortho_mm = length(setdiff(tier_mm$Symbol, pc_ortho$Symbol_mm))
+    N_specific_hg = n_specific_hg,
+    N_ortho_hg = (n_specific_hg - n_not_ortho_hg),
+    N_not_ortho_hg = n_not_ortho_hg,
+    # Prop_not_ortho_hg = (n_not_ortho_hg / n_specific_hg),
+    N_specific_mm = n_specific_mm,
+    N_ortho_mm = (n_specific_mm - n_not_ortho_mm),
+    N_not_ortho_mm = n_not_ortho_mm
+    # Prop_not_ortho_mm = (n_not_ortho_mm / n_specific_mm)
   )
 })
 
-n_not_ortho <- do.call(rbind, n_not_ortho[!is.na(n_not_ortho)])
+
+not_ortho <- do.call(rbind, not_ortho[!is.na(not_ortho)])
 
 
 
@@ -842,3 +851,117 @@ p4 <-
         axis.ticks.x = element_blank(),
         plot.title = element_text(size = 20),
         plot.margin = margin(c(10, 20, 10, 10)))
+
+
+# Non-orthologous genes gained in species-specific comparison
+
+
+p_df5a <- not_ortho %>% 
+  dplyr::select(Symbol, N_ortho_hg, N_not_ortho_hg) %>% 
+  pivot_longer(cols = c("N_ortho_hg", "N_not_ortho_hg"),
+               names_to = "Has_ortholog",
+               values_to = "Count") %>% 
+  mutate(Has_ortholog = ifelse(Has_ortholog == "N_ortho_hg", TRUE, FALSE))
+
+
+p_df5b <- not_ortho %>% 
+  dplyr::select(Symbol, N_ortho_mm, N_not_ortho_mm) %>% 
+  pivot_longer(cols = c("N_ortho_mm", "N_not_ortho_mm"),
+               names_to = "Has_ortholog",
+               values_to = "Count") %>% 
+  mutate(Has_ortholog = ifelse(Has_ortholog == "N_ortho_mm", TRUE, FALSE))
+
+
+p5a <- 
+  ggplot(p_df5a, aes(x = reorder(Symbol, Count, fun = sum), y = Count, fill = Has_ortholog, colour = Has_ortholog)) +
+  geom_bar(position = "stack", stat = "identity") +
+  ggtitle("Human") +
+  scale_fill_manual(values = c("royalblue", "darkgrey")) +
+  scale_colour_manual(values = c("royalblue", "darkgrey")) +
+  theme_classic() +
+  theme(axis.text.y = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 25),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        legend.position = c(0.7, 0.8),
+        plot.margin = margin(c(10, 20, 10, 10)))
+  
+
+p5b <- 
+  ggplot(p_df5b, aes(x = reorder(Symbol, Count, fun = sum), y = Count, fill = Has_ortholog, colour = Has_ortholog)) +
+  geom_bar(position = "stack", stat = "identity") +
+  ggtitle("Mouse") +
+  scale_fill_manual(values = c("goldenrod", "darkgrey")) +
+  scale_colour_manual(values = c("goldenrod", "darkgrey")) +
+  theme_classic() +
+  theme(axis.text.y = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 25),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        legend.position = c(0.7, 0.8),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+p5 <- plot_grid(p5a, p5b, ncol = 1)
+
+
+ggsave(p5, height = 15, width = 18, device = "png", dpi = 300, bg = "white",
+       filename = file.path(plot_dir, "species_specific_genes_gained.png"))
+
+
+
+# Missing data type in elevated set
+
+
+head(missing_prop)
+
+p6a <- missing_prop %>% 
+  filter(N >= 5) %>% 
+  pivot_longer(cols = c("Prop_human", "Prop_mouse"),
+               names_to = "Species",
+               values_to = "Proportion") %>% 
+  mutate(Species = ifelse(Species == "Prop_human", "Human", "Mouse")) %>% 
+  ggplot(aes(., x = Species, y = Proportion)) +
+  geom_boxplot(width = 0.3, fill = "slategrey") +
+  ylab("Proportion Missing") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 25),
+        axis.title.y = element_text(size = 25),
+        axis.title.x = element_blank())
+
+
+p6b <- missing_prop %>% 
+  filter(N >= 5) %>% 
+  pivot_longer(cols = c("Prop_coexpr_hg", "Prop_bind_hg", "Prop_coexpr_mm", "Prop_bind_mm"),
+               names_to = "Rank",
+               values_to = "Proportion") %>% 
+  mutate(Rank = case_when(
+    Rank == "Prop_bind_hg" ~ "Binding human",
+    Rank == "Prop_coexpr_hg" ~ "Coexpr. human",
+    Rank == "Prop_bind_mm" ~ "Binding mouse",
+    Rank == "Prop_coexpr_mm" ~ "Coexpr. mouse")
+  ) %>% 
+  ggplot(aes(., x = Rank, y = Proportion)) +
+  geom_boxplot(width = 0.3, fill = "slategrey") +
+  ylab("Proportion Missing") +
+  theme_classic() +
+  theme(axis.text.y = element_text(size = 25),
+        axis.text.x = element_text(size = 20),
+        axis.title.y = element_text(size = 25),
+        axis.title.x = element_blank())
+
+
+ggsave(p6a, height = 6, width = 6, device = "png", dpi = 300, bg = "white",
+       filename = file.path(plot_dir, "species_elevated_proportion_missing.png"))
+
+
+ggsave(p6b, height = 6, width = 12, device = "png", dpi = 300, bg = "white",
+       filename = file.path(plot_dir, "rank_elevated_proportion_missing.png"))
