@@ -1,9 +1,4 @@
 ## Setting up paths and global variables
-## TODO: pcoding download and common filter needs to be formalized
-## TODO: mito gene was manually downloaded from biomart... doc this https://www.biostars.org/p/310641/
-## TODO: ribo human ribo S https://www.genenames.org/data/genegroup/#!/group/728  https://www.genenames.org/cgi-bin/genegroup/download?id=728&type=node
-## TODO: ribo human ribo L https://www.genenames.org/data/genegroup/#!/group/729  https://www.genenames.org/cgi-bin/genegroup/download?id=729&type=node
-## TODO: TF data acquisition
 ## -----------------------------------------------------------------------------
 
 
@@ -23,7 +18,8 @@ sc_dir <- "/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_pr
 amat_dir <- "/space/scratch/amorin/TR_singlecell/"
 
 
-# 1:1 orthologous protein coding genes
+# DIOPT raw input and 1:1 orthologous protein coding genes
+diopt_path <- "/space/grp/DIOPT/DIOPTvs8_export_Sanja Rogic.txt" 
 pc_ortho_path <- "/space/grp/amorin/Metadata/hg_mm_1to1_ortho_genes_DIOPT-v8.tsv"
 
 
@@ -39,9 +35,8 @@ tfs_hg_path <- "/space/grp/amorin/Metadata/human_tfs.tsv"
 tfs_mm_path <- "/space/grp/amorin/Metadata/mouse_tfs.tsv"
 
 
-# Human L/S ribo genes
-sribo_hg_path <- "/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv"
-lribo_hg_path <- "/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv"
+# Ortho L/S ribo genes
+ribo_path <- "/space/grp/amorin/Metadata/L_S_ribosomal_ortho_genes.tsv"
 
 
 # TR-target rankings from genomics evidence
@@ -121,8 +116,3 @@ avg_vs_ind_auc_mm_path <- "/space/scratch/amorin/R_objects/individual_vs_average
 rev_coexpr_auc_hg_path <- "/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_hg.RDS"
 rev_coexpr_auc_mm_path <- "/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_mm.RDS"
 
-
-
-# Human Protein Atlas
-# expr_mat_l_path <- "/home/amorin/scratch/R_objects/HPA_expression_mat_list.RDS"
-# cor_mat_l_path <- "/home/amorin/scratch/R_objects/HPA_cor_mat_list.RDS"
