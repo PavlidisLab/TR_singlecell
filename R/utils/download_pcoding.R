@@ -1,8 +1,9 @@
 ## Ensembl has every TSS for a gene. Refseq select is only using one TSS per gene.
 ## -----------------------------------------------------------------------------
 
-if (!require("BiocManager", quietly = TRUE))
+if (!require("BiocManager", quietly = TRUE)) {
   install.packages("BiocManager")
+}
 
 BiocManager::install("biomaRt")
 
