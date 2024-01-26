@@ -123,15 +123,10 @@ lt_final <- rbind(lt_all, pavlab)
 
 # Certain low-throughput only:
 # TRRUST, Pavlab, Chu2021, TFe, InnateDB
-# HTRIdb_LC is only the literature curated part of HTRIdb
-# Same for ORegAnno_LC
+# HTRIdb_LC is only the literature curated part of HTRIdb, same for ORegAnno_LC
 
 #  Uncertain if contains genomic evidence: 
 # CytReg (note 2020 update using eY1H, not included here!)
-
-# sort(table(lt_final$Databases))
-# unique(unlist(str_split(lt_final$Databases, ", ")))
-
 
 
 # Remove TCF4 from non Pavlab sources as heavily contaminated with TCF7L2.
@@ -228,4 +223,3 @@ p1 <- ggplot(n_target, aes(x = TF_Symbol, y = N_target)) +
 
 ggsave(p1, height = 6, width = 9, device = "png", dpi = 300,
        filename = file.path(plot_dir, "count_of_distinct_curated_targets.png"))
-
