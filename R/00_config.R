@@ -45,7 +45,7 @@ evidence_path <- "/space/scratch/amorin/R_objects/ranked_target_list_Apr2022.RDS
 
 # Gsheets ID for TRsc datasets, local copy of raw meta, and final
 gsheets_id <- "1SQx_rFdBNBwOEdChaHkbQY1vStcbuA3fF0CZk6YECEc"
-ghseets_meta_raw_path <- "/space/grp/amorin/Metadata/gsheets_single_cell_dataset_meta_raw.tsv"
+gsheets_meta_raw_path <- "/space/grp/amorin/Metadata/gsheets_single_cell_dataset_meta_raw.tsv"
 sc_meta_path <- "/space/grp/amorin/Metadata/single_cell_dataset_meta.tsv"
 
 
