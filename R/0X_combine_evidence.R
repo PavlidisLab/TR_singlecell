@@ -525,7 +525,7 @@ p1a <- ggplot(
   # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
   geom_bar(position = "stack", stat = "identity") +
   ylab("Count of reproducible interactions") +
-  xlab("Transcription factor") +
+  xlab("Transcription regulator") +
   scale_fill_manual(values = c("#1b9e77", "#d95f02", "#7570b3")) +
   scale_colour_manual(values = c("#1b9e77", "#d95f02", "#7570b3")) +
   theme_classic() +
@@ -560,7 +560,7 @@ p1b <- ggplot(
   # aes(x = Symbol, y = Count, fill = Scheme, colour = Scheme)) +
   geom_bar(position = "stack", stat = "identity") +
   ylab("Count of reproducible interactions") +
-  xlab("Transcription factor") +
+  xlab("Transcription regulator") +
   scale_fill_manual(values = c("#1b9e77", "goldenrod", "royalblue", "#d95f02", "#7570b3")) +
   scale_colour_manual(values = c("#1b9e77", "goldenrod", "royalblue", "#d95f02", "#7570b3")) +
   theme_classic() +
@@ -613,9 +613,10 @@ p2a <- ggplot(
   geom_bar(position = "stack", stat = "identity") +
   facet_wrap(~Ortho, scales = "free") +
   ylab("Count of reproducible interactions") +
-  xlab("Transcription factor") +
-  scale_fill_manual(values = c("royalblue", "darkgrey")) +
+  xlab("Transcription regulator") +
+  scale_fill_manual(values = c("royalblue", "darkgrey"), labels = c("Human specific", "Orthologous")) +
   scale_colour_manual(values = c("royalblue", "darkgrey")) +
+  guides(colour = "none") +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         # axis.title = element_text(size = 20),
@@ -623,7 +624,7 @@ p2a <- ggplot(
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         plot.title = element_text(size = 20),
-        legend.position = c(0.75, 0.7),
+        legend.position = c(0.75, 0.85),
         legend.title = element_blank(),
         legend.text = element_text(size = 15),
         strip.text = element_text(size = 15),
@@ -636,9 +637,10 @@ p2b <- ggplot(
   geom_bar(position = "stack", stat = "identity") +
   facet_wrap(~Ortho, scales = "free") +
   ylab("Count of reproducible interactions") +
-  xlab("Transcription factor") +
-  scale_fill_manual(values = c("goldenrod", "darkgrey")) +
+  xlab("Transcription regulator") +
+  scale_fill_manual(values = c("goldenrod", "darkgrey"), labels = c("Mouse specific", "Orthologous")) +
   scale_colour_manual(values = c("goldenrod", "darkgrey")) +
+  guides(colour = "none") +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         # axis.title = element_text(size = 20),
@@ -646,10 +648,10 @@ p2b <- ggplot(
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         plot.title = element_text(size = 20),
-        legend.position = c(0.75, 0.7),
+        legend.position = c(0.75, 0.85),
         legend.title = element_blank(),
         legend.text = element_text(size = 15),
-         strip.text = element_text(size = 15),
+        strip.text = element_text(size = 15),
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
@@ -661,7 +663,7 @@ p2 <- plot_grid(p2a, p2b, ncol = 1)
 y_grob <- textGrob("Count of reproducible interactions", 
                    gp = gpar(fontsize = 20), rot = 90)
 
-x_grob <- textGrob("Transcription factor", 
+x_grob <- textGrob("Transcription regulator", 
                    gp = gpar(fontsize = 20))
 
 p2 <- grid.arrange(arrangeGrob(p2, left = y_grob, bottom = x_grob))
