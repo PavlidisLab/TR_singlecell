@@ -1,19 +1,13 @@
-## Examine gene measurement/coverage across experiments. A gene is considered
-## measured if has at least 1 count in at least 20 cells in at least one cell
-## type. Exports a binary gene x experiment matrix that tracks measurement.
+## Summarizing and plotting details about gene measurement and cell counts
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
-library(data.table)
-library(parallel)
 library(pheatmap)
 library(RColorBrewer)
 library(cowplot)
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
-
-force_resave <- FALSE
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -29,20 +23,21 @@ pc_ortho <- read.delim(pc_ortho_path)
 tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% pc_hg$Symbol)
 tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
 
+# Binary measurement matrices
+msr_mat_hg <- readRDS(msr_mat_hg_path)
+msr_mat_mm <- readRDS(msr_mat_mm_path)
 
 
-# Get the average/proportion of gene measurement across experiments
-# Human: 450 genes are never measured and 5,155 genes always measured
-# Mouse: 887 genes are never measured and 838 genes are always measured
-# Ortho: 630 genes measured in every mouse and human dataset
-# TFs: In both species TF genes show small trend of being measured more than non-TF genes 
+# Describing metadata
 # ------------------------------------------------------------------------------
 
 
-count_msr_hg <- rowSums(msr_mat_hg)
-prop_msr_hg <- count_msr_hg / ncol(msr_mat_hg)
+# Gene-wise summaries of measurement across experiments
 
+count_msr_hg <- rowSums(msr_mat_hg)
 count_msr_mm <- rowSums(msr_mat_mm)
+
+prop_msr_hg <- count_msr_hg / ncol(msr_mat_hg)
 prop_msr_mm <- count_msr_mm / ncol(msr_mat_mm)
 
 
@@ -81,10 +76,25 @@ always_ortho <- filter(pc_ortho,
                        Symbol_mm %in% always_msr$Mouse$Symbol)
 
 
+# Organize counts
+
+n_msr <- do.call(rbind, list(
+  Never = lapply(never_msr, nrow),
+  Rarely = lapply(rarely_msr, nrow),
+  Always = lapply(always_msr, nrow),
+  Mostly = lapply(mostly_msr, nrow)
+))
+
+
+
+# Median count of datasets that a TF is measured in
+
 tf_med_count <- gene_msr_df %>% 
   group_by(Species, TF) %>% 
   summarise(Median_count = median(Count_msr), .groups = "keep")
 
+
+# Do TFs tend to be measured differentially compared to non-TF genes?
 
 tf_wilx_count <- gene_msr_df %>% 
   group_by(Species) %>% 
@@ -92,29 +102,13 @@ tf_wilx_count <- gene_msr_df %>%
   summarise(Species, Wilcox = W$p.value)
 
 
-
-# Look at experiment-wise gene coverage
-# Human: HPA max coverage at 18299 genes, GSE85241 min at 8952
-# Mouse: TabulaMuris max coverage at 17977 genes, GSE160193 min at 1988 genes.
-# ------------------------------------------------------------------------------
+# Summarize count of cells and cell types across experiments
+summ_cells <- lapply(split(sc_meta, sc_meta$Species), function(x) summary(x$N_cells))
+summ_cts <- lapply(split(sc_meta, sc_meta$Species), function(x) summary(x$N_celltypes))
 
 
-exp_hg <- sort(colSums(msr_mat_hg), decreasing = TRUE)
-exp_mm <- sort(colSums(msr_mat_mm), decreasing = TRUE)
-
-
-exp_df <- data.frame(
-  Gene_count = c(exp_hg, exp_mm),
-  Symbol = c(names(exp_hg), names(exp_mm)),
-  Species = c(rep("Human", length(exp_hg)), rep("Mouse", length(exp_mm)))
-)
-
-
-exp_summ <- lapply(split(exp_df, exp_df$Species), function(x) summary(x$Gene_count))
-
-summ_cells <- lapply(split(meta_loaded, meta_loaded$Species), function(x) summary(x$N_cells))
-summ_cts <- lapply(split(meta_loaded, meta_loaded$Species), function(x) summary(x$N_celltypes))
-
+# Summarize gene measurement across experiments
+summ_gene_msr <- lapply(split(sc_meta, sc_meta$Species), function(x) summary(x$N_genes))
 
 
 # Plot 
@@ -123,18 +117,15 @@ summ_cts <- lapply(split(meta_loaded, meta_loaded$Species), function(x) summary(
 
 # Barchart of data set counts by species
 
-p1 <- count(meta_loaded, Species) %>% 
+p1 <- count(sc_meta, Species) %>% 
   ggplot(., aes(x = Species, y = n)) +
-  # geom_bar(stat = "identity", fill = "#1c9099", col = "black", width = 0.6) +
   geom_bar(stat = "identity", fill = "slategrey", col = "black", width = 0.6) +
-  ylab("Count of data sets") +
+  ylab("Count of datasets") +
   theme_classic() +
   theme(axis.text = element_text(size = 25),
         axis.title = element_text(size = 25),
         axis.title.x = element_blank(),
         plot.margin = margin(10, 5, 5, 5))
-
-
 
 ggsave(p1, height = 6, width = 4.5, device = "png", dpi = 300,
        filename = file.path(plot_dir, "dataset_counts_by_species.png"))
@@ -142,20 +133,19 @@ ggsave(p1, height = 6, width = 4.5, device = "png", dpi = 300,
 
 # Histogram of log10 cell counts by species
 
-p2 <- ggplot(meta_loaded, aes(x = log10(N_cells), fill = Species, colour = Species)) +
+p2 <- ggplot(sc_meta, aes(x = log10(N_cells), fill = Species, colour = Species)) +
   geom_histogram(bins = 30) +
-  ylab("Count of data sets") +
-  xlab("Log10 count of cells") +
+  ylab("Count of datasets") +
+  xlab(bquote(~Log[10]~ "count of cells")) +
   scale_fill_manual(values = c("royalblue", "goldenrod")) +
   scale_colour_manual(values = c("royalblue", "goldenrod")) +
   theme_classic() +
   theme(axis.text = element_text(size = 25),
-        axis.title = element_text(size = 25),
-        legend.text = element_text(size = 20),
-        legend.title = element_text(size = 20),
-        legend.position = c(0.85, 0.75),
-        plot.margin = margin(10, 5, 5, 5))
-
+        axis.title = element_text(size = 30),
+        legend.text = element_text(size = 25),
+        legend.title = element_text(size = 25),
+        legend.position = c(0.85, 0.85),
+        plot.margin = margin(10, 10, 5, 5))
 
 ggsave(p2, height = 6, width = 9, device = "png", dpi = 600,
        filename = file.path(plot_dir, "cell_counts_by_species.png"))
@@ -163,21 +153,70 @@ ggsave(p2, height = 6, width = 9, device = "png", dpi = 600,
 
 # Histogram of cell type counts by species
 
-p3 <- ggplot(meta_loaded, aes(x = N_celltypes, fill = Species)) +
+p3 <- ggplot(sc_meta, aes(x = N_celltypes, fill = Species)) +
   geom_histogram(bins = 50) +
-  ylab("Count of data sets") +
+  ylab("Count of datasets") +
   xlab("Count of cell types") +
   scale_fill_manual(values = c("royalblue", "goldenrod")) +
   theme_classic() +
   theme(axis.text = element_text(size = 25),
-        axis.title = element_text(size = 25),
-        legend.text = element_text(size = 20),
-        legend.title = element_text(size = 20),
-        legend.position = c(0.85, 0.75))
-
+        axis.title = element_text(size = 30),
+        legend.text = element_text(size = 25),
+        legend.title = element_text(size = 25),
+        legend.position = c(0.85, 0.85),
+        plot.margin = margin(10, 10, 5, 5))
 
 ggsave(p3, height = 6, width = 9, device = "png", dpi = 600,
        filename = file.path(plot_dir, "celltype_counts_by_species.png"))
+
+
+# Look at experiment counts of gene measurement 
+
+p4 <- ggplot(gene_msr_df, aes(x = Proportion_msr)) +
+  facet_wrap(~Species, nrow = 2) +
+  geom_histogram(bins = 100) +
+  ylab("Count of genes") +
+  xlab("Proportion of experiments with measurement") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        strip.text = element_text(size = 25))
+        
+
+ggsave(p4, height = 9, width = 12, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "gene_proportion_measurement_hist.png"))
+
+
+# Looking at the proportion of gene measurement split by TF status
+
+p5 <- ggplot(gene_msr_df, aes(y = Proportion_msr, x = TF)) +
+  facet_wrap(~Species) +
+  geom_boxplot() +
+  ylab("Proportion of experiments with measurement") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        strip.text = element_text(size = 25))
+
+
+ggsave(p5, height = 9, width = 9, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "TF_proportion_measurement_boxplot.png"))
+
+
+# Look at experiment counts of gene measurement 
+
+p6 <- ggplot(sc_meta, aes(x = N_genes)) +
+  facet_wrap(~Species, nrow = 2) +
+  geom_histogram(bins = 20) +
+  ylab("Count of experiments") +
+  xlab("Count of genes measured") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        strip.text = element_text(size = 25))
+
+ggsave(p6, height = 9, width = 9, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "experiment_gene_measurement_hist.png"))
 
 
 
@@ -195,6 +234,8 @@ pheatmap(
   treeheight_row = 0,
   treeheight_col = 0,
   legend = FALSE,
+  # height = 80,
+  # width = 80,
   filename = file.path(plot_dir, "measurement_heatmap_human.png")
 )
 
@@ -211,52 +252,3 @@ pheatmap(
   legend = FALSE,
   filename = file.path(plot_dir, "measurement_heatmap_mouse.png")
 )
-
-
-# Look at experiment counts of gene measurement 
-
-p1 <- ggplot(gene_msr_df, aes(x = Proportion_msr)) +
-  facet_wrap(~Species, nrow = 2) +
-  geom_histogram(bins = 100) +
-  ylab("Count of genes") +
-  xlab("Proportion of experiments with measurement") +
-  theme_classic() +
-  theme(axis.text = element_text(size = 25),
-        axis.title = element_text(size = 25),
-        strip.text = element_text(size = 25))
-        
-
-ggsave(p1, height = 9, width = 12, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "gene_proportion_measurement_hist.png"))
-
-
-# Looking at the proportion of gene measurement split by TF status
-
-p2 <- ggplot(gene_msr_df, aes(y = Proportion_msr, x = TF)) +
-  facet_wrap(~Species) +
-  geom_boxplot() +
-  ylab("Proportion of experiments with measurement") +
-  theme_classic() +
-  theme(axis.text = element_text(size = 25),
-        axis.title = element_text(size = 25),
-        strip.text = element_text(size = 25))
-
-
-ggsave(p2, height = 9, width = 9, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "TF_proportion_measurement_boxplot.png"))
-
-
-# Look at experiment counts of gene measurement 
-
-p3 <- ggplot(exp_df, aes(x = Gene_count)) +
-  facet_wrap(~Species, nrow = 2) +
-  geom_histogram(bins = 20) +
-  ylab("Count of experiments") +
-  xlab("Count of genes measured") +
-  theme_classic() +
-  theme(axis.text = element_text(size = 25),
-        axis.title = element_text(size = 25),
-        strip.text = element_text(size = 25))
-
-ggsave(p3, height = 9, width = 9, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "experiment_gene_measurement_hist.png"))
