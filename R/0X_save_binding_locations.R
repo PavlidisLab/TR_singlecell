@@ -126,6 +126,11 @@ all_hg <- reduce(unlist(reduce(GRangesList(peaks_hg))))
 all_mm <- reduce(unlist(reduce(GRangesList(peaks_mm))))
 
 
+# Width of reduced set (may be slightly larger than gap to due to reducing overlaps)
+all_hg$Width <- width(all_hg)
+all_mm$Width <- width(all_mm)
+
+
 # Get distance of the all set to gene TSS
 all_hg$Distance <- GenomicRanges::distance(all_hg, gene_gr_hg, ignore.strand = TRUE)
 all_hg <- all_hg[order(all_hg$Distance)]
@@ -140,6 +145,24 @@ all_hg <- all_hg[order(-all_hg$Count)]
 
 all_mm$Count <- GenomicRanges::countOverlaps(all_mm, GRangesList(peaks_mm), ignore.strand = TRUE)
 all_mm <- all_mm[order(-all_mm$Count)]
+
+
+# Count of regions at 500 and 100 kb
+count_regions <- list(
+  Human_500kb = length(all_hg),
+  Human_100kb = sum(all_hg$Distance <= 100e3),
+  Mouse_500kb = length(all_mm),
+  Mouse_100kb = sum(all_mm$Distance <= 100e3)
+)
+
+
+# Summary of counts
+summ_l <- list(
+  Summary_hg = summary(all_hg$Count),
+  Gt1_hg = sum(all_hg$Count > 1),
+  Summary_mm = summary(all_mm$Count),
+  Gt1_mm = sum(all_mm$Count > 1)
+)
 
 
 # Convert to table and format for igvR and export
