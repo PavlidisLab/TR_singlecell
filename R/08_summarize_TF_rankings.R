@@ -120,6 +120,24 @@ summary(count_ribo_mm$Count)
 
 
 
+# Top genes not in ribo
+
+not_ribo_hg <- lapply(rank_ribo_hg, function(x) {
+  setdiff(arrange(x, Rank_RSR)$Symbol[1:82], ribo_genes$Symbol_hg)
+})
+
+
+not_ribo_mm <- lapply(rank_ribo_mm, function(x) {
+  setdiff(arrange(x, Rank_RSR)$Symbol[1:82], ribo_genes$Symbol_mm)
+})
+
+
+
+sort(table(unlist(not_ribo_hg)))
+sort(table(unlist(not_ribo_mm)))
+
+
+
 # Top coexpr partner for each TF
 # ------------------------------------------------------------------------------
 
