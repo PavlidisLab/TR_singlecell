@@ -4,7 +4,7 @@
 
 library(googlesheets4)
 library(tidyverse)
-library(parallel)
+library(data.table)
 source("R/00_config.R")
 source("R/utils/functions.R")
 
