@@ -245,6 +245,30 @@ overlap_genes <- intersect(
 )
 
 
+
+# TODO: remove/replace, but schematic of topk
+pjj1 <- ggplot(overlap_df, aes(x = Topk_hg_in_mm)) + 
+  geom_density(linewidth = 2.5) + 
+  geom_vline(xintercept = filter(overlap_df, Symbol == check_tf)$Topk_hg_in_mm, colour = "royalblue", linewidth = 3) +
+  theme_nothing() + 
+  theme(text = element_blank())
+
+
+pjj2 <- ggplot(overlap_df, aes(x = Topk_mm_in_hg)) + 
+  geom_density(linewidth = 2.5) + 
+  geom_vline(xintercept = filter(overlap_df, Symbol == check_tf)$Topk_mm_in_hg, colour = "goldenrod", linewidth = 3) +
+  theme_nothing() + 
+  theme(text = element_blank())
+
+
+ggsave(pjj1, height = 7, width = 7, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "demo_topk_distn_ortho_overlap_hg.png"))
+
+
+ggsave(pjj2, height = 7, width = 7, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "demo_topk_distn_ortho_overlap_mm.png"))
+
+
 # Correlation across metrics. The elevated correlation of bottom K with
 # Scor makes me concerned that the high Scor values are being elevated by the 
 # bottom of the rankings, which are less reliable. Also see strong cor between
@@ -395,14 +419,14 @@ ggplot(sim_df2,
 
 p10a <- qplot(sim_df2, xvar = "Topk_Count", yvar = "Mean_human") +
   geom_smooth(method = "lm", colour = "red") +
-  xlab(paste0("Cross-species top k = ", k)) +
-  ylab(paste0("Mean Top k = ", k, " within species")) +
+  xlab(expr("Cross-species Top"[!!k])) +
+  ylab(expr("Within species mean Top"[!!k])) +
   ggtitle("Human")
 
 p10b <- qplot(sim_df2, xvar = "Topk_Count", yvar = "Mean_mouse") +
   geom_smooth(method = "lm", colour = "red") +
-  xlab(paste0("Cross-species top k = ", k)) +
-  ylab(paste0("Mean Top k = ", k, " within species")) +
+  xlab(expr("Cross-species Top"[!!k])) +
+  ylab(expr("Within species mean Top"[!!k])) +
   ggtitle("Mouse")
 
 
@@ -441,19 +465,19 @@ px2 <- qplot(rank_tf_ortho[[check_tf]],
 
 # Scatter of overlap percentiles in mouse/human
 
-px3a <- qplot(sim_df, xvar = "Topk_Perc_mm_in_hg", yvar = "Topk_Perc_hg_in_mm") +
-  xlab(paste0("Top K=", k, " percentile mouse in human")) +
-  ylab(paste0("Top K=", k, " percentile human in mouse"))
+px3a <- qplot(sim_df, xvar = "Topk_Perc_hg_in_mm", yvar = "Topk_Perc_mm_in_hg") +
+  xlab(expr("Top"[!!k] ~ "quantile human in mouse")) +
+  ylab(expr("Top"[!!k] ~ "quantile mouse in human"))
 
 
 px3b <- qplot(sim_df, xvar = "Bottomk_Perc_mm_in_hg", yvar = "Bottomk_Perc_hg_in_mm") +
-  xlab(paste0("Bottom K=", k, " percentile mouse in human")) +
-  ylab(paste0("Bottom K=", k, " percentile human in mouse"))
+  xlab(expr("Bottom"[!!k] ~ "quantile mouse in human")) +
+  ylab(expr("Bottom"[!!k] ~ "quantile human in mouse"))
 
 
 px3c <- qplot(sim_df, xvar = "Bottomk_Perc_ortho", yvar = "Topk_Perc_ortho") +
-  xlab(paste0("Bottom K=", k, " percentile ortho")) +
-  ylab(paste0("Top K=", k, " percentile ortho"))
+  xlab(expr("Bottom"[!!k] ~ "quantile orthologous")) +
+  ylab(expr("Top"[!!k] ~ "quantile orthologous"))
 
 
 ggsave(px3a, height = 7, width = 7, device = "png", dpi = 300,
@@ -515,8 +539,8 @@ px6a <-
     size = 5,
     segment.size = 0.1,
     segment.color = "grey50") +
-  xlab("Human in mouse") +
-  ylab("Mouse in human") +
+  xlab(expr("Top"[!!k] ~ "human in mouse")) +
+  ylab(expr("Top"[!!k] ~ "mouse in human")) +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         axis.title = element_text(size = 20),
@@ -529,21 +553,22 @@ ggsave(px6a, height = 7, width = 7, device = "png", dpi = 300,
 
   
 # Hist of topk counts for each species
+# TODO: Consider specific use of gghist; split calls
 
 
 px6b <- plot_grid(
   
-  plot_hist(plot_df6, stat_col = "Topk_hg_in_mm", title = check_tf) + 
+  plot_hist(plot_df6, stat_col = "Topk_hg_in_mm", title = paste("Human", check_tf), nbins = 30) + 
     geom_vline(xintercept = filter(plot_df6, Symbol == check_tf)$Topk_hg_in_mm,
-               linewidth = 1.6,
+               size = 1.6,
                col = "royalblue") +
-    xlab("Human in mouse"),
+    xlab(expr("Top"[!!k] ~ "human in mouse")),
   
-  plot_hist(plot_df6, stat_col = "Topk_mm_in_hg", title = check_tf) + 
+  plot_hist(plot_df6, stat_col = "Topk_mm_in_hg", title = paste("Mouse", str_to_title(check_tf)), nbins = 30) +
     geom_vline(xintercept = filter(plot_df6, Symbol == check_tf)$Topk_mm_in_hg, 
-               linewidth = 1.6,
+               size = 1.6,
                col = "goldenrod") +
-    xlab("Mouse in human"),
+    xlab(expr("Top"[!!k] ~ "mouse in human")),
   
   nrow = 2)
 
@@ -618,7 +643,7 @@ p9_cols <- c("#9e9ac8","#6a51a3", "#3f007d")
 p9a <- ggplot(plot_df9, aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Cutoff, colour = Cutoff)) +
   geom_bar(position = "stack", stat = "identity") +
   ylab("Count of orthologous interactions") +
-  xlab("Transcription factor") +
+  xlab("Transcription regulator") +
   ggtitle(paste0("N=", nrow(n_topk_ortho))) +
   scale_fill_manual(values = p9_cols) +
   scale_colour_manual(values = p9_cols) +
