@@ -14,7 +14,7 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-k <- 200
+k <- 1000
 min_exp <- 5
 
 # Table of assembled scRNA-seq datasets
@@ -435,13 +435,13 @@ point_plot_similarity1 <- function(summary_df,
 px_hg1 <- point_plot_similarity1(summ_tf_hg$Topk,
                                  null_df = summ_null_hg$Topk,
                                  plot_title = "Human",
-                                 ylabel = paste0("Mean Top k (k=", k, ")"))
+                                 ylabel = expr("Mean Top"[!!k]))
 
 
 px_mm1 <- point_plot_similarity1(summ_tf_mm$Topk,
                                  null_df = summ_null_mm$Topk,
                                  plot_title = "Mouse",
-                                 ylabel = paste0("Mean Top k (k=", k, ")"))
+                                 ylabel = expr("Mean Top"[!!k]))
 
 
 # Histogram of expected values for TF, null, and ribosomal
@@ -449,16 +449,17 @@ px_mm1 <- point_plot_similarity1(summ_tf_mm$Topk,
 
 hist_expected <- function(summary_df, null_df, ribo_df, xlabel) {
   
-  expected_df <- 
-    data.frame(Stat = c(summary_df[, "Mean"],
-                        null_df[, "Mean"],
-                        ribo_df[, "Mean"]),
-               Group = c(rep("TF", nrow(summary_df)),
-                         rep("Null", nrow(null_df)),
-                         rep("Ribosomal", nrow(ribo_df))))
+  expected_df <- data.frame(
+    Stat = c(summary_df[, "Mean"],
+             null_df[, "Mean"],
+             ribo_df[, "Mean"]),
+    Group = c(rep("TR", nrow(summary_df)),
+              rep("Null", nrow(null_df)),
+              rep("Ribosomal", nrow(ribo_df)))
+    )
   
   ggplot(expected_df, aes(x = Stat)) + 
-    facet_wrap(~Group, nrow = 3, scales = "free") + 
+    facet_wrap(~Group, nrow = 3, scales = "free") +
     geom_histogram(bins = 30, fill = "slategrey", colour = "slategrey") +
     xlab(xlabel) +
     ylab("Count") +
@@ -477,13 +478,13 @@ hist_expected <- function(summary_df, null_df, ribo_df, xlabel) {
 py_hg <- hist_expected(summary_df = summ_tf_hg$Topk,
                        null_df = summ_null_hg$Topk,
                        ribo_df = summ_ribo_hg$Topk,
-                       xlabel = paste0("Mean Top k (k=", k, ")"))
+                       xlabel = expr("Mean Top"[!!k]))
 
 
 py_mm <- hist_expected(summary_df = summ_tf_mm$Topk,
                        null_df = summ_null_mm$Topk,
                        ribo_df = summ_ribo_mm$Topk,
-                       xlabel = paste0("Mean Top k (k=", k, ")"))
+                       xlabel = expr("Mean Top"[!!k]))
 
 
 
@@ -497,8 +498,7 @@ pxy_mm3 <- plot_grid(px_mm1, py_mm, rel_widths = c(1, 0.5))
 pxy_both <- plot_grid(pxy_hg1, pxy_mm3, nrow = 1)
 
 
-ggsave(pxy_both, height = 11, width = 22, device = "png", dpi = 600,
-# ggsave(pxy_both, height = 10, width = 20, device = "png", dpi = 600,
+ggsave(pxy_both, height = 10, width = 22, device = "png", dpi = 600,
        filename = file.path(paste0(plot_dir, "mean_topk=", k, "_human_and_mouse.png")))
 
 
@@ -507,26 +507,26 @@ ggsave(pxy_both, height = 11, width = 22, device = "png", dpi = 600,
 pv_hg <- point_plot_similarity1(summ_tf_hg$Bottomk,
                                 null_df = summ_null_hg$Bottomk,
                                 plot_title = "Human",
-                                ylabel = paste0("Mean Bottom k (k=", k, ")"))
+                                ylabel = expr("Mean Bottom"[!!k]))
 
 
 pv_mm <- point_plot_similarity1(summ_tf_mm$Bottomk,
                                 null_df = summ_null_mm$Bottomk,
                                 plot_title = "Mouse",
-                                ylabel = paste0("Mean Bottom k (k=", k, ")"))
+                                ylabel = expr("Mean Bottom"[!!k]))
 
 
 
 pw_hg <- hist_expected(summary_df = summ_tf_hg$Bottomk,
                        null_df = summ_null_hg$Bottomk,
                        ribo_df = summ_ribo_hg$Bottomk,
-                       xlabel = paste0("Mean Bottom k (k=", k, ")"))
+                       xlabel = expr("Mean Bottom"[!!k]))
 
 
 pw_mm <- hist_expected(summary_df = summ_tf_mm$Bottomk,
                        null_df = summ_null_mm$Bottomk,
                        ribo_df = summ_ribo_mm$Bottomk,
-                       xlabel = paste0("Mean Bottom k (k=", k, ")"))
+                       xlabel = expr("Mean Bottom"[!!k]))
 
 
 
@@ -536,8 +536,7 @@ pvw_mm <- plot_grid(pv_mm, pw_mm, rel_widths = c(1, 0.5))
 pvw_both <- plot_grid(pvw_hg, pvw_mm, nrow = 1)
 
 
-ggsave(pvw_both, height = 11, width = 22, device = "png", dpi = 600,
-# ggsave(pxy_both, height = 10, width = 20, device = "png", dpi = 600,
+ggsave(pvw_both, height = 10, width = 22, device = "png", dpi = 600,
        filename = file.path(paste0(plot_dir, "mean_bottomk=", k, "_human_and_mouse.png")))
 
 
@@ -574,12 +573,12 @@ boxplot_topk_median <- function(summary_df, null_df, plot_title, ylabel) {
 pza <- boxplot_topk_median(summary_df = summ_tf_hg$Topk, 
                            null_df = summ_null_hg$Topk,
                            plot_title = "Human",
-                           ylabel = paste0("Mean Top k (k=", k, ")"))
+                           ylabel = expr("Mean Top"[!!k]))
 
 pzb <- boxplot_topk_median(summary_df = summ_tf_mm$Topk, 
                            null_df = summ_null_mm$Topk,
                            plot_title = "Mouse",
-                           ylabel = paste0("Mean Top k (k=", k, ")"))
+                           ylabel = expr("Mean Top"[!!k]))
 
 
 
@@ -595,7 +594,7 @@ plot_divergent <- function(divergent_l, null_df, k, plot_title, nlabel = 10) {
     Symbol = c(divergent_l$Below_null$Symbol, 
                rep("Null", length(null_df$Mean))),
     
-    Group = c(rep("TF", length(divergent_l$Below_null$Mean_Bottomk)),
+    Group = c(rep("TR", length(divergent_l$Below_null$Mean_Bottomk)),
               rep("Null", length(null_df$Mean)))
   )
   
@@ -633,13 +632,13 @@ plot_divergent <- function(divergent_l, null_df, k, plot_title, nlabel = 10) {
       segment.size = 0.1,
       segment.color = "grey50") +
     ggtitle(plot_title) +
-    ylab(paste0("Mean Bottom k=", k)) +
+    ylab(expr("Mean Bottom"[!!k])) +
     theme_classic() +
-    theme(axis.text = element_text(size = 20),
+    theme(axis.text = element_text(size = 25),
           axis.ticks.x = element_blank(),
           axis.title.x = element_blank(),
-          axis.title = element_text(size = 20),
-          plot.title = element_text(size = 20),
+          axis.title = element_text(size = 30),
+          plot.title = element_text(size = 30),
           plot.margin = margin(c(10, 20, 10, 10)))
 }
 
@@ -660,7 +659,7 @@ pm <- plot_grid(pma, pmb, nrow = 1)
 
 
 ggsave(pm, height = 10, width = 20, device = "png", dpi = 600,
-       filename = file.path(paste0(plot_dir, "divergent_similarity_topk=", k, "_.png")))
+       filename = file.path(paste0(plot_dir, "divergent_similarity_topk=", k, ".png")))
 
 
 
@@ -712,7 +711,7 @@ pn <- plot_grid(pna, pnb, nrow = 1)
 
 
 ggsave(pn, height = 7, width = 14, device = "png", dpi = 300,
-       filename = file.path(paste0(plot_dir, "ratio_similarity_topk=", k, "_.png")))
+       filename = file.path(paste0(plot_dir, "ratio_similarity_topk=", k, ".png")))
 
 
 # Density plot of topk intersect for select genes + null
@@ -724,85 +723,62 @@ density_topk <- function(plot_df, k, plot_title) {
     geom_density(alpha = 0.6) +
     theme_classic() +
     ylab("Density") +
-    xlab(paste0("Top k=", k)) +
+    xlab(expr("Top"[!!k])) +
     ggtitle(plot_title) +
-    scale_fill_manual(values = c("lightgrey", "#7570b3", "#d95f02", "#1b9e77")) +
+    scale_fill_manual(values = c("black", "#1b9e77", "#d95f02", "#7570b3", "lightgrey")) +
     theme(
       axis.text = element_text(size = 30),
       axis.title = element_text(size = 30),
       plot.title = element_text(size = 30),
       legend.position = c(0.75, 0.90),
-      legend.text = element_text(size = 20),
+      legend.text = element_text(size = 30),
       legend.title = element_blank(),
-      plot.margin = margin(10, 30, 10, 10))
+      plot.margin = margin(5, 20, 5, 5))
 }
 
 
 # Isolating the max TF by topk similarity, a representative TF, a ribosomal gene,
 # and a null
 
-example_tf_hg <- "NEUROD6"
-example_tf_mm <- "Neurod6"
+tf1_hg <- "NEUROD6"
+tf2_hg <- "PAX6"
+tf3_hg <- "E2F8"
+ribo1_hg <- "RPL32"
 
-max_tf_hg <- "PAX6"
-max_tf_mm <- "Pax6"
-# max_tf_hg <- as.character(slice_max(summ_sub_tf_hg$Topk, Median)$Symbol)
-# max_tf_mm <- as.character(slice_max(summ_sub_tf_mm$Topk, Median)$Symbol)
 
-example_ribo_hg <- "RPL32"
-example_ribo_mm <- "Rpl32"
+tf_l_hg <- sim_tf_hg[c(tf1_hg, tf2_hg, tf3_hg)]
+ribo_hg <- sim_ribo_hg[[ribo1_hg]]
 
-max_tf_df_hg <- sim_tf_hg[[max_tf_hg]]
-max_tf_df_mm <- sim_tf_mm[[max_tf_mm]]
-
-tf_df_hg <- sim_tf_hg[[example_tf_hg]]
-tf_df_mm <- sim_tf_mm[[example_tf_mm]]
-
-ribo_df_hg <- sim_ribo_hg[[example_ribo_hg]]
-ribo_df_mm <- sim_ribo_mm[[example_ribo_mm]]
 
 # Pull a random sample
 set.seed(154)
 rep_null_hg <- sim_null_hg[[sample(1:length(sim_null_hg), 1)]]
-rep_null_mm <- sim_null_mm[[sample(1:length(sim_null_mm), 1)]]
+
 
 
 plot_df_hg <- data.frame(
   Group = c(
-    rep("Null", nrow(rep_null_hg)),
-    rep(example_ribo_hg, nrow(ribo_df_hg)),
-    rep(max_tf_hg, nrow(max_tf_df_hg)),
-    rep(example_tf_hg, nrow(tf_df_hg))
+    rep(ribo1_hg, nrow(ribo_hg)),
+    rep(tf1_hg, nrow(tf_l_hg[[1]])),
+    rep(tf2_hg, nrow(tf_l_hg[[2]])),
+    rep(tf3_hg, nrow(tf_l_hg[[3]])),
+    rep("Null", nrow(rep_null_hg))
   ), 
-  Topk = c(rep_null_hg$Topk, ribo_df_hg$Topk, max_tf_df_hg$Topk, tf_df_hg$Topk))
+  Topk = c(ribo_hg$Topk, 
+           tf_l_hg[[1]]$Topk, 
+           tf_l_hg[[2]]$Topk, 
+           tf_l_hg[[3]]$Topk,
+           rep_null_hg$Topk)
+)
+
 
 plot_df_hg$Group <- factor(plot_df_hg$Group, levels = unique(plot_df_hg$Group))
 
-
-plot_df_mm <- data.frame(
-  Group = c(
-    rep("Null", nrow(rep_null_mm)),
-    rep(example_ribo_mm, nrow(ribo_df_mm)),
-    rep(max_tf_mm, nrow(max_tf_df_mm)),
-    rep(example_tf_mm, nrow(tf_df_mm))
-  ), 
-  Topk = c(rep_null_mm$Topk, ribo_df_mm$Topk, max_tf_df_mm$Topk, tf_df_mm$Topk))
-
-plot_df_mm$Group <- factor(plot_df_mm$Group, levels = unique(plot_df_mm$Group))
-
 p4a <- density_topk(plot_df_hg, k = k, plot_title = "Human")
-p4b <- density_topk(plot_df_mm, k = k, plot_title = "Mouse")
-p4 <- plot_grid(p4a, p4b)
 
 
-# boxplot(plot_df_hg$Topk ~ plot_df_hg$Group)
-# boxplot(plot_df_mm$Topk ~ plot_df_mm$Group)
-# boxplot(log10(plot_df_hg$Topk+1) ~ plot_df_hg$Group)
-# boxplot(log10(plot_df_mm$Topk+1) ~ plot_df_mm$Group)
-
-
-ggsave(p4, height = 9, width = 18, device = "png", dpi = 300,
-       filename = file.path(plot_dir, paste0("density_topk=", k, "_example.png")))
+ggsave(p4a, height = 8, width = 11, device = "png", dpi = 300,
+       filename = file.path(plot_dir, paste0("density_topk=", k, "_human.png")))
 
 
 
@@ -811,14 +787,14 @@ ggsave(p4, height = 9, width = 18, device = "png", dpi = 300,
 
 pxa <- qplot(ortho_rank_sim$Topk, xvar = "Mean_human", yvar = "Mean_mouse") +
   geom_smooth(method = "lm", colour = "red") +
-  xlab(paste0("Human Mean Top k=", k)) +
-  ylab(paste0("Mouse Mean Top k=", k)) +
+  xlab(expr("Human Mean Top"[!!k])) +
+  ylab(expr("Mouse Mean Top"[!!k])) +
   ggtitle("Consistency of positive profiles")
 
 pxb <- qplot(ortho_rank_sim$Bottomk, xvar = "Mean_human", yvar = "Mean_mouse") +
   geom_smooth(method = "lm", colour = "red") +
-  xlab(paste0("Human Mean Bottom k=", k)) +
-  ylab(paste0("Mouse Mean Bottom k=", k)) +
+  xlab(expr("Human Mean Top"[!!k])) +
+  ylab(expr("Mouse Mean Top"[!!k])) +
   ggtitle("Consistency of negative profiles")
 
 
