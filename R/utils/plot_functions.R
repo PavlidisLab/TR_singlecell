@@ -11,6 +11,19 @@ library(scales)
 # ------------------------------------------------------------------------------
 
 
+# Return ggobject with default config
+# TODO: how to connect to ggplot `+` call
+
+pdef <- function(p) {
+  p +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20),
+          plot.title = element_text(size = 20),
+          plot.margin = margin(c(10, 20, 10, 10)))
+}
+
+
 
 # TODO:
 
@@ -25,6 +38,24 @@ qplot <- function(df, xvar, yvar, title = NULL) {
           plot.title = element_text(size = 20),
           plot.margin = margin(c(10, 20, 10, 10)))
 }
+
+
+
+# TODO:
+
+qbox <- function(df, xvar, yvar, title = NULL) {
+  
+  ggplot(df, aes(x = !!sym(xvar), y = !!sym(yvar))) +
+    geom_boxplot(width = 0.3, fill = "slategrey") +
+    ggtitle(title) +
+    theme_classic() +
+    theme(axis.text = element_text(size = 20),
+          axis.title = element_text(size = 20),
+          plot.title = element_text(size = 20),
+          plot.margin = margin(c(10, 20, 10, 10)))
+}
+
+
 
 
 
@@ -156,6 +187,35 @@ qc_scatter <- function(meta) {
 
 
 
+# Akin to a forest plot, show the spread of cell-type correlations for a given
+# gene pair across all experiments
+# cor_l: a named list of named numeric vectors, where list names are the dataset
+# IDs, vector names are the cell types, and the values are cell type correlations
+
+all_corplot <- function(cor_l) {
+  
+  cor_df <- do.call(
+    rbind, 
+    lapply(names(cor_l), function(x) data.frame(Cor = cor_l[[x]], ID = x))
+  )
+  
+  ggplot(cor_df, aes(x = Cor, y = reorder(ID, Cor, FUN = median))) +
+    geom_point(alpha = 0.4, shape = 21, size = 2.4) +
+    geom_boxplot(outlier.shape = NA, coef = 0, fill = "slategrey") +
+    geom_vline(xintercept = 0, colour = "black") +
+    xlab("Pearson's correlation") +
+    theme_classic() +
+    theme(axis.title.y = element_blank(),
+          axis.title.x = element_text(size = 30),
+          axis.text.x = element_text(size = 25),
+          axis.text.y = element_text(size = 10),
+          plot.margin = margin(c(10, 20, 10, 10)))
+  
+}
+
+
+
+# TODO:
 
 plot_scatter <- function(df, cell_type) {
   
@@ -196,72 +256,3 @@ all_celltype_scatter <- function(mat,
   plot_l <- plot_l[!is.na(plot_l)]
   return(plot_l)
 }
-
-
-
-
-# TODO:
-
-cor_heatmap <- function(cor_vec, 
-                        col_min = -1, 
-                        col_max = 1,
-                        heatmap_pal = colorRampPalette(c("#0571b0", "white", "#ca0020"))(pal_length),
-                        display_numbers_arg = TRUE,
-                        pal_length = 100,
-                        cell_size = 50) {
-  
-  color_breaks <- seq(col_min, col_max, length.out = pal_length)
-  
-  pheatmap(t(cor_vec),
-           cluster_rows = FALSE,
-           cluster_cols = FALSE,
-           border_col = "black",
-           color = heatmap_pal,
-           breaks = color_breaks,
-           display_numbers = display_numbers_arg,
-           number_color = "black",
-           # fontsize_number = 20,
-           fontsize = 20,
-           cellwidth = cell_size,
-           cellheight = cell_size)
-}
-
-
-
-
-# Plot functions interacting with Seurat object
-# ------------------------------------------------------------------------------
-
-
-# Old, typically not working directly with Seurat object
-
-# plot_scatter <- function(sdat, 
-#                          gene1, 
-#                          gene2, 
-#                          assay = "RNA", 
-#                          slot = "data",
-#                          jitter = TRUE) {
-#   
-#   stopifnot(assay %in% Assays(sdat), slot %in% slotNames(sdat@assays[[assay]]))
-#   
-#   counts <- GetAssayData(object = sdat@assays[[assay]], slot = slot)
-#   
-#   plot_df <- data.frame(t(as.matrix(counts[c(gene1, gene2), ])))
-#   
-#   p <- ggplot(plot_df, aes(x = !!sym(gene1), y = !!sym(gene2)))
-#   
-#   if (jitter) {
-#     p <- p + geom_jitter(shape = 21, size = 2.4)
-#   } else {
-#     p <- p + geom_point(shape = 21, size = 2.4)
-#   }
-#   
-#   p <- p + 
-#     xlab(gene1) +
-#     ylab(gene2) +
-#     theme_classic() +
-#     theme(axis.title = element_text(size = 25),
-#           axis.text = element_text(size = 20))
-#   
-#   return(p)
-# }
