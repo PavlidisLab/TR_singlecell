@@ -37,10 +37,11 @@ if (!(species %in% c("human", "hg", "mouse", "mm"))) {
 
 load_data <- function(species, gene1, gene2) {
   
+  sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
+  
   if (species %in% c("human", "hg")) {
     
     pc <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
-    sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
     ids <- filter(sc_meta, Species == "Human")$ID
     
     gene1 <- str_to_upper(gene1)
@@ -53,7 +54,6 @@ load_data <- function(species, gene1, gene2) {
   } else if (species %in% c("mouse", "mm")) {
     
     pc <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
-    sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
     ids <- filter(sc_meta, Species == "Mouse")$ID
     
     gene1 <- str_to_title(gene1)
@@ -92,37 +92,7 @@ if (!file.exists(dat$cor_path)) {
 
 
 
-# Plot
-
-
-# Akin to a forest plot, show the spread of cell-type correlations for a given
-# gene pair across all experiments
-# cor_l: a named list of named numeric vectors, where list names are the dataset
-# IDs, vector names are the cell types, and the values are cell type correlations
-
-
-all_corplot <- function(cor_l) {
-  
-  cor_df <- do.call(
-    rbind, 
-    lapply(names(cor_l), function(x) data.frame(Cor = cor_l[[x]], ID = x))
-  )
-  
-  ggplot(cor_df, aes(x = Cor, y = reorder(ID, Cor, FUN = median))) +
-    geom_point(alpha = 0.4, shape = 21, size = 2.4) +
-    geom_boxplot(outlier.shape = NA, coef = 0, fill = "slategrey") +
-    geom_vline(xintercept = 0, colour = "black") +
-    xlab("Pearson's correlation") +
-    theme_classic() +
-    theme(axis.title.y = element_blank(),
-          axis.title.x = element_text(size = 30),
-          axis.text.x = element_text(size = 25),
-          axis.text.y = element_text(size = 10),
-          plot.margin = margin(c(10, 20, 10, 10)))
-  
-}
-
-
+# Plot and save
 
 p <- all_corplot(cor_l)
 
