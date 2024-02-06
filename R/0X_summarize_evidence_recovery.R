@@ -519,10 +519,10 @@ sum(targets_rank_binding$Rank_bind <= 500)
 
 # Histograms of Average versus individual AUCs
 
-p1a <- plot_hist(avi_df_hg, stat_col = paste0("AUPRC", "_percentile"), xlab = "Percentile AUPRC", title = "Human")
-p1b <- plot_hist(avi_df_hg, stat_col = paste0("AUROC", "_percentile"), xlab = "Percentile AUROC", title = "Human")
-p1c <- plot_hist(avi_df_mm, stat_col = paste0("AUPRC", "_percentile"), xlab = "Percentile AUPRC", title = "Mouse")
-p1d <- plot_hist(avi_df_mm, stat_col = paste0("AUROC", "_percentile"), xlab = "Percentile AUROC", title = "Mouse")
+p1a <- plot_hist(avi_df_hg, stat_col = paste0("AUPRC", "_percentile"), xlab = "AUPRC quantile", title = "Human")
+p1b <- plot_hist(avi_df_hg, stat_col = paste0("AUROC", "_percentile"), xlab = "AUROC quantile", title = "Human")
+p1c <- plot_hist(avi_df_mm, stat_col = paste0("AUPRC", "_percentile"), xlab = "AUPRC quantile", title = "Mouse")
+p1d <- plot_hist(avi_df_mm, stat_col = paste0("AUROC", "_percentile"), xlab = "AUROC quantile", title = "Mouse")
 
 p1 <- plot_grid(p1a, p1b, p1c, p1d, nrow = 2)
 
@@ -578,17 +578,17 @@ plot_df3_mm <- agg_df_mm
 # plot_df3_mm <- agg_df_common_mm
 
 
-p3a <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_coexpr"), xlab = "AUPRC percentile coexpression", title = "Human") 
-p3b <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_coexpr"), xlab = "AUPRC percentile coexpression", title = "Mouse")
+p3a <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_coexpr"), xlab = "AUPRC quantile coexpression", title = "Human")
+p3b <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_coexpr"), xlab = "AUPRC quantile coexpression", title = "Mouse")
 
-p3c <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_coexpr"), xlab = "AUROC percentile coexpression", title = "Human")
-p3d <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_coexpr"), xlab = "AUROC percentile coexpression", title = "Mouse")
+p3c <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_coexpr"), xlab = "AUROC quantile coexpression", title = "Human")
+p3d <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_coexpr"), xlab = "AUROC quantile coexpression", title = "Mouse")
 
-p3e <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_unibind"), xlab = "AUPRC percentile binding", title = "Human")
-p3f <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_unibind"), xlab = "AUPRC percentile binding", title = "Mouse")
+p3e <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_unibind"), xlab = "AUPRC quantile binding", title = "Human")
+p3f <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_unibind"), xlab = "AUPRC quantile binding", title = "Mouse")
 
-p3g <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_unibind"), xlab = "AUROC percentile binding", title = "Human")
-p3h <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_unibind"), xlab = "AUROC percentile binding", title = "Mouse")
+p3g <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_unibind"), xlab = "AUROC quantile binding", title = "Human")
+p3h <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_unibind"), xlab = "AUROC quantile binding", title = "Mouse")
 
 
 # TODO: fussing with fit in figure. when finalized clean up save 
@@ -662,8 +662,8 @@ p5 <-
   geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = "firebrick", colour = NA, alpha = 0.006) +
 
   geom_point(shape = 21, size = 3.4) +
-  xlab(paste0(p5_stat, " percentile coexpression")) +
-  ylab(paste0(p5_stat, " percentile binding")) +
+  xlab(paste0(p5_stat, " quantile coexpression")) +
+  ylab(paste0(p5_stat, " quantile binding")) +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         axis.title = element_text(size = 20),
@@ -707,14 +707,14 @@ p_auroc_n <- plot_grid(plotlist = pl_auroc_n, nrow = 2)
 
 
 # Vbplot of AUC percentiles for coexpression and binding aggregations 
-# TODO: better joining, function and save
+# TODO: better joining, function and save for mouse and human
 
 # plot_df6 <- filter(rev_coexpr_hg, Symbol %in% agg_df_common_hg$Symbol)
 plot_df6 <- filter(rev_coexpr_mm, Symbol %in% agg_df_common_mm$Symbol)
 
 
 plot_df6 <- data.frame(
-  Percentile = c(
+  Quantile = c(
     plot_df6$AUPRC_percentile_coexpr,
     plot_df6$AUPRC_percentile_unibind,
     plot_df6$AUPRC_percentile_reverse_coexpr,
@@ -736,11 +736,11 @@ plot_df6$Group2 <- c(rep("AUPRC", nrow(plot_df6) / 2), rep("AUROC", nrow(plot_df
 plot_df6$Group1 <- factor(plot_df6$Group1, levels = unique(plot_df6$Group1))
 
 
-p6 <- ggplot(plot_df6, aes(x = Group1, y = Percentile)) +
+p6 <- ggplot(plot_df6, aes(x = Group1, y = Quantile)) +
   facet_wrap(~Group2, scales = "free") +
   geom_violin(fill = "slategrey") +
   geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
-  ylab("AUC Percentile") +
+  ylab("AUC quantile") +
   theme_classic() +
   theme(axis.text = element_text(size = 25),
         axis.title.x = element_blank(),
