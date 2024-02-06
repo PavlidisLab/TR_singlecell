@@ -590,11 +590,26 @@ mat_to_df <- function(mat, symmetric = TRUE, value_name = NULL) {
 
 
 # Bind given gene vectors from all matrices in agg_l into its own matrix
+# TODO: remove when everything updated
 
-gene_vec_to_mat <- function(agg_l, gene) {
+# gene_vec_to_mat <- function(agg_l, gene) {
+#   genes <- rownames(agg_l[[1]])
+#   stopifnot(gene %in% genes)
+#   do.call(cbind, lapply(agg_l, function(x) x[genes, gene]))
+# }
+
+
+# For the given gene, bind its coexpression profiles for all datasets in agg_l
+# into a matrix, keeping only the profiles that are measured.
+gene_vec_to_mat <- function(agg_l, gene, msr_mat) {
+  
   genes <- rownames(agg_l[[1]])
   stopifnot(gene %in% genes)
-  do.call(cbind, lapply(agg_l, function(x) x[genes, gene]))
+  
+  gene_mat <- do.call(cbind, lapply(agg_l, function(x) x[genes, gene]))
+  gene_mat <- subset_to_measured(gene_mat, msr_mat = msr_mat, gene = gene)
+  
+  return(gene_mat)
 }
 
 
