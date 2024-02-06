@@ -361,23 +361,6 @@ query_gene_rank_cor_all <- function(agg_l,
 
 
 
-# Convert similarity matrices into a dataframe of unique pairs and values
-
-get_similarity_pair_df <- function(cor_mat, topk_mat, bottomk_mat, jacc_mat) {
-  
-  df <-
-    mat_to_df(cor_mat, symmetric = TRUE, value_name = "Scor") %>%
-    cbind(
-      Topk = mat_to_df(topk_mat, symmetric = TRUE)$Value,
-      Bottomk = mat_to_df(bottomk_mat, symmetric = TRUE)$Value,
-      Jaccard = mat_to_df(jacc_mat, symmetric = TRUE)$Value
-    )
-  
-  return(df)
-}
-
-
-
 
 # Functions using ROCR:: for measuring ranked performance
 # TODO: consider just returning both; null as df instead of nested list
