@@ -499,6 +499,43 @@ ap1_hg <- plyr::join_all(ap1_hg, by = "Symbol")
 ap1_hg <- ap1_hg[order(rowSums(select_if(ap1_hg, is.integer))), ]
 
 
+
+# Saving out objects
+# ------------------------------------------------------------------------------
+
+
+tiered_path <- "/space/scratch/amorin/R_objects/tiered_evidence_list.RDS"
+
+
+# TODO: yet another reshape of the tiered list. must reconsider
+# Get a list grouped by tier, with each element containing a single table of
+# the TR-gene pairs at that tier
+
+
+tiered_output <- lapply(tier_names, function(tier) {
+  
+  l <- lapply(names(tiered_l), function(x) {
+    tf_by_tier <- tiered_l[[x]][[tier]]
+    if (length(tf_by_tier) == 0 || nrow(tf_by_tier) == 0) return(NA)
+    data.frame(TR = x, tf_by_tier)
+  })
+  
+  l <- l[!is.na(l)]
+  do.call(rbind, l)
+})
+names(tiered_output) <- tier_names
+
+
+saveRDS(tiered_output, tiered_path)
+  
+
+
+
+
+
+
+
+
 # Plots
 # ------------------------------------------------------------------------------
 
