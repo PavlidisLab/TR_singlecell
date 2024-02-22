@@ -147,7 +147,7 @@ calc_sample_similarity <- function(agg_l,
   
   ids <- names(agg_l)
   
-  sim_l <- mclapply(1:n_sample, function(i) {
+  sim_l <- mclapply(1:n_samps, function(i) {
     
     message(paste("Sample #", i, Sys.time()))
     
@@ -242,7 +242,7 @@ save_similarity_results(
   args = list(
     agg_l = agg_ribo_hg,
     msr_mat = msr_hg,
-    genes = ribo_hg$Symbol,
+    genes = ribo_genes$Symbol_hg,
     k = k,
     ncores = ncore
   ),
@@ -258,7 +258,7 @@ save_similarity_results(
   args = list(
     agg_l = agg_ribo_mm,
     msr_mat = msr_mm,
-    genes = ribo_mm$Symbol,
+    genes = ribo_genes$Symbol_mm,
     k = k,
     ncores = ncore
   ),
@@ -268,13 +268,14 @@ save_similarity_results(
 
 # Human null
 save_similarity_results(
-  path = sim_tf_hg_path,
+  path = sim_null_hg_path,
   fun = calc_sample_similarity,
   args = list(
     agg_l = agg_tf_hg,
     msr_mat = msr_hg,
     genes = tfs_hg$Symbol,
     k = k,
+    n_samps = n_samps,
     ncores = ncore
   ),
   force_resave = force_resave
@@ -284,13 +285,14 @@ save_similarity_results(
 
 # Mouse null
 save_similarity_results(
-  path = sim_tf_mm_path,
+  path = sim_null_mm_path,
   fun = calc_sample_similarity,
   args = list(
     agg_l = agg_tf_mm,
     msr_mat = msr_mm,
     genes = tfs_mm$Symbol,
     k = k,
+    n_samps = n_samps,
     ncores = ncore
   ),
   force_resave = force_resave
