@@ -31,8 +31,8 @@ ens_mm_path <- "/space/grp/amorin/Metadata/ensembl_mouse_protein_coding_105.tsv"
 
 
 # TF gene paths
-tfs_hg_path <- "/space/grp/amorin/Metadata/human_tfs.tsv"
-tfs_mm_path <- "/space/grp/amorin/Metadata/mouse_tfs.tsv"
+tfs_hg_path <- "/space/grp/amorin/Metadata/TFs_human.tsv"
+tfs_mm_path <- "/space/grp/amorin/Metadata/TFs_mouse.tsv"
 
 
 # Ortho L/S ribo genes
