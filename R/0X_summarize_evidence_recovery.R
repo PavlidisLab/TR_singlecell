@@ -578,17 +578,17 @@ plot_df3_mm <- agg_df_mm
 # plot_df3_mm <- agg_df_common_mm
 
 
-p3a <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_coexpr"), xlab = "AUPRC quantile coexpression", title = "Human")
-p3b <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_coexpr"), xlab = "AUPRC quantile coexpression", title = "Mouse")
+p3a <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_coexpr"), xlab = "Coexpression AUPRC quantile", title = "Human")
+p3b <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_coexpr"), xlab = "Coexpression AUPRC quantile", title = "Mouse")
 
-p3c <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_coexpr"), xlab = "AUROC quantile coexpression", title = "Human")
-p3d <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_coexpr"), xlab = "AUROC quantile coexpression", title = "Mouse")
+p3c <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_coexpr"), xlab = "Coexpression AUROC quantile", title = "Human")
+p3d <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_coexpr"), xlab = "Coexpression AUROC quantile", title = "Mouse")
 
-p3e <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_unibind"), xlab = "AUPRC quantile binding", title = "Human")
-p3f <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_unibind"), xlab = "AUPRC quantile binding", title = "Mouse")
+p3e <- plot_hist(plot_df3_hg, stat_col = paste0("AUPRC_percentile_unibind"), xlab = "Binding AUPRC quantile", title = "Human")
+p3f <- plot_hist(plot_df3_mm, stat_col = paste0("AUPRC_percentile_unibind"), xlab = "Binding AUPRC quantile", title = "Mouse")
 
-p3g <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_unibind"), xlab = "AUROC quantile binding", title = "Human")
-p3h <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_unibind"), xlab = "AUROC quantile binding", title = "Mouse")
+p3g <- plot_hist(plot_df3_hg, stat_col = paste0("AUROC_percentile_unibind"), xlab = "Binding AUROC quantile", title = "Human")
+p3h <- plot_hist(plot_df3_mm, stat_col = paste0("AUROC_percentile_unibind"), xlab = "Binding AUROC quantile", title = "Mouse")
 
 
 # TODO: fussing with fit in figure. when finalized clean up save 
@@ -656,14 +656,14 @@ p5 <-
   # geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = -0.05, ymax = 0.1), fill = NA, colour = "grey") +
   # geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = NA, colour = "firebrick") +
 
-  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = 0.9, ymax = 1.05), fill = "forestgreen", colour = NA, alpha = 0.006) +
+  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = 0.9, ymax = 1.05), fill = "forestgreen", colour = NA, alpha = 0.002) +
   geom_rect(aes(xmin = -0.05, xmax = 0.1, ymin = 0.9, ymax = 1.05), fill = "grey", colour = NA, alpha = 0.006) +
   geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = -0.05, ymax = 0.1), fill = "grey", colour = NA, alpha = 0.006) +
-  geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = "firebrick", colour = NA, alpha = 0.006) +
+  geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = "firebrick", colour = NA, alpha = 0.002) +
 
   geom_point(shape = 21, size = 3.4) +
-  xlab(paste0(p5_stat, " quantile coexpression")) +
-  ylab(paste0(p5_stat, " quantile binding")) +
+  xlab(paste("Coexpression", p5_stat, "quantile")) +
+  ylab(paste("Binding", p5_stat, "quantile")) +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         axis.title = element_text(size = 20),
