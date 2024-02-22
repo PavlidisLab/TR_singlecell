@@ -188,7 +188,10 @@ write.table(ens_mm, sep = "\t", quote = FALSE, file = ens_mm_path)
 
 
 
-# 2) List of TFs http://bioinfo.life.hust.edu.cn/AnimalTFDB/
+# 2) List of TFs http://bioinfo.life.hust.edu.cn/AnimalTFDB4/#/
+# NOTE: Analysis was carried out using V3; V4 has since been released.
+# https://guolab.wchscu.cn/AnimalTFDB4_static/download/TF_list_final/Homo_sapiens_TF
+# https://guolab.wchscu.cn/AnimalTFDB4_static/download/TF_list_final/Mus_musculus_TF
 # ------------------------------------------------------------------------------
 
 
@@ -196,14 +199,30 @@ tfs_hg_url <- "http://bioinfo.life.hust.edu.cn/static/AnimalTFDB3/download/Homo_
 tfs_mm_url <- "http://bioinfo.life.hust.edu.cn/static/AnimalTFDB3/download/Mus_musculus_TF"
 
 
-if (!file.exists(tfs_hg_path)) {
-  download.file(url = tfs_hg_url, destfile = tfs_hg_path)
+download_tfs <- function(tfs_url,
+                         tfs_path,
+                         pc_path) {
+  
+  if (!file.exists(tfs_path)) {
+    
+    download.file(url = tfs_url, destfile = tfs_path)
+    
+    pc <- read.delim(pc_path, stringsAsFactors = FALSE)
+    tfs <- read.delim(tfs_path, stringsAsFactors = FALSE)
+    
+    tfs <- tfs %>% 
+      filter(Symbol %in% pc$Symbol) %>%
+      distinct(Symbol, .keep_all = TRUE)
+    
+    write.table(tfs, sep = "\t", quote = FALSE, row.names = FALSE, file = tfs_path)
+  
+  }
 }
 
 
-if (!file.exists(tfs_mm_path)) {
-  download.file(url = tfs_mm_url, destfile = tfs_mm_path)
-}
+download_tfs(tfs_url = tfs_hg_url, tfs_path = tfs_hg_path, pc_path = ens_hg_path)
+download_tfs(tfs_url = tfs_mm_url, tfs_path = tfs_mm_path, pc_path = ens_mm_path)
+
 
 
 # 3) Filter/organize high-confidence 1:1 orthologs between mouse and human.
