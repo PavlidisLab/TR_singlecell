@@ -22,6 +22,7 @@ sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 # Using human ASCL1-DLL3 as example of the all cor plot + summarized info
 # ------------------------------------------------------------------------------
 
+
 species <- "Human"
 gene1 <- "ASCL1"
 gene2 <- "DLL3"
@@ -124,10 +125,25 @@ meta_mm <- dat_mm$Meta
 ct_scatter_hg <- all_celltype_scatter(mat_hg, meta_hg, gene1_hg, gene2_hg)
 ct_scatter_mm <- all_celltype_scatter(mat_mm, meta_mm, gene1_mm, gene2_mm)
 
+# TODO: this should not be hard coded
+max_ct_hg <- ct_scatter_hg$`neural cell` +
+  ggtitle(label = "GarciaAlonso2022Human: neural cell",
+          subtitle = paste("r=0.54")) +
+  theme(plot.title = element_text(size = 18),
+        plot.subtitle = element_text(size = 18))
+
+
+max_ct_mm <- ct_scatter_mm$`GABAergic INs` +
+  ggtitle(label = "GSE200202: GABAergic INs",
+          subtitle = paste("r=0.63")) +
+  theme(plot.title = element_text(size = 18),
+        plot.subtitle = element_text(size = 18))
+
+
 
 # Exporting max cor cell types
-ggsave(ct_scatter_hg$`neural cell`, height = 6, width = 6, device = "png", dpi = 300,
+ggsave(max_ct_hg, height = 6, width = 6, device = "png", dpi = 300,
        filename = file.path(plot_dir, paste0(gene1_hg, "_", gene2_hg, "_", id_hg, "_maxcor.png")))
 
-ggsave(ct_scatter_mm$`GABAergic INs`, height = 6, width = 6, device = "png", dpi = 300,
+ggsave(max_ct_mm, height = 6, width = 6, device = "png", dpi = 300,
        filename = file.path(plot_dir, paste0(gene1_mm, "_", gene2_mm, "_", id_mm, "_maxcor.png")))
