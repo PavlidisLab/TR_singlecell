@@ -226,7 +226,7 @@ plot_scatter <- function(df, cell_type) {
     ylab(colnames(df)[2]) +
     ggtitle(cell_type) +
     theme_classic() +
-    theme(plot.title = element_text(size = 15),
+    theme(plot.title = element_text(size = 20),
           axis.title = element_text(size = 20),
           axis.text = element_text(size = 15))
 }
