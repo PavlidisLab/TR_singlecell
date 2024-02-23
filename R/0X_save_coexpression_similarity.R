@@ -9,9 +9,9 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/functions.R")
 source("R/00_config.R")
 
-k <- 100
+k <- 200
 n_samps <- 1000
-force_resave <- TRUE
+force_resave <- FALSE
 set.seed(5)
 
 # Table of assembled scRNA-seq datasets
@@ -21,16 +21,11 @@ sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 ids_hg <- filter(sc_meta, Species == "Human")$ID
 ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 
-# Protein coding genes 
+# Protein coding genes, TFs, and L/S ribo genes
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
-
-# Transcription Factors
-tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% pc_hg$Symbol)
-tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
-tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
-
-# Ribo genes
+tfs_hg <- read.delim(tfs_hg_path, stringsAsFactors = FALSE)
+tfs_mm <- read.delim(tfs_mm_path, stringsAsFactors = FALSE)
 ribo_genes <- read.delim(ribo_path, stringsAsFactors = FALSE)
 
 # Measurement matrices used for filtering when a gene was never expressed
@@ -43,18 +38,14 @@ agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = p
 agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
 agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
 
-# TODO: necessary?
-tfs_hg <- filter(tfs_hg, Symbol %in% colnames(agg_tf_hg[[1]]))
-tfs_mm <- filter(tfs_mm, Symbol %in% colnames(agg_tf_mm[[1]]))
-
-
+# Output paths of similarity lists
 # TODO: pathing in config
-sim_null_hg_path <- paste0("/space/scratch/amorin/R_objects/similarity_null_hg_k=", k, ".RDS")
-sim_null_mm_path <- paste0("/space/scratch/amorin/R_objects/similarity_null_mm_k=", k, ".RDS")
-sim_tf_hg_path <- paste0("/space/scratch/amorin/R_objects/similarity_TF_hg_k=", k, ".RDS")
-sim_tf_mm_path <- paste0("/space/scratch/amorin/R_objects/similarity_TF_mm_k=", k, ".RDS")
-sim_ribo_hg_path <- paste0("/space/scratch/amorin/R_objects/similarity_ribo_hg_k=", k, ".RDS")
-sim_ribo_mm_path <- paste0("/space/scratch/amorin/R_objects/similarity_ribo_mm_k=", k, ".RDS")
+sim_null_hg_path <- paste0("/space/scratch/amorin/R_objects/TRsc/similarity_null_hg_k=", k, ".RDS")
+sim_null_mm_path <- paste0("/space/scratch/amorin/R_objects/TRsc/similarity_null_mm_k=", k, ".RDS")
+sim_tf_hg_path <- paste0("/space/scratch/amorin/R_objects/TRsc/similarity_TF_hg_k=", k, ".RDS")
+sim_tf_mm_path <- paste0("/space/scratch/amorin/R_objects/TRsc/similarity_TF_mm_k=", k, ".RDS")
+sim_ribo_hg_path <- paste0("/space/scratch/amorin/R_objects/TRsc/similarity_ribo_hg_k=", k, ".RDS")
+sim_ribo_mm_path <- paste0("/space/scratch/amorin/R_objects/TRsc/similarity_ribo_mm_k=", k, ".RDS")
 
 
 
@@ -116,9 +107,10 @@ calc_gene_similarity <- function(agg_l,
     
     # Bind the gene profiles into a single matrix. Remove self to prevent inflated overlap
     gene_mat <- gene_vec_to_mat(agg_l, gene = x, msr_mat = msr_mat)
-    gene_mat <- gene_mat[setdiff(rownames(gene_mat), x), ]
+    gene_mat <- gene_mat[setdiff(rownames(gene_mat), x), , drop = FALSE]
 
-    if (ncol(gene_mat) < 2) {  # need more than one experiment for pairing
+    # need more than one experiment for pairing
+    if (is.null(gene_mat) || ncol(gene_mat) < 2) {  
       return(NA)
     }
     
@@ -231,7 +223,6 @@ save_similarity_results(
   ),
   force_resave = force_resave
 )
-
 
 
 
