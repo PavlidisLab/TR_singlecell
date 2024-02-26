@@ -2,7 +2,7 @@
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
-library(pheatmap)
+library(ComplexHeatmap)
 library(RColorBrewer)
 library(cowplot)
 source("R/utils/functions.R")
@@ -224,31 +224,53 @@ ggsave(p6, height = 9, width = 9, device = "png", dpi = 300,
 # that the gene was measured in the given experiment
 
 
-pheatmap(
-  msr_mat_hg,
-  col = c("black", "royalblue"),
-  cluster_rows = TRUE,
-  cluster_cols = FALSE,
-  show_rownames = FALSE,
-  show_colnames = FALSE,
-  treeheight_row = 0,
-  treeheight_col = 0,
-  legend = FALSE,
-  # height = 80,
-  # width = 80,
-  filename = file.path(plot_dir, "measurement_heatmap_human.png")
-)
+p7a <- Heatmap(msr_mat_hg,
+               col = c("black", "royalblue"),
+               heatmap_legend_param = list(
+                 title = "Measured",
+                 labels = c("TRUE", "FALSE")
+               ),
+               cluster_rows = TRUE,
+               cluster_columns = FALSE,
+               show_row_names = FALSE,
+               show_column_names = FALSE,
+               show_row_dend = FALSE,
+               show_column_dend = FALSE,
+               use_raster = FALSE)
 
 
-pheatmap(
-  msr_mat_mm,
-  col = c("black", "royalblue"),
-  cluster_rows = TRUE,
-  cluster_cols = FALSE,
-  show_rownames = FALSE,
-  show_colnames = FALSE,
-  treeheight_row = 0,
-  treeheight_col = 0,
-  legend = FALSE,
-  filename = file.path(plot_dir, "measurement_heatmap_mouse.png")
-)
+
+png(file = file.path(plot_dir, "measurement_heatmap_human.png"), 
+    res = 1200, 
+    height = 6,
+    width = 6,
+    units = "in")
+
+draw(p7a)
+dev.off()
+
+
+
+p7b <- Heatmap(msr_mat_mm,
+               col = c("black", "royalblue"),
+               heatmap_legend_param = list(
+                 title = "Measured",
+                 labels = c("TRUE", "FALSE")
+               ),
+               cluster_rows = TRUE,
+               cluster_columns = FALSE,
+               show_row_names = FALSE,
+               show_column_names = FALSE,
+               show_row_dend = FALSE,
+               show_column_dend = FALSE,
+               use_raster = FALSE)
+
+
+png(file = file.path(plot_dir, "measurement_heatmap_mouse.png"), 
+    res = 1200, 
+    height = 6,
+    width = 6,
+    units = "in")
+
+draw(p7b)
+dev.off()
