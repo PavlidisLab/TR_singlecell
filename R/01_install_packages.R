@@ -44,4 +44,4 @@ BiocManager::install("preprocessCore")
 BiocManager::install("GenomicRanges")
 BiocManager::install("limma")
 BiocManager::install("edgeR")
-
+BiocManager::install("ComplexHeatmap")
