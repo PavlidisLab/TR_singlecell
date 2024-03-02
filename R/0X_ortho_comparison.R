@@ -11,6 +11,7 @@ source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
 k <- 200
+min_exp <- 5
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -33,17 +34,6 @@ msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
 
-# Only keep ortho genes measured in both species
-
-pc_ortho <- filter(pc_ortho,
-                   Symbol_hg %in% pc_hg$Symbol &
-                   Symbol_mm %in% pc_mm$Symbol)
-
-tfs_ortho <- filter(pc_ortho, 
-                    Symbol_hg %in% names(rank_tf_hg) & 
-                    Symbol_mm %in% names(rank_tf_mm))
-
-
 # Functions
 # ------------------------------------------------------------------------------
 
@@ -59,30 +49,33 @@ join_ortho_ranks <- function(gene,
   
   gene_ortho <- filter(pc_df, Symbol_hg == gene | Symbol_mm == gene)
   
-  if (nrow(gene_ortho) != 1) stop("A one to one match was not found")
   
   df_hg <- 
     left_join(rank_hg[[gene_ortho$Symbol_hg]], 
               pc_ortho[, c("Symbol_hg", "ID")],
               by = c("Symbol" = "Symbol_hg")) %>% 
-    filter(!is.na(ID)) %>% 
+    filter(!is.na(ID)) %>%
     mutate(Rank_RSR = rank(-Avg_RSR, ties.method = "min"))
+  
   
   df_mm <- 
     left_join(rank_mm[[gene_ortho$Symbol_mm]], 
               pc_ortho[, c("Symbol_mm", "ID")], 
               by = c("Symbol" = "Symbol_mm")) %>% 
-    filter(!is.na(ID)) %>% 
+    filter(!is.na(ID)) %>%
     mutate(Rank_RSR = rank(-Avg_RSR, ties.method = "min"))
+  
   
   sim_df <- 
     left_join(df_hg, df_mm,
               by = "ID",
               suffix = c("_hg", "_mm")) %>% 
-    filter(!is.na(Avg_RSR_hg) & !is.na(Avg_RSR_mm))
+    filter((!is.na(Avg_RSR_hg) & !is.na(Avg_RSR_mm)))
   
   return(sim_df)
 }
+
+
 
 
 # Return a df of the spearman cor between human and mouse RSR rankings
@@ -146,42 +139,74 @@ calc_overlap_mat <- function(ortho_l, k, reverse = FALSE, ncores = 1) {
 
 
 # Given gene x gene overlap_mat, return a data.frame containing the count of
-# overlap for the orthologous match, as well as the percentile of the match
+# overlap for the orthologous match, as well as the quantile of the match
 # relative to all other TFs for each species
 
-gen_percentile_df <- function(overlap_mat, ncores = 1) {
+gen_quantile_df <- function(overlap_mat, ncores = 1) {
   
   genes <- intersect(rownames(overlap_mat), colnames(overlap_mat))
   
-  perc <- mclapply(genes, function(x) {
+  quant_l <- mclapply(genes, function(x) {
     
     count_overlap <- overlap_mat[x, x]
-    hg_in_mm <- overlap_mat[x, setdiff(tfs_ortho$Symbol_hg, x)]
-    mm_in_hg <- overlap_mat[setdiff(tfs_ortho$Symbol_hg, x), x]
+    hg_in_mm <- overlap_mat[x, setdiff(colnames(overlap_mat), x)]
+    mm_in_hg <- overlap_mat[setdiff(rownames(overlap_mat), x), x]
     
     data.frame(
       Symbol = x,
       Count = count_overlap,
-      Perc_hg_in_mm = ecdf(hg_in_mm)(count_overlap),
-      Perc_mm_in_hg = ecdf(mm_in_hg)(count_overlap))
+      Quant_hg_in_mm = ecdf(hg_in_mm)(count_overlap),
+      Quant_mm_in_hg = ecdf(mm_in_hg)(count_overlap))
     
   }, mc.cores = ncores)
   
-  perc_df <- do.call(rbind, perc)
-  perc_df$Perc_ortho <- rowMeans(perc_df[, c("Perc_hg_in_mm", "Perc_mm_in_hg")])
+  quant_df <- do.call(rbind, quant_l)
+  quant_df$Quant_ortho <- rowMeans(quant_df[, c("Quant_hg_in_mm", "Quant_mm_in_hg")])
   
-  return(perc_df)
+  return(quant_df)
 }
 
 
+
+# Only keeping ortho TFs measured in a minimum amount of experiments Note that
+# I also tried filtering within each TF for the same minimal amount of 
+# co-measurement and it made negligble difference, so skipping.
+# ------------------------------------------------------------------------------
+
+
+# All ortho protein coding gnenes
+pc_ortho <- filter(pc_ortho,
+                   Symbol_hg %in% pc_hg$Symbol &
+                     Symbol_mm %in% pc_mm$Symbol)
+
+# Ortho TFs where a ranking was generated
+tf_ortho <- filter(pc_ortho, 
+                    Symbol_hg %in% names(rank_tf_hg) & 
+                      Symbol_mm %in% names(rank_tf_mm))
+
+# Measurement counts for each TF
+msr_df <- data.frame(
+  Symbol = tf_ortho$Symbol_hg,
+  N_hg = rowSums(msr_hg[tf_ortho$Symbol_hg, ]),
+  N_mm = rowSums(msr_mm[tf_ortho$Symbol_mm, ])
+)
+
+
+rm_tfs <- filter(msr_df, N_hg < min_exp | N_mm < min_exp)
+
+
+tf_ortho <- filter(tf_ortho, Symbol_hg %!in% rm_tfs$Symbol)
+
+
+
 # Join the human and mouse rankings for only orthologous genes, then generate
-# the similarity objects. The human symbols used for representing ortho TFs. 
+# the similarity objects. Human symbols are used for representing ortho TFs. 
 # -------------------------------------------------------------------------------
 
 
 # List of joined human and mouse TF rankings
-rank_tf_ortho <- mclapply(tfs_ortho$Symbol_hg, join_ortho_ranks, mc.cores = ncore)
-names(rank_tf_ortho) <- tfs_ortho$Symbol_hg
+rank_tf_ortho <- mclapply(tf_ortho$Symbol_hg, join_ortho_ranks, mc.cores = ncore)
+names(rank_tf_ortho) <- tf_ortho$Symbol_hg
 
 
 # Get the Spearman's correlation of rankings between every ortho TF
@@ -193,17 +218,12 @@ topk_mat <- calc_overlap_mat(rank_tf_ortho, k = k, ncores = ncore)
 bottomk_mat <- calc_overlap_mat(rank_tf_ortho, k = k, reverse = TRUE, ncores = ncore)
 
 
-# Percentiles dfs of top/bottom k
-topk_df <- gen_percentile_df(topk_mat, ncores = ncore)
-bottomk_df <- gen_percentile_df(bottomk_mat, ncores = ncore)
+# Quantiles dfs of top/bottom k
+topk_df <- gen_quantile_df(topk_mat, ncores = ncore)
+bottomk_df <- gen_quantile_df(bottomk_mat, ncores = ncore)
 
 
-# Measurement counts for each TF
-msr_df <- data.frame(
-  Symbol = tfs_ortho$Symbol_hg,
-  N_hg = rowSums(msr_hg[tfs_ortho$Symbol_hg, ]),
-  N_mm = rowSums(msr_mm[tfs_ortho$Symbol_mm, ])
-)
+
 
 
 # Prepare and join all dfs
@@ -240,33 +260,9 @@ overlap_df <- data.frame(
 
 
 overlap_genes <- intersect(
-  slice_min(rank_tf_ortho$ASCL1, Rank_RSR_hg, n = k)$Symbol_hg,
-  slice_min(rank_tf_ortho$ASCL1, Rank_RSR_mm, n = k)$Symbol_hg
+  slice_min(rank_tf_ortho[[check_tf]], Rank_RSR_hg, n = k)$Symbol_hg,
+  slice_min(rank_tf_ortho[[check_tf]], Rank_RSR_mm, n = k)$Symbol_hg
 )
-
-
-
-# TODO: remove/replace, but schematic of topk
-pjj1 <- ggplot(overlap_df, aes(x = Topk_hg_in_mm)) + 
-  geom_density(linewidth = 2.5) + 
-  geom_vline(xintercept = filter(overlap_df, Symbol == check_tf)$Topk_hg_in_mm, colour = "royalblue", linewidth = 3) +
-  theme_nothing() + 
-  theme(text = element_blank())
-
-
-pjj2 <- ggplot(overlap_df, aes(x = Topk_mm_in_hg)) + 
-  geom_density(linewidth = 2.5) + 
-  geom_vline(xintercept = filter(overlap_df, Symbol == check_tf)$Topk_mm_in_hg, colour = "goldenrod", linewidth = 3) +
-  theme_nothing() + 
-  theme(text = element_blank())
-
-
-ggsave(pjj1, height = 7, width = 7, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "demo_topk_distn_ortho_overlap_hg.png"))
-
-
-ggsave(pjj2, height = 7, width = 7, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "demo_topk_distn_ortho_overlap_mm.png"))
 
 
 # Correlation across metrics. The elevated correlation of bottom K with
@@ -304,9 +300,9 @@ summ_topk <- summary(Filter(is.numeric, topk_df))
 
 extremes_topk <- list(
   Count0 = sum(topk_df$Topk_Count == 0),
-  Perc_hg1 = sum(topk_df$Topk_Perc_hg_in_mm == 1),
-  Perc_mm1 = sum(topk_df$Topk_Perc_mm_in_hg == 1),
-  Perc_ortho1 = sum(topk_df$Topk_Perc_ortho == 1)
+  Quant_hg1 = sum(topk_df$Topk_Quant_hg_in_mm == 1),
+  Quant_mm1 = sum(topk_df$Topk_Quant_mm_in_hg == 1),
+  Quant_ortho1 = sum(topk_df$Topk_Quant_ortho == 1)
 )
 
 
@@ -322,7 +318,7 @@ common_topk <- data.frame(
 
 # Inspect TFs with highest generic human in mouse overlap. Find that they still
 # generally are specific to their matched ortholog, despite having more common
-# overlap in general. FOXO4 exception: high Mm_in_hg, but Perc_mm_in_hg ~ 0.68
+# overlap in general. FOXO4 exception: high Mm_in_hg, but Quant_mm_in_hg ~ 0.68
 
 most_common_topk <- common_topk %>% 
   filter(Symbol %in% slice_max(., Hg_in_mm, n = 5)$Symbol | 
@@ -347,9 +343,9 @@ summ_bottomk <- summary(Filter(is.numeric, bottomk_df))
 
 extremes_bottomk <- list(
   Count0 = sum(bottomk_df$Bottomk_Count == 0),
-  Perc_hg1 = sum(bottomk_df$Bottomk_Perc_hg_in_mm == 1),
-  Perc_mm1 = sum(bottomk_df$Bottomk_Perc_mm_in_hg == 1),
-  Perc_ortho1 = sum(bottomk_df$Bottomk_Perc_ortho == 1)
+  Quant_hg1 = sum(bottomk_df$Bottomk_Quant_hg_in_mm == 1),
+  Quant_mm1 = sum(bottomk_df$Bottomk_Quant_mm_in_hg == 1),
+  Quant_ortho1 = sum(bottomk_df$Bottomk_Quant_ortho == 1)
 )
 
 
@@ -376,18 +372,18 @@ most_common_bottomk <- common_bottomk %>%
 # TFs with minimal or no overlap
 
 no_bottomk <- filter(sim_df, Bottomk_Count == 0)
-minimal_overlap <- filter(sim_df, Topk_Perc_ortho < 0.5 & Bottomk_Perc_ortho < 0.5)
+minimal_overlap <- filter(sim_df, Topk_Quant_ortho < 0.5 & Bottomk_Quant_ortho < 0.5)
 
 # TFs preserved in bottom but not top
 
-bottom_not_top <- filter(sim_df, Topk_Perc_ortho < 0.5 & Bottomk_Perc_ortho > 0.9)
+bottom_not_top <- filter(sim_df, Topk_Quant_ortho < 0.5 & Bottomk_Quant_ortho > 0.9)
 
 
 # TFs showing top specificity at top and bottom
 
 most_specific <- list(
-  Top1 = filter(sim_df, Topk_Perc_ortho == 1 & Bottomk_Perc_ortho == 1),
-  Top99 = filter(sim_df, Topk_Perc_ortho > 0.99 & Bottomk_Perc_ortho > 0.99)
+  Top1 = filter(sim_df, Topk_Quant_ortho == 1 & Bottomk_Quant_ortho == 1),
+  Top99 = filter(sim_df, Topk_Quant_ortho > 0.99 & Bottomk_Quant_ortho > 0.99)
 )
 
 
@@ -463,33 +459,33 @@ px2 <- qplot(rank_tf_ortho[[check_tf]],
              title = check_tf)
 
 
-# Scatter of overlap percentiles in mouse/human
+# Scatter of overlap quantiles in mouse/human
 
-px3a <- qplot(sim_df, xvar = "Topk_Perc_hg_in_mm", yvar = "Topk_Perc_mm_in_hg") +
+px3a <- qplot(sim_df, xvar = "Topk_Quant_hg_in_mm", yvar = "Topk_Quant_mm_in_hg") +
   xlab(expr("Top"[!!k] ~ "quantile human in mouse")) +
   ylab(expr("Top"[!!k] ~ "quantile mouse in human"))
 
 
-px3b <- qplot(sim_df, xvar = "Bottomk_Perc_mm_in_hg", yvar = "Bottomk_Perc_hg_in_mm") +
+px3b <- qplot(sim_df, xvar = "Bottomk_Quant_mm_in_hg", yvar = "Bottomk_Quant_hg_in_mm") +
   xlab(expr("Bottom"[!!k] ~ "quantile mouse in human")) +
   ylab(expr("Bottom"[!!k] ~ "quantile human in mouse"))
 
 
-px3c <- qplot(sim_df, xvar = "Bottomk_Perc_ortho", yvar = "Topk_Perc_ortho") +
+px3c <- qplot(sim_df, xvar = "Bottomk_Quant_ortho", yvar = "Topk_Quant_ortho") +
   xlab(expr("Bottom"[!!k] ~ "quantile orthologous")) +
   ylab(expr("Top"[!!k] ~ "quantile orthologous"))
 
 
 ggsave(px3a, height = 7, width = 7, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "topk_percentile_between_species.png"))
+       filename = file.path(plot_dir, "topk_quantile_between_species.png"))
 
 
 ggsave(px3b, height = 7, width = 7, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "bottomk_percentile_between_species.png"))
+       filename = file.path(plot_dir, "bottomk_quantile_between_species.png"))
 
 
 ggsave(px3c, height = 7, width = 7, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "topk_vs_bottomk_percentile_between_species.png"))
+       filename = file.path(plot_dir, "topk_vs_bottomk_quantile_between_species.png"))
 
 
 
@@ -500,10 +496,10 @@ px4b <- plot_hist(sim_df, nbins = 50, stat_col = "Bottomk_Count")
 px4c <- qplot(sim_df, xvar = "Topk_Count", yvar = "Bottomk_Count")
 
 
-# Scatter of perc ortho versus top k
+# Scatter of quant ortho versus top k
 
-px5a <- qplot(sim_df, xvar = "Topk_Count", yvar = "Topk_Perc_ortho")
-px5b <- qplot(sim_df, xvar = "Bottomk_Count", yvar = "Bottomk_Perc_ortho")
+px5a <- qplot(sim_df, xvar = "Topk_Count", yvar = "Topk_Quant_ortho")
+px5b <- qplot(sim_df, xvar = "Bottomk_Count", yvar = "Bottomk_Quant_ortho")
 
 
 # Scatter plot of topk counts between species. Label the matched TF in red,
@@ -577,6 +573,34 @@ ggsave(px6b, height = 7, width = 7, device = "png", dpi = 300,
        filename = file.path(plot_dir, paste0(check_tf, "_topk_count_hist.png")))
 
 
+
+# Minimal density plot of species overlap to use in schematic
+
+pjj1 <- ggplot(overlap_df, aes(x = Topk_hg_in_mm)) + 
+  geom_density(linewidth = 2.5) + 
+  geom_vline(xintercept = filter(overlap_df, Symbol == check_tf)$Topk_hg_in_mm, colour = "royalblue", linewidth = 3) +
+  theme_nothing() + 
+  theme(text = element_blank())
+
+
+pjj2 <- ggplot(overlap_df, aes(x = Topk_mm_in_hg)) + 
+  geom_density(linewidth = 2.5) + 
+  geom_vline(xintercept = filter(overlap_df, Symbol == check_tf)$Topk_mm_in_hg, colour = "goldenrod", linewidth = 3) +
+  theme_nothing() + 
+  theme(text = element_blank())
+
+
+ggsave(pjj1, height = 7, width = 7, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "demo_topk_distn_ortho_overlap_hg.png"))
+
+
+ggsave(pjj2, height = 7, width = 7, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "demo_topk_distn_ortho_overlap_mm.png"))
+
+
+
+
+
 # Plots of common/generic
 
 
@@ -610,12 +634,13 @@ ortho_coexpr_counts <- mclapply(rank_tf_ortho, function(x) {
   
   k200 = filter(x, Rank_RSR_hg <= 200 & Rank_RSR_mm <= 200) 
   k500 = filter(x, Rank_RSR_hg <= 500 & Rank_RSR_mm <= 500 & (!Symbol_hg %in% k200$Symbol_hg)) 
-  k1000 = filter(x, Rank_RSR_hg <= 1000 & Rank_RSR_mm <= 1000 & (!Symbol_hg %in% k500$Symbol_hg))
+  k1000 = filter(x, Rank_RSR_hg <= 1000 & Rank_RSR_mm <= 1000 & (!Symbol_hg %in% c(k200$Symbol_hg, k500$Symbol_hg)))
   
   data.frame(K200 = nrow(k200),
              K500 = nrow(k500),
              K1000 = nrow(k1000))
 }, mc.cores = ncore)
+
 
 
 n_topk_ortho <- data.frame(
@@ -631,9 +656,6 @@ plot_df9 <- pivot_longer(n_topk_ortho,
   mutate(Cutoff = factor(Cutoff, levels = c("K1000", "K500", "K200")))
 
 
-# p9_cols <- c("#f2f0f7","#cbc9e2", "#9e9ac8", "#6a51a3")
-# p9_cols <- c("#9e9ac8","#6a51a3", "#54278f", "#3f007d")
-# p9_cols <- c("#9e9ac8","#6a51a3", "#3f007d", "black")
 p9_cols <- c("#9e9ac8","#6a51a3", "#3f007d")
 
 
@@ -715,6 +737,64 @@ plot_grid(p9b1, p9b3, p9b5, ncol = 1)
 
 
 # TODO: why are K200 and K500 shaped identically
+
+
+
+plot_df9 <- pivot_longer(n_topk_ortho,
+                         cols = c("K200", "K500", "K1000"),
+                         names_to = "Cutoff",
+                         values_to = "Count") %>% 
+  mutate(Cutoff = factor(Cutoff, levels = c("K1000", "K500", "K200")))
+
+
+p9_cols <- c("#9e9ac8","#6a51a3", "#3f007d")
+
+
+# plot_df9 <- filter(plot_df9, Symbol %in% sample(names(rank_tf_ortho), 200))
+# plot_df9 <- filter(plot_df9, Cutoff != "K200")
+
+# tf_order <- plot_df9 %>%
+#   filter(Cutoff == "K200") %>% 
+#   arrange(Count)
+
+
+tf_order <- plot_df9 %>%
+  group_by(Symbol) %>% 
+  summarise(mean = mean(Count), sum = sum(Count)) %>% 
+  arrange(mean)
+
+
+plot_df9 <- mutate(plot_df9, Symbol = factor(Symbol, levels = unique(tf_order$Symbol)))
+
+
+# plot_df9 <- filter(plot_df9, Cutoff != "K200")
+
+
+ggplot(plot_df9, aes(x = Symbol, y = Count, fill = Cutoff, colour = Cutoff)) +
+# ggplot(plot_df9, aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Cutoff, colour = Cutoff)) +
+# ggplot(plot_df9, aes(x = reorder(Symbol, Count, FUN = mean), y = Count, fill = Cutoff, colour = Cutoff)) +
+  geom_bar(position = "stack", stat = "identity") +
+  ylab("Count of orthologous interactions") +
+  xlab("Transcription regulator") +
+  ggtitle(paste0("N=", nrow(n_topk_ortho))) +
+  scale_fill_manual(values = p9_cols) +
+  scale_colour_manual(values = p9_cols) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 25),
+        legend.position = c(0.85, 0.85),
+        legend.text = element_text(size = 25),
+        legend.title = element_text(size = 25),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+
+
+
 
 # Not because of reorder...
 plot_df9 <- pivot_longer(n_topk_ortho,
@@ -800,4 +880,29 @@ ggplot(plot_df9, aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill =
         legend.position = c(0.85, 0.85),
         legend.text = element_text(size = 20),
         legend.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+
+##
+
+
+
+ggplot(plot_df9, aes(x = reorder(Symbol, Count, FUN = median), y = Count, fill = Cutoff, colour = Cutoff)) +
+  geom_bar(position = "stack", stat = "identity") +
+  ylab("Count of orthologous interactions") +
+  xlab("Transcription regulator") +
+  ggtitle(paste0("N=", nrow(n_topk_ortho))) +
+  scale_fill_manual(values = p9_cols) +
+  scale_colour_manual(values = p9_cols) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 25),
+        axis.title = element_text(size = 25),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(size = 25),
+        legend.position = c(0.85, 0.85),
+        legend.text = element_text(size = 25),
+        legend.title = element_text(size = 25),
         plot.margin = margin(c(10, 20, 10, 10)))
