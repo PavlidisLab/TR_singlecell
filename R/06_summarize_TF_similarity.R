@@ -1,5 +1,5 @@
-## Summarize the similarity (by topk intersect) of TF genes with themselves
-## across datasets, and contrast to null intersects and L/S ribosomal genes
+## Summarize the similarity (focus on topk intersect) of TF profiles across 
+## datasets, and contrast to null intersects and L/S ribosomal genes
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -14,47 +14,32 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
-k <- 1000
+k <- 200
 min_exp <- 5
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 
-# IDs for scRNA-seq datasets
-ids_hg <- filter(sc_meta, Species == "Human")$ID
-ids_mm <- filter(sc_meta, Species == "Mouse")$ID
-
-# Protein coding genes
+# Protein coding genes, TFs, and L/S ribo genes
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
-pc_ortho <- read.delim(pc_ortho_path)
-
-# Transcription Factors
-tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% pc_hg$Symbol)
-tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
-tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
+pc_ortho <- read.delim(pc_ortho_path, stringsAsFactors = FALSE)
+tfs_hg <- read.delim(tfs_hg_path, stringsAsFactors = FALSE)
+tfs_mm <- read.delim(tfs_mm_path, stringsAsFactors = FALSE)
+ribo_genes <- read.delim(ribo_path, stringsAsFactors = FALSE)
 
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
-# List of paired experiment similarities for TFs
-# sim_tf_hg <- readRDS(sim_tf_hg_path)
-sim_tf_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_TF_hg_k=", k, ".RDS"))
-# sim_tf_mm <- readRDS(sim_tf_mm_path)
-sim_tf_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_TF_mm_k=", k, ".RDS"))
-
-# L/S ribo topk overlap
-# sim_ribo_hg <- readRDS(sim_ribo_hg_path)
-sim_ribo_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_ribo_hg_k=", k, ".RDS"))
-# sim_ribo_mm <- readRDS(sim_ribo_mm_path)
-sim_ribo_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_ribo_mm_k=", k, ".RDS"))
-
-# Null topk overlap
-# sim_null_hg <- readRDS(sim_null_hg_path)
-sim_null_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_null_hg_k=", k, ".RDS"))
-# sim_null_mm <- readRDS(sim_null_mm_path)
-sim_null_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_null_mm_k=", k, ".RDS"))
+# Lists of paired experiment similarities for TFs, ribo, and shuffled null
+# TODO: pathing in config
+sim_tf_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/TRsc/similarity_TF_hg_k=", k, ".RDS"))
+sim_tf_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/TRsc/similarity_TF_mm_k=", k, ".RDS"))
+sim_ribo_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/TRsc/similarity_ribo_hg_k=", k, ".RDS"))
+sim_ribo_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/TRsc/similarity_ribo_mm_k=", k, ".RDS"))
+sim_null_hg <- readRDS(paste0("/space/scratch/amorin/R_objects/TRsc/similarity_null_hg_k=", k, ".RDS"))
+sim_null_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/TRsc/similarity_null_mm_k=", k, ".RDS"))
 
 
 
@@ -62,7 +47,12 @@ sim_null_mm <- readRDS(paste0("/space/scratch/amorin/R_objects/similarity_null_m
 # ------------------------------------------------------------------------------
 
 
-# Returns a list of dataframes of summary stats for each TF's similarity
+# Assumes that each element of a sim_l is a dataframe with Row/Col (IDs) and 
+# similarity stat columns. Generates a new list where each element, one for each
+# stat, is a data.frame summarizing the given similarity stat for every element
+# sim_l
+
+# TODO: consider separate addition of add_nexp and joining TF family
 
 get_summary_df <- function(sim_l, msr_mat = NULL, add_nexp = TRUE) {
   
@@ -78,7 +68,7 @@ get_summary_df <- function(sim_l, msr_mat = NULL, add_nexp = TRUE) {
       arrange(desc(Mean)) %>% 
       mutate(Symbol = factor(Symbol, levels = unique(Symbol)))
     
-    if (add_nexp) df[["N_exp"]] <-  rowSums(msr_mat[as.character(df$Symbol), ])
+    if (add_nexp) df[["N_exp"]] <- rowSums(msr_mat[as.character(df$Symbol), ])
     
     return(df)
   })
@@ -117,19 +107,6 @@ summ_null_mm <- get_summary_df(sim_null_mm, add_nexp = FALSE)
 
 
 
-# summary(summ_ribo_hg$Topk[, "Mean"])
-# summary(summ_ribo_mm$Topk[, "Mean"])
-
-# summary(summ_null_hg$Topk[, "Mean"])
-# summary(summ_null_mm$Topk[, "Mean"])
-
-# summary(summ_sub_tf_hg$Topk[, "Mean"])
-# summary(summ_sub_tf_mm$Topk[, "Mean"])
-
-
-
-
-
 # Count of TFs whose expected similarity is greater than the expected null
 # ------------------------------------------------------------------------------
 
@@ -140,8 +117,10 @@ calc_prop_gt_null <- function(sim_l, null_l) {
   n <- nrow(sim_l[[1]])
   
   prop_l <- lapply(stats, function(x) {
-    null_mean <- mean(null_l[[x]]$Mean)
-    sum(sim_l[[x]]$Mean > null_mean) / n
+    # null_mean <- mean(null_l[[x]]$Mean)
+    null_max <- max(null_l[[x]]$Mean)
+    # sum(sim_l[[x]]$Mean > null_mean) / n
+    sum(sim_l[[x]]$Mean > null_max) / n
   })
   
   names(prop_l) <- stats
@@ -341,7 +320,7 @@ family_sim_mm <- summarize_family_similarity(summ_sub_tf_mm, tfs_mm)
 # Saving out similarity for joining with cross-species comparison
 
 out_l <- list(Human = summ_tf_hg$Topk, Mouse = summ_tf_mm$Topk)
-saveRDS(out_l, paste0("/space/scratch/amorin/R_objects/human_mouse_topk=", k, "_similarity_df.RDS"))
+saveRDS(out_l, paste0("/space/scratch/amorin/R_objects/TRsc/human_mouse_topk=", k, "_similarity_df.RDS"))
 
 
 
@@ -392,7 +371,7 @@ point_plot_similarity1 <- function(summary_df,
                                    plot_title,
                                    ylabel) {
   
-  null_expected <- mean(null_df[, "Mean"])
+  null_expected <- max(null_df[, "Mean"])
   
   topn_genes <- slice_max(summary_df, Mean, n = topn_label)$Symbol
   
@@ -459,8 +438,8 @@ hist_expected <- function(summary_df, null_df, ribo_df, xlabel) {
     )
   
   ggplot(expected_df, aes(x = Stat)) + 
-    facet_wrap(~Group, nrow = 3, scales = "free") +
-    geom_histogram(bins = 30, fill = "slategrey", colour = "slategrey") +
+    facet_wrap(~Group, nrow = 3, scales = "free_y") +
+    geom_histogram(bins = 100, fill = "slategrey", colour = "slategrey") +
     xlab(xlabel) +
     ylab("Count") +
     scale_x_continuous(breaks = scales::pretty_breaks()) +
