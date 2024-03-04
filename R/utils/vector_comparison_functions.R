@@ -10,22 +10,6 @@ library(ROCR)
 
 
 
-# TODO:
-
-subset_to_measured <- function(mat, msr_mat, gene) {
-  
-  stopifnot(gene %in% rownames(msr_mat), 
-            length(intersect(rownames(mat), rownames(msr_mat))) > 0,
-            length(intersect(colnames(mat), colnames(msr_mat))) > 0)
-  
-  msr_exps <- names(which(msr_mat[gene, ] == 1))
-  mat <- mat[, msr_exps, drop = FALSE]
-  
-  return(mat)
-}
-
-
-
 # Aggregate vectors are ranked with ties which causes clumping of NA==0 values,
 # and so selecting the top k elements may include uninformative NAs. This checks
 # for ties at the kth position, and if found, returns the first non-tied k index
@@ -144,7 +128,7 @@ colwise_cor <- function(mat, cor_method = "spearman", ncores = 1) {
 
 
 # TODO:
-# https://stackoverflow.com/a/66594545 Jaccard faster than nested loop 
+# https://stackoverflow.com/a/66594545 Jaccard; outer faster than nested loop 
 
 
 colwise_jaccard <- function(mat, k, check_k_arg = TRUE) {

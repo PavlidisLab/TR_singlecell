@@ -14,6 +14,28 @@ library(Matrix)
 '%!in%' <- function(x, y) !('%in%'(x, y))
 
 
+
+# Execute a function with provided args and save an RDS to path
+
+save_function_results <- function(path, 
+                                  fun,
+                                  args,
+                                  force_resave = FALSE) {
+  
+  if (!file.exists(path) || force_resave) {
+    
+    result <- do.call(fun, args)
+    
+    if (!is.null(result)) {
+      saveRDS(result, path)
+    }
+    
+    return(invisible(NULL))
+  }
+}
+
+
+
 # Loading data objects
 # ------------------------------------------------------------------------------
 
@@ -585,6 +607,22 @@ mat_to_df <- function(mat, symmetric = TRUE, value_name = NULL) {
   if (!is.null(value_name)) colnames(df)[colnames(df) == "Value"] <- value_name
   
   return(df)
+}
+
+
+
+# TODO:
+
+subset_to_measured <- function(mat, msr_mat, gene) {
+  
+  stopifnot(gene %in% rownames(msr_mat), 
+            length(intersect(rownames(mat), rownames(msr_mat))) > 0,
+            length(intersect(colnames(mat), colnames(msr_mat))) > 0)
+  
+  msr_exps <- names(which(msr_mat[gene, ] == 1))
+  mat <- mat[, msr_exps, drop = FALSE]
+  
+  return(mat)
 }
 
 
