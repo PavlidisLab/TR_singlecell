@@ -4,17 +4,13 @@
 
 library(tidyverse)
 library(data.table)
-library(WGCNA)
 library(parallel)
-library(pheatmap)
-library(RColorBrewer)
-library(cowplot)
 source("R/utils/vector_comparison_functions.R")
 source("R/utils/functions.R")
 source("R/00_config.R")
 
-k <- 1000
-force_resave <- FALSE
+k <- 500
+force_resave <- TRUE
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -23,20 +19,13 @@ sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 ids_hg <- filter(sc_meta, Species == "Human")$ID
 ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 
-# Protein coding genes 
+# Protein coding genes, TFs, and L/S ribo genes
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 pc_ortho <- read.delim(pc_ortho_path)
-
-# Transcription Factors
-tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% pc_hg$Symbol)
-tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
-tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
-
-# Ribosomal genes
-sribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Sribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
-lribo_hg <- read.table("/space/grp/amorin/Metadata/HGNC_human_Lribosomal_genes.csv", stringsAsFactors = FALSE, skip = 1, sep = ",", header = TRUE)
-ribo_genes <- filter(pc_ortho, Symbol_hg %in% c(sribo_hg$Approved.symbol, lribo_hg$Approved.symbol))
+tfs_hg <- read.delim(tfs_hg_path, stringsAsFactors = FALSE)
+tfs_mm <- read.delim(tfs_mm_path, stringsAsFactors = FALSE)
+ribo_genes <- read.delim(ribo_path, stringsAsFactors = FALSE)
 
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
@@ -48,19 +37,37 @@ agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = p
 agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = ribo_genes$Symbol_hg)
 agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
 
-tfs_hg <- filter(tfs_hg, Symbol %in% colnames(agg_tf_hg[[1]]))
-tfs_mm <- filter(tfs_mm, Symbol %in% colnames(agg_tf_mm[[1]]))
-
 
 # Functions
 # ------------------------------------------------------------------------------
+
+
+# Assumes gene mat is a gene x experiment matrix of a given TF's coexpression
+# profiles. Returns a logical gene x experiment matrix tracking if the given
+# TF was co-measured with each gene in each experiment
+
+gen_comsr_mat <- function(tf, gene_mat, msr_mat) {
+  
+  exps <- colnames(gene_mat)
+  genes <- rownames(gene_mat)
+  
+  tf_msr <- matrix(rep(msr_mat[tf, exps], each = length(genes)), 
+                   nrow = length(genes))
+
+  gene_msr <- msr_mat[genes, exps, drop = FALSE]
+  
+  
+  comsr <- tf_msr & gene_msr
+  
+  return(comsr)
+}
 
 
 
 # Given a gene x experiment matrix, return a count vector of the times that each
 # gene was in the top k of values for each column/experiment of gene_mat
 
-get_topk_count <- function(gene_mat, k, check_k_arg = TRUE) {
+calc_topk_count <- function(gene_mat, k, check_k_arg = TRUE) {
   
   bin_l <- lapply(1:ncol(gene_mat), function(x) {
     
@@ -75,7 +82,6 @@ get_topk_count <- function(gene_mat, k, check_k_arg = TRUE) {
   
   return(k_count)
 }
-
 
 
 
@@ -102,34 +108,27 @@ get_topk_count <- function(gene_mat, k, check_k_arg = TRUE) {
 # measurement. This imputation down weights this artifact and still preserves 
 # the bottom of the list for the most consistently negative TF-gene pairs.
 
-
-all_rank_summary <- function(agg_l, 
-                             msr_mat, 
-                             genes, 
-                             k = 1000,
-                             verbose = TRUE) {
+gen_rank_list <- function(agg_l,
+                          msr_mat,
+                          genes,
+                          k,
+                          ncores = 1,
+                          verbose = TRUE) {
   
-  summ_l <- lapply(genes, function(x) {
+  rank_l <- mclapply(genes, function(x) {
     
     if (verbose) message(paste(x, Sys.time()))
     
-    # Gene x experiment matrix for given TF, and TF itself set to NA
-    gene_mat <- gene_vec_to_mat(agg_l, x)
-    gene_mat[x, ] <- NA
-    gene_mat <- subset_to_measured(gene_mat, msr_mat = msr_mat, gene = x)
+    # Gene x experiment aggregate coexpression matrix for current TF
+    gene_mat <- gene_vec_to_mat(agg_l, gene = x, msr_mat = msr_mat)
+    gene_mat[x, ] <- NA  # prevent self cor from being #1 rank
     
     if (length(gene_mat) == 0) {
       return(NA)
     }
 
-    # Logical matrix of whether TF-genes were co-measured in an experiment
-    comsr <- lapply(rownames(gene_mat), function(y) {
-      msr_mat[x, colnames(gene_mat)] & msr_mat[y, colnames(gene_mat)]
-    })
-    comsr <- do.call(rbind, comsr)
-    rownames(comsr) <- rownames(gene_mat)
-    
-    # Count of times the TF-gene were co-measured across experiments
+    # Get count of times each gene was co-measured with the TF
+    comsr <- gen_comsr_mat(x, gene_mat, msr_mat)
     comsr_sum <- rowSums(comsr)
     
     # When a TF-gene was not co-measured, impute to the median NA
@@ -144,25 +143,81 @@ all_rank_summary <- function(agg_l,
     avg_rsr <- rowMeans(gene_mat, na.rm = TRUE)
     rank_rsr <- rank(-avg_rsr, ties.method = "min")
 
-    # Count/proportion of times a gene was in the top K across experiments  
-    topk_count <- get_topk_count(gene_mat, k)
-    topk_prop <- round(topk_count / comsr_sum, 3)
+    # Count of times a gene was in the top K across experiments  
+    topk_count <- calc_topk_count(gene_mat, k)
+    topk_var <- paste0("Top", k, "_count")
     
     # Organize summary df
-    data.frame(
+    rank_df <- data.frame(
       Symbol = rownames(gene_mat),
+      Rank_aggr_coexpr = rank_rsr,
       N_comeasured = comsr_sum,
-      Avg_RSR = avg_rsr,
-      Rank_RSR = rank_rsr,
-      Best_rank = best_rank,
-      Topk_count = topk_count,
-      Topk_proportion = topk_prop)
+      Avg_aggr_coexpr = avg_rsr,
+      Rank_single_best = best_rank,
+      Topk_count = topk_count
+    )
     
+    colnames(rank_df)[colnames(rank_df) == "Topk_count"] <- paste0("Top", k, "_count")
+    
+    return(rank_df)
   })
   
-  names(summ_l) <- genes
+  names(rank_l) <- genes
+  rank_l <- rank_l[!is.na(rank_l)]
   
-  return(summ_l)
+  return(rank_l)
+}
+
+
+
+# Gene is assumed to be an ortho gene found in pc_df. Retrieve and join the 
+# corresponding gene rank dfs from the mouse and human rank lists. Re-rank
+# average RSR just using ortho genes
+
+join_ortho_ranks <- function(pc_ortho,
+                             rank_hg,
+                             rank_mm,
+                             ncores = 1) {
+  
+  # Ortho TFs with rankings in both species
+  tf_ortho <- filter(pc_ortho, 
+                     Symbol_hg %in% names(rank_tf_hg) & 
+                     Symbol_mm %in% names(rank_tf_mm))
+  
+  # Create a list of ranked dfs for each ortho TF
+  rank_ortho <- mclapply(tf_ortho$Symbol_hg, function(x) {
+    
+    gene_ortho <- filter(pc_ortho, Symbol_hg == x | Symbol_mm == x)
+    
+    # Prepare species specific rankings, re-ranking after filtering for ortho
+    df_hg <-
+      left_join(rank_hg[[gene_ortho$Symbol_hg]],
+                pc_ortho[, c("Symbol_hg", "ID")],
+                by = c("Symbol" = "Symbol_hg")) %>%
+      filter(!is.na(ID)) %>%
+      mutate(Rank_RSR = rank(-Avg_RSR, ties.method = "min"))
+  
+    df_mm <-
+      left_join(rank_mm[[gene_ortho$Symbol_mm]],
+                pc_ortho[, c("Symbol_mm", "ID")],
+                by = c("Symbol" = "Symbol_mm")) %>%
+      filter(!is.na(ID)) %>%
+      mutate(Rank_RSR = rank(-Avg_RSR, ties.method = "min"))
+  
+    # Join and create a rank that combines each species ranking
+    df_ortho <-
+      left_join(df_hg, df_mm,
+                by = "ID",
+                suffix = c("_hg", "_mm")) %>%
+      filter((!is.na(Avg_RSR_hg) & !is.na(Avg_RSR_mm))) %>% 
+      dplyr::select(-c(ID)) %>% 
+      mutate(Rank_aggr_coexpr_ortho = rank(Rank_RSR_hg * Rank_RSR_mm)) %>% 
+      relocate(Symbol_hg, Symbol_mm, Rank_aggr_coexpr_ortho, Rank_RSR_hg, Rank_RSR_mm)
+      
+    })
+    
+    names(rank_ortho) <- tf_ortho$Symbol_hg
+    return(rank_ortho)
 }
 
 
@@ -171,61 +226,83 @@ all_rank_summary <- function(agg_l,
 # ------------------------------------------------------------------------------
 
 
-
-if (!file.exists(rank_tf_hg_path) || force_resave) {
-  
-  tf_hg <- all_rank_summary(agg_l = agg_tf_hg,
-                            msr_mat = msr_hg,
-                            genes = tfs_hg$Symbol,
-                            k = k)
-  
-  tf_hg <- tf_hg[!is.na(tf_hg)]
-  
-  saveRDS(tf_hg, rank_tf_hg_path)
-
-}
-
-
-
-if (!file.exists(rank_tf_mm_path) || force_resave) {
-  
-  tf_mm <- all_rank_summary(agg_l = agg_tf_mm,
-                            msr_mat = msr_mm,
-                            genes = tfs_mm$Symbol,
-                            k = k)
-  
-  tf_mm <- tf_mm[!is.na(tf_mm)]
-  
-  saveRDS(tf_mm, rank_tf_mm_path)
-  
-}
+# Human TFs
+save_function_results(
+  path = rank_tf_hg_path,
+  fun = gen_rank_list,
+  args = list(
+    agg_l = agg_tf_hg,
+    msr_mat = msr_hg,
+    genes = tfs_hg$Symbol,
+    k = k,
+    ncores = ncore
+  ),
+  force_resave = force_resave
+)
 
 
 
-if (!file.exists(rank_ribo_hg_path) || force_resave) {
-  
-  ribo_hg <- all_rank_summary(agg_l = agg_ribo_hg, 
-                              msr_mat = msr_hg, 
-                              genes = ribo_genes$Symbol_hg,
-                              k = k)
-  
-  ribo_hg <- ribo_hg[!is.na(ribo_hg)]
-  
-  saveRDS(ribo_hg, rank_ribo_hg_path)
-  
-}
+
+# Mouse TFs
+save_function_results(
+  path = rank_tf_mm_path,
+  fun = gen_rank_list,
+  args = list(
+    agg_l = agg_tf_mm,
+    msr_mat = msr_mm,
+    genes = tfs_mm$Symbol,
+    k = k,
+    ncores = ncore
+  ),
+  force_resave = force_resave
+)
 
 
 
-if (!file.exists(rank_ribo_mm_path) || force_resave) {
-  
-  ribo_mm <- all_rank_summary(agg_l = agg_ribo_mm, 
-                              msr_mat = msr_mm, 
-                              genes = ribo_genes$Symbol_mm,
-                              k = k)
-  
-  ribo_mm <- ribo_mm[!is.na(ribo_mm)]
-  
-  saveRDS(ribo_mm, rank_ribo_mm_path)
-  
-}
+# Join ortho
+rank_tf_hg <- readRDS(rank_tf_hg_path)
+rank_tf_mm <- readRDS(rank_tf_mm_path)
+
+save_function_results(
+  path = rank_tf_ortho_path,
+  fun = join_ortho_ranks,
+  args = list(
+    pc_ortho = pc_ortho,
+    rank_hg = rank_tf_hg,
+    rank_mm = rank_tf_mm,
+    ncores = ncore
+  ),
+  force_resave = force_resave
+)
+
+
+
+# Human ribo
+save_function_results(
+  path = rank_ribo_hg_path,
+  fun = gen_rank_list,
+  args = list(
+    agg_l = agg_ribo_hg,
+    msr_mat = msr_hg,
+    genes = ribo_genes$Symbol_hg,
+    k = k,
+    ncores = ncore
+  ),
+  force_resave = force_resave
+)
+
+
+
+# Mouse ribo
+save_function_results(
+  path = rank_ribo_mm_path,
+  fun = gen_rank_list,
+  args = list(
+    agg_l = agg_ribo_mm,
+    msr_mat = msr_mm,
+    genes = ribo_genes$Symbol_mm,
+    k = k,
+    ncores = ncore
+  ),
+  force_resave = force_resave
+)
