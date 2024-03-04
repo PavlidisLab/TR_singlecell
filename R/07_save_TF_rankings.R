@@ -158,6 +158,7 @@ gen_rank_list <- function(agg_l,
     )
     
     colnames(rank_df)[colnames(rank_df) == "Topk_count"] <- paste0("Top", k, "_count")
+    rank_df <- arrange(rank_df, Rank_aggr_coexpr)
     
     return(rank_df)
   })
@@ -212,6 +213,7 @@ join_ortho_ranks <- function(pc_ortho,
       filter((!is.na(Avg_RSR_hg) & !is.na(Avg_RSR_mm))) %>% 
       dplyr::select(-c(ID)) %>% 
       mutate(Rank_aggr_coexpr_ortho = rank(Rank_RSR_hg * Rank_RSR_mm)) %>% 
+      arrange(Rank_aggr_coexpr_ortho) %>% 
       relocate(Symbol_hg, Symbol_mm, Rank_aggr_coexpr_ortho, Rank_RSR_hg, Rank_RSR_mm)
       
     })
