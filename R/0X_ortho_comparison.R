@@ -43,46 +43,6 @@ topk_l <- readRDS(paste0("/space/scratch/amorin/R_objects/human_mouse_topk=", k,
 # ------------------------------------------------------------------------------
 
 
-# Gene is assumed to be an ortho gene found in pc_df. Retrieve and join the 
-# corresponding gene rank dfs from the mouse and human rank lists. Re-rank
-# average RSR just using ortho genes
-
-join_ortho_ranks <- function(gene,
-                             pc_df = pc_ortho,
-                             rank_hg = rank_tf_hg,
-                             rank_mm = rank_tf_mm) {
-  
-  gene_ortho <- filter(pc_df, Symbol_hg == gene | Symbol_mm == gene)
-  
-  
-  df_hg <- 
-    left_join(rank_hg[[gene_ortho$Symbol_hg]], 
-              pc_ortho[, c("Symbol_hg", "ID")],
-              by = c("Symbol" = "Symbol_hg")) %>% 
-    filter(!is.na(ID)) %>%
-    mutate(Rank_RSR = rank(-Avg_RSR, ties.method = "min"))
-  
-  
-  df_mm <- 
-    left_join(rank_mm[[gene_ortho$Symbol_mm]], 
-              pc_ortho[, c("Symbol_mm", "ID")], 
-              by = c("Symbol" = "Symbol_mm")) %>% 
-    filter(!is.na(ID)) %>%
-    mutate(Rank_RSR = rank(-Avg_RSR, ties.method = "min"))
-  
-  
-  sim_df <- 
-    left_join(df_hg, df_mm,
-              by = "ID",
-              suffix = c("_hg", "_mm")) %>% 
-    filter((!is.na(Avg_RSR_hg) & !is.na(Avg_RSR_mm)))
-  
-  return(sim_df)
-}
-
-
-
-
 # Return a df of the spearman cor between human and mouse RSR rankings
 
 calc_ortho_cor <- function(ortho_rank_l, ncores = 1) {
@@ -252,11 +212,6 @@ tf_ortho <- filter(tf_ortho, Symbol_hg %!in% rm_tfs$Symbol)
 # Join the human and mouse rankings for only orthologous genes, then generate
 # the similarity objects. Human symbols are used for representing ortho TFs. 
 # ------------------------------------------------------------------------------
-
-
-# List of joined human and mouse TF rankings
-rank_tf_ortho <- mclapply(tf_ortho$Symbol_hg, join_ortho_ranks, mc.cores = ncore)
-names(rank_tf_ortho) <- tf_ortho$Symbol_hg
 
 
 # Get the Spearman's correlation of rankings between every ortho TF
