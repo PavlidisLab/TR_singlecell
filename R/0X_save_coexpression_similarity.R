@@ -11,7 +11,7 @@ source("R/00_config.R")
 
 k <- 200
 n_samps <- 1000
-force_resave <- FALSE
+force_resave <- TRUE
 set.seed(5)
 
 # Table of assembled scRNA-seq datasets
@@ -130,12 +130,12 @@ calc_gene_similarity <- function(agg_l,
 
 # This samples from the input genes to generate null similarities 
 
-calc_sample_similarity <- function(agg_l,
-                                   msr_mat,
-                                   genes,
-                                   k, 
-                                   n_samps,
-                                   ncores = 1) {
+calc_null_similarity <- function(agg_l,
+                                 msr_mat,
+                                 genes,
+                                 k,
+                                 n_samps,
+                                 ncores = 1) {
   
   ids <- names(agg_l)
   
@@ -167,35 +167,13 @@ calc_sample_similarity <- function(agg_l,
 
 
 
-
-# Handle saving RDS output of either similarity function if it does not exist 
-
-save_similarity_results <- function(path, 
-                                    fun, 
-                                    args, 
-                                    force_resave = FALSE) {
-  
-  if (!file.exists(path) || force_resave) {
-    
-    result <- do.call(fun, args)
-    
-    if (!is.null(result)) {
-      saveRDS(result, path)
-    }
-    
-    return(invisible(NULL))
-  }
-}
-
-
-
 # Run and save
 # ------------------------------------------------------------------------------
 
 
 
 # Human TFs
-save_similarity_results(
+save_function_results(
   path = sim_tf_hg_path,
   fun = calc_gene_similarity,
   args = list(
@@ -211,7 +189,7 @@ save_similarity_results(
 
 
 # Mouse TFs
-save_similarity_results(
+save_function_results(
   path = sim_tf_mm_path,
   fun = calc_gene_similarity,
   args = list(
@@ -227,7 +205,7 @@ save_similarity_results(
 
 
 # Human ribo
-save_similarity_results(
+save_function_results(
   path = sim_ribo_hg_path,
   fun = calc_gene_similarity,
   args = list(
@@ -243,7 +221,7 @@ save_similarity_results(
 
 
 # Mouse ribo
-save_similarity_results(
+save_function_results(
   path = sim_ribo_mm_path,
   fun = calc_gene_similarity,
   args = list(
@@ -258,9 +236,9 @@ save_similarity_results(
 
 
 # Human null
-save_similarity_results(
+save_function_results(
   path = sim_null_hg_path,
-  fun = calc_sample_similarity,
+  fun = calc_null_similarity,
   args = list(
     agg_l = agg_tf_hg,
     msr_mat = msr_hg,
@@ -275,9 +253,9 @@ save_similarity_results(
 
 
 # Mouse null
-save_similarity_results(
+save_function_results(
   path = sim_null_mm_path,
-  fun = calc_sample_similarity,
+  fun = calc_null_similarity,
   args = list(
     agg_l = agg_tf_mm,
     msr_mat = msr_mm,
