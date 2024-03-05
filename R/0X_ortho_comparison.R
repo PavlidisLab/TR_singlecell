@@ -25,9 +25,8 @@ pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 pc_ortho <- read.delim(pc_ortho_path)
 
-# Saved list RDS of the ranks
-rank_tf_hg <- readRDS(rank_tf_hg_path)
-rank_tf_mm <- readRDS(rank_tf_mm_path)
+# Saved list RDS of the ortho ranks
+rank_tf_ortho <- readRDS(rank_tf_ortho_path)
 
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
@@ -50,7 +49,7 @@ calc_ortho_cor <- function(ortho_rank_l, ncores = 1) {
   symbols <- names(ortho_rank_l)
   
   cor_l <- mclapply(ortho_rank_l, function(x) {
-    cor(x$Avg_RSR_hg, x$Avg_RSR_mm, method = "spearman")
+    cor(x$Avg_aggr_coexpr_hg, x$Avg_aggr_coexpr_mm, method = "spearman")
   }, mc.cores = ncores)
   
   cor_df <- data.frame(Symbol = symbols, Cor = unlist(cor_l))
@@ -62,7 +61,9 @@ calc_ortho_cor <- function(ortho_rank_l, ncores = 1) {
 # Flip sign of average RSR (rank metric) to prioritize bottom of ranks
 
 reverse_ranks <- function(df) {
-  mutate(df, Avg_RSR_hg = -Avg_RSR_hg, Avg_RSR_mm = -Avg_RSR_mm)
+  mutate(df, 
+         Avg_aggr_coexpr_hg = -Avg_aggr_coexpr_hg, 
+         Avg_aggr_coexpr_mm = -Avg_aggr_coexpr_mm)
 }
 
 
@@ -83,8 +84,8 @@ calc_overlap_mat <- function(ortho_l, k, reverse = FALSE, ncores = 1) {
   # Get list of topK genes (char vec) for each gene and species
   topk_l <- mclapply(ortho_l, function(x) {
     list(
-      Human = slice_max(x, Avg_RSR_hg, n = k)$Symbol_hg,
-      Mouse = slice_max(x, Avg_RSR_mm, n = k)$Symbol_hg
+      Human = slice_max(x, Avg_aggr_coexpr_hg, n = k)$Symbol_hg,
+      Mouse = slice_max(x, Avg_aggr_coexpr_mm, n = k)$Symbol_hg
     )
   }, mc.cores = ncores)
   names(topk_l) <- genes
@@ -143,8 +144,8 @@ calc_null_overlap <- function(ortho_l, k, reverse = FALSE, ncores = 1) {
   # Helper to get size of overlap between mouse and human for sampled TFs
   calc_topk <- function(k, sample_tfs) {
     topk_intersect(
-      slice_max(ortho_l[[sample_tfs[1]]], Avg_RSR_hg, n = k)$Symbol_hg,
-      slice_max(ortho_l[[sample_tfs[2]]], Avg_RSR_mm, n = k)$Symbol_hg
+      slice_max(ortho_l[[sample_tfs[1]]], Avg_aggr_coexpr_hg, n = k)$Symbol_hg,
+      slice_max(ortho_l[[sample_tfs[2]]], Avg_aggr_coexpr_mm, n = k)$Symbol_hg
     )
   }
   
@@ -163,13 +164,15 @@ calc_null_overlap <- function(ortho_l, k, reverse = FALSE, ncores = 1) {
 
 calc_null_cor <- function(ortho_l, ncores = 1) {
   
+  # Keep same gene order
+  genes <- ortho_l[[1]]$Symbol_hg
+  
   null_cor <- mclapply(1:1000, function(x) {
     
     sample_tfs <- sample(names(ortho_l), 2, replace = FALSE)
-    
-    cor(ortho_l[[sample_tfs[1]]]$Avg_RSR_hg, 
-        ortho_l[[sample_tfs[2]]]$Avg_RSR_mm,
-        method = "spearman")
+    tf1 <- arrange(ortho_l[[sample_tfs[1]]], match(Symbol_hg, genes)) 
+    tf2 <- arrange(ortho_l[[sample_tfs[2]]], match(Symbol_hg, genes)) 
+    cor(tf1$Rank_aggr_coexpr_hg, tf2$Rank_aggr_coexpr_mm, method = "spearman")
     
   }, mc.cores = ncore)
   
@@ -180,37 +183,33 @@ calc_null_cor <- function(ortho_l, ncores = 1) {
 
 # Only keeping ortho TFs measured in a minimum amount of experiments Note that
 # I also tried filtering within each TF for the same minimal amount of 
-# co-measurement and it made negligble difference, so skipping.
+# co-measurement and it made a negligible difference, so skipping.
 # ------------------------------------------------------------------------------
 
 
-# All ortho protein coding gnenes
+# All ortho protein coding genes
 pc_ortho <- filter(pc_ortho,
                    Symbol_hg %in% pc_hg$Symbol &
                      Symbol_mm %in% pc_mm$Symbol)
 
 # Ortho TFs where a ranking was generated
-tf_ortho <- filter(pc_ortho, 
-                    Symbol_hg %in% names(rank_tf_hg) & 
-                      Symbol_mm %in% names(rank_tf_mm))
+tf_ortho <- filter(pc_ortho, Symbol_hg %in% names(rank_tf_ortho))
 
 # Measurement counts for each TF
 msr_df <- data.frame(
   Symbol = tf_ortho$Symbol_hg,
   N_hg = rowSums(msr_hg[tf_ortho$Symbol_hg, ]),
-  N_mm = rowSums(msr_mm[tf_ortho$Symbol_mm, ])
-)
+  N_mm = rowSums(msr_mm[tf_ortho$Symbol_mm, ]))
 
 
+# Remove TFs that were rarely measured (problems of small n)
 rm_tfs <- filter(msr_df, N_hg < min_exp | N_mm < min_exp)
-
-
+rank_tf_ortho <- rank_tf_ortho[setdiff(names(rank_tf_ortho), rm_tfs$Symbol)]
 tf_ortho <- filter(tf_ortho, Symbol_hg %!in% rm_tfs$Symbol)
 
 
 
-# Join the human and mouse rankings for only orthologous genes, then generate
-# the similarity objects. Human symbols are used for representing ortho TFs. 
+# Generate the similarity objects. Human symbols used for representing ortho TFs 
 # ------------------------------------------------------------------------------
 
 
@@ -270,10 +269,8 @@ check_tf <- "ASCL1"
 
 
 rank_df <- rank_tf_ortho[[check_tf]] %>% 
-  mutate(Diff_rank = Rank_RSR_hg - Rank_RSR_mm,
-         Add = Avg_RSR_hg + Avg_RSR_mm,
-         RP = rank(Rank_RSR_hg * Rank_RSR_mm)) %>% 
-  relocate(Symbol_hg, RP, Rank_RSR_hg, Rank_RSR_mm, Add, Diff_rank, Avg_RSR_hg, Avg_RSR_mm)
+  mutate(Diff_rank = Rank_aggr_coexpr_hg - Rank_aggr_coexpr_mm,
+         Add = Avg_aggr_coexpr_hg + Avg_aggr_coexpr_mm)
 
 
 # Inspect check TFs top and bottom k overlap across all TFs
@@ -288,8 +285,8 @@ overlap_df <- data.frame(
 
 # Genes in the topk for both species for check TF
 overlap_genes <- intersect(
-  slice_min(rank_tf_ortho[[check_tf]], Rank_RSR_hg, n = k)$Symbol_hg,
-  slice_min(rank_tf_ortho[[check_tf]], Rank_RSR_mm, n = k)$Symbol_hg
+  slice_min(rank_tf_ortho[[check_tf]], Rank_aggr_coexpr_hg, n = k)$Symbol_hg,
+  slice_min(rank_tf_ortho[[check_tf]], Rank_aggr_coexpr_mm, n = k)$Symbol_hg
 )
 
 
@@ -411,7 +408,8 @@ p1 <- plot_hist(sim_df,
                 stat_col = "Cor",
                 xlab = "Spearman's correlation",
                 title = paste0("n=", nrow(sim_df), " orthologous TFs")) +
-  # geom_vline(xintercept = median(null_cor), linewidth = 1.4, col = "black") +
+  geom_vline(xintercept = median(null_cor), linewidth = 1.4, col = "red") +
+  geom_vline(xintercept = median(sim_df$Cor), linewidth = 1.4, col = "black") +
   xlim(c(-0.4, 1))
 
 
@@ -422,8 +420,8 @@ ggsave(p1, height = 5, width = 7, device = "png", dpi = 300,
 # Scatter of mouse versus human RSR for a given TF
 
 p2 <- qplot(rank_tf_ortho[[check_tf]],
-            xvar = "Avg_RSR_hg",
-            yvar = "Avg_RSR_mm",
+            xvar = "Avg_aggr_coexpr_hg",
+            yvar = "Avg_aggr_coexpr_mm",
             title = check_tf)
 
 
