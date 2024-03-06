@@ -31,6 +31,10 @@ ribo_genes <- read.delim(ribo_path, stringsAsFactors = FALSE)
 msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
+# Comeasure matrices tracking count of experiments gene pairs were comeasured
+comsr_hg <- readRDS(comsr_mat_hg_path)
+comsr_mm <- readRDS(comsr_mat_mm_path)
+
 # Loading the subset TF and ribosomal aggregate matrices
 agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
 agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
@@ -40,28 +44,6 @@ agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes
 
 # Functions
 # ------------------------------------------------------------------------------
-
-
-# Assumes gene mat is a gene x experiment matrix of a given TF's coexpression
-# profiles. Returns a logical gene x experiment matrix tracking if the given
-# TF was co-measured with each gene in each experiment
-
-gen_comsr_mat <- function(tf, gene_mat, msr_mat) {
-  
-  exps <- colnames(gene_mat)
-  genes <- rownames(gene_mat)
-  
-  tf_msr <- matrix(rep(msr_mat[tf, exps], each = length(genes)), 
-                   nrow = length(genes))
-
-  gene_msr <- msr_mat[genes, exps, drop = FALSE]
-  
-  
-  comsr <- tf_msr & gene_msr
-  
-  return(comsr)
-}
-
 
 
 # Given a gene x experiment matrix, return a count vector of the times that each
@@ -87,6 +69,7 @@ calc_topk_count <- function(gene_mat, k, check_k_arg = TRUE) {
 
 # agg_l: list of gene x TF RSR matrices for each experiment
 # msr_mat: gene x experiment binary matrix indicating gene measurement
+# comsr_mat: gene x gene matrix count gene pair comeasurement across experiments
 # genes: the list of genes (assumed TFs) to generate a summary df for
 # k: integer used as the index for the cut-off of the "top" of each list
 # verbose: declare time for each calculated
@@ -110,6 +93,7 @@ calc_topk_count <- function(gene_mat, k, check_k_arg = TRUE) {
 
 gen_rank_list <- function(agg_l,
                           msr_mat,
+                          comsr_mat,
                           genes,
                           k,
                           ncores = 1,
@@ -127,21 +111,21 @@ gen_rank_list <- function(agg_l,
       return(NA)
     }
 
-    # Get count of times each gene was co-measured with the TF
-    comsr <- gen_comsr_mat(x, gene_mat, msr_mat)
-    comsr_sum <- rowSums(comsr)
-    
     # When a TF-gene was not co-measured, impute to the median NA
+    msr_mat <- msr_mat[, colnames(gene_mat)]
     med <- median(gene_mat, na.rm = TRUE)
-    gene_mat[comsr == FALSE] <- med
-
+    gene_mat[msr_mat == 0] <- med
+    
+    # Get count of times each gene was co-measured with the TF
+    comsr_sum <- comsr_mat[x, rownames(gene_mat)]
+    
     # Get a gene's ranking within each experiment and select the best
     colrank_gene_mat <- colrank_mat(gene_mat, ties_arg = "min")
     best_rank <- apply(colrank_gene_mat, 1, min)
     
-    # Average the RSR and rank (higher RSR = more important = lower/better rank)
-    avg_rsr <- rowMeans(gene_mat, na.rm = TRUE)
-    rank_rsr <- rank(-avg_rsr, ties.method = "min")
+    # Average the aggr coexpr and rank (lower rank = positive correlation)
+    avg_aggr_coexpr <- rowMeans(gene_mat, na.rm = TRUE)
+    rank_aggr_coexpr <- rank(-avg_aggr_coexpr, ties.method = "min")
 
     # Count of times a gene was in the top K across experiments  
     topk_count <- calc_topk_count(gene_mat, k)
@@ -150,16 +134,21 @@ gen_rank_list <- function(agg_l,
     # Organize summary df
     rank_df <- data.frame(
       Symbol = rownames(gene_mat),
-      Rank_aggr_coexpr = rank_rsr,
+      Rank_aggr_coexpr = rank_aggr_coexpr,
       N_comeasured = comsr_sum,
-      Avg_aggr_coexpr = avg_rsr,
+      Avg_aggr_coexpr = avg_aggr_coexpr,
       Rank_single_best = best_rank,
       Topk_count = topk_count
     )
     
-    colnames(rank_df)[colnames(rank_df) == "Topk_count"] <- paste0("Top", k, "_count")
-    rank_df <- arrange(rank_df, Rank_aggr_coexpr)
+    # Make K explicit, order by rank, and set TF stats other than msr to NA
+    rank_df <- rank_df %>% 
+      dplyr::rename(!!(paste0("Top", k, "_count")) := Topk_count) %>% 
+      arrange(Rank_aggr_coexpr) 
     
+    rank_df[rank_df$Symbol == x, 
+            setdiff(colnames(rank_df), c("Symbol", "N_comeasured"))] <- NA
+      
     return(rank_df)
   })
   
@@ -196,30 +185,45 @@ join_ortho_ranks <- function(pc_ortho,
                 pc_ortho[, c("Symbol_hg", "ID")],
                 by = c("Symbol" = "Symbol_hg")) %>%
       filter(!is.na(ID)) %>%
-      mutate(Rank_RSR = rank(-Avg_RSR, ties.method = "min"))
+      mutate(
+        Rank_aggr_coexpr = rank(-Avg_aggr_coexpr, 
+                                ties.method = "min", 
+                                na.last = "keep"))
   
     df_mm <-
       left_join(rank_mm[[gene_ortho$Symbol_mm]],
                 pc_ortho[, c("Symbol_mm", "ID")],
                 by = c("Symbol" = "Symbol_mm")) %>%
       filter(!is.na(ID)) %>%
-      mutate(Rank_RSR = rank(-Avg_RSR, ties.method = "min"))
+      mutate(Rank_aggr_coexpr = rank(-Avg_aggr_coexpr, 
+                                     ties.method = "min", 
+                                     na.last = "keep"))
   
     # Join and create a rank that combines each species ranking
     df_ortho <-
       left_join(df_hg, df_mm,
                 by = "ID",
                 suffix = c("_hg", "_mm")) %>%
-      filter((!is.na(Avg_RSR_hg) & !is.na(Avg_RSR_mm))) %>% 
       dplyr::select(-c(ID)) %>% 
-      mutate(Rank_aggr_coexpr_ortho = rank(Rank_RSR_hg * Rank_RSR_mm)) %>% 
+      mutate(
+        Rank_aggr_coexpr_ortho = rank(
+          Rank_aggr_coexpr_hg * Rank_aggr_coexpr_mm,
+          ties.method = "min",
+          na.last = "keep"
+        )
+      ) %>% 
       arrange(Rank_aggr_coexpr_ortho) %>% 
-      relocate(Symbol_hg, Symbol_mm, Rank_aggr_coexpr_ortho, Rank_RSR_hg, Rank_RSR_mm)
-      
-    })
-    
-    names(rank_ortho) <- tf_ortho$Symbol_hg
-    return(rank_ortho)
+      relocate(
+        Symbol_hg,
+        Symbol_mm,
+        Rank_aggr_coexpr_ortho,
+        Rank_aggr_coexpr_hg,
+        Rank_aggr_coexpr_mm
+      )
+  })
+  
+  names(rank_ortho) <- tf_ortho$Symbol_hg
+  return(rank_ortho)
 }
 
 
@@ -235,6 +239,7 @@ save_function_results(
   args = list(
     agg_l = agg_tf_hg,
     msr_mat = msr_hg,
+    comsr_mat = comsr_hg,
     genes = tfs_hg$Symbol,
     k = k,
     ncores = ncore
@@ -252,6 +257,7 @@ save_function_results(
   args = list(
     agg_l = agg_tf_mm,
     msr_mat = msr_mm,
+    comsr_mat = comsr_mm,
     genes = tfs_mm$Symbol,
     k = k,
     ncores = ncore
@@ -286,6 +292,7 @@ save_function_results(
   args = list(
     agg_l = agg_ribo_hg,
     msr_mat = msr_hg,
+    comsr_mat = comsr_hg,
     genes = ribo_genes$Symbol_hg,
     k = k,
     ncores = ncore
@@ -302,6 +309,7 @@ save_function_results(
   args = list(
     agg_l = agg_ribo_mm,
     msr_mat = msr_mm,
+    comsr_mat = comsr_mm,
     genes = ribo_genes$Symbol_mm,
     k = k,
     ncores = ncore
