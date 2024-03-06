@@ -128,3 +128,4 @@ rev_coexpr_auc_mm_path <- "/space/scratch/amorin/R_objects/reverse_coexpr_recove
 
 # Tiered evidence based on K cutoff
 tiered_evidence_path <- "/space/scratch/amorin/R_objects/tiered_evidence_list.RDS"
+tiered_evidence_flat_path <- "/space/scratch/amorin/R_objects/tiered_evidence_flat_list.RDS"
