@@ -53,9 +53,11 @@ sc_meta_path <- "/space/grp/amorin/Metadata/single_cell_dataset_meta.tsv"
 celltype_list_path <- "/space/scratch/amorin/R_objects/celltype_list.RDS"
 
 
-# Binary matrices tracking if a gene was measured in at least once cell type
+# Measurement matrices
 msr_mat_hg_path <- "/space/scratch/amorin/R_objects/binary_measurement_matrix_hg.RDS"
 msr_mat_mm_path <- "/space/scratch/amorin/R_objects/binary_measurement_matrix_mm.RDS"
+comsr_mat_hg_path <- "/space/scratch/amorin/R_objects/comeasurement_matrix_hg.RDS"
+comsr_mat_mm_path <- "/space/scratch/amorin/R_objects/comeasurement_matrix_mm.RDS"
 
 
 # List of the most correlated gene pair per experiment
@@ -83,10 +85,17 @@ null_topk_mm_path <- "/space/scratch/amorin/R_objects/sampled_null_topk_intersec
 
 
 # List of summarized aggregate coexpression rankings
-rank_tf_hg_path <- "/space/scratch/amorin/R_objects/ranking_agg_TF_hg.RDS"
-rank_tf_mm_path <- "/space/scratch/amorin/R_objects/ranking_agg_TF_mm.RDS"
-rank_ribo_hg_path <- "/space/scratch/amorin/R_objects/ranking_agg_ribo_hg.RDS"
-rank_ribo_mm_path <- "/space/scratch/amorin/R_objects/ranking_agg_ribo_mm.RDS"
+rank_tf_hg_path <- "/space/scratch/amorin/R_objects/ranking_agg_coexpr_TF_hg.RDS"
+rank_tf_mm_path <- "/space/scratch/amorin/R_objects/ranking_agg_coexpr_TF_mm.RDS"
+rank_tf_ortho_path <- "/space/scratch/amorin/R_objects/ranking_agg_coexpr_TF_ortho.RDS"
+rank_ribo_hg_path <- "/space/scratch/amorin/R_objects/ranking_agg_coexpr_ribo_hg.RDS"
+rank_ribo_mm_path <- "/space/scratch/amorin/R_objects/ranking_agg_coexpr_ribo_mm.RDS"
+
+
+# List of integrated rankings
+rank_int_hg_path <- "/space/scratch/amorin/R_objects/ranking_agg_integrated_TF_hg.RDS"
+rank_int_mm_path <- "/space/scratch/amorin/R_objects/ranking_agg_integrated_TF_mm.RDS"
+rank_int_ortho_path <- "/space/scratch/amorin/R_objects/ranking_agg_integrated_TF_ortho.RDS"
 
 
 # Curated targets from on going curation and from Eric's 2021 paper
@@ -102,7 +111,7 @@ curated_all_path <- "/home/amorin/Data/Metadata/Curated_targets_all_Sept2023.tsv
 
 # Unibind summarized ChIP-seq data
 bind_dat_path <- "/space/scratch/amorin/R_objects/processed_unibind_data.RDS"
-bind_summary_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_summary.RDS"
+bind_summary_path <- "/space/scratch/amorin/R_objects/unibind_Permissive_bindscore_summary.RDS"
 bind_model_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_modelfit.RDS"
 
 
@@ -116,3 +125,6 @@ avg_vs_ind_auc_mm_path <- "/space/scratch/amorin/R_objects/individual_vs_average
 rev_coexpr_auc_hg_path <- "/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_hg.RDS"
 rev_coexpr_auc_mm_path <- "/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_mm.RDS"
 
+
+# Tiered evidence based on K cutoff
+tiered_evidence_path <- "/space/scratch/amorin/R_objects/tiered_evidence_list.RDS"
