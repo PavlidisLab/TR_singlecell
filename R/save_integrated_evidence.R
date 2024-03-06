@@ -24,8 +24,6 @@ rank_tf_ortho <- readRDS(rank_tf_mm_path)
 
 # Average bind scores
 bind_summary <- readRDS(bind_summary_path)
-bind_dat <- readRDS(bind_dat_path)
-
 
 
 # Functions
@@ -96,16 +94,21 @@ join_and_rank_ortho <- function(rank_hg, rank_mm, pc_ortho, ncores = 1) {
     df_ortho <- left_join(df_hg, df_mm,
                           by = "ID",
                           suffix = c("_hg", "_mm")) %>%
-      filter(!is.na(Avg_aggr_coexpr_hg) & !is.na(Avg_aggr_coexpr_mm)) %>%
+      # filter(!is.na(Avg_aggr_coexpr_hg) & !is.na(Avg_aggr_coexpr_mm)) %>%
       dplyr::select(-ID) %>% 
       mutate(
-        Rank_aggr_coexpr_hg = rank(-Avg_aggr_coexpr_hg, ties.method = "min"),
-        Rank_aggr_coexpr_mm = rank(-Avg_aggr_coexpr_mm, ties.method = "min"),
+        Rank_aggr_coexpr_hg = rank(-Avg_aggr_coexpr_hg, 
+                                   ties.method = "min",
+                                   na.last = "keep"),
+        Rank_aggr_coexpr_mm = rank(-Avg_aggr_coexpr_mm, 
+                                   ties.method = "min",
+                                   na.last = "keep"),
         Rank_bind_hg = rank(-Bind_score_hg, ties.method = "min"),
         Rank_bind_mm = rank(-Bind_score_mm, ties.method = "min"),
         Rank_integrated = rank(
           log(Rank_aggr_coexpr_hg + Rank_aggr_coexpr_mm + Rank_bind_hg + Rank_bind_mm),
-          ties.method = "min")
+          ties.method = "min",
+          na.last = "keep")
       ) %>% 
         relocate(c(Symbol_mm, 
                    Rank_integrated, 
@@ -192,7 +195,7 @@ subset_tiered_evidence <- function(rank_ortho,
           Cutoff_bind_hg & 
           Cutoff_bind_mm
         ) %>%
-        dplyr::select(-contains("Cutoff"), ID) %>%
+        dplyr::select(-contains("Cutoff")) %>%
         arrange(Rank_integrated)
       
       # Elevated requires evidence in 3/4 rankings
@@ -233,6 +236,33 @@ subset_tiered_evidence <- function(rank_ortho,
   
   names(tiered_l) <- tf_ortho$Symbol_hg
   return(tiered_l)
+}
+
+
+
+# Collapse each tier of evidence into a single dataframe of TR-gene pairs
+
+flatten_tiered_evidence <- function(tiered_evidence) {
+  
+  tier_names <- names(tiered_evidence[[1]]) 
+  
+  tiered_output <- lapply(tier_names, function(tier) {
+    
+    l <- lapply(names(tiered_evidence), function(x) {
+      
+      tf_by_tier <- tiered_evidence[[x]][[tier]]
+      if (length(tf_by_tier) == 0 || nrow(tf_by_tier) == 0) return(NA)
+      
+      data.frame(TR = x, tf_by_tier)
+      
+    })
+    
+    l <- l[!is.na(l)]
+    do.call(rbind, l)
+  })
+  
+  names(tiered_output) <- tier_names
+  return(tiered_output)
 }
 
 
@@ -304,28 +334,12 @@ save_function_results(
 
 
 
+# TR-gene pairs for each tier
 tiered_evidence <- readRDS(tiered_evidence_path)
 
-
-
-
-# TODO: yet another reshape of the tiered list. must reconsider
-# Get a list grouped by tier, with each element containing a single table of
-# the TR-gene pairs at that tier
-
-
-tiered_output <- lapply(tier_names, function(tier) {
-  
-  l <- lapply(names(tiered_l), function(x) {
-    tf_by_tier <- tiered_l[[x]][[tier]]
-    if (length(tf_by_tier) == 0 || nrow(tf_by_tier) == 0) return(NA)
-    data.frame(TR = x, tf_by_tier)
-  })
-  
-  l <- l[!is.na(l)]
-  do.call(rbind, l)
-})
-names(tiered_output) <- tier_names
-
-
-saveRDS(tiered_output, tiered_path)
+save_function_results(
+  path = tiered_evidence_flat_path,
+  fun = flatten_tiered_evidence,
+  args = list(tiered_evidence = tiered_evidence),
+  force_resave = force_resave
+)
