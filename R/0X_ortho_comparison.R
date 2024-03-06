@@ -169,9 +169,18 @@ calc_null_cor <- function(ortho_l, ncores = 1) {
   
   null_cor <- mclapply(1:1000, function(x) {
     
+    # Need to remove sampled TFs (which are self NAs)
     sample_tfs <- sample(names(ortho_l), 2, replace = FALSE)
-    tf1 <- arrange(ortho_l[[sample_tfs[1]]], match(Symbol_hg, genes)) 
-    tf2 <- arrange(ortho_l[[sample_tfs[2]]], match(Symbol_hg, genes)) 
+    genes <- setdiff(genes, sample_tfs)
+    
+    tf1 <- ortho_l[[sample_tfs[1]]] %>% 
+      filter(Symbol_hg %in% genes) %>% 
+      arrange(match(Symbol_hg, genes))
+    
+    tf2 <- ortho_l[[sample_tfs[2]]] %>% 
+      filter(Symbol_hg %in% genes) %>% 
+      arrange(match(Symbol_hg, genes))
+    
     cor(tf1$Rank_aggr_coexpr_hg, tf2$Rank_aggr_coexpr_mm, method = "spearman")
     
   }, mc.cores = ncore)
