@@ -59,35 +59,45 @@ calc_cell_counts <- function(id) {
 
 
 
-# For the given ID, load the matrix tracking NA counts of gene msrmt pairs, 
-# using the diagonal (identity) to binarize if a gene was measured at least
-# once (1) or not (0)
+# Generates a list of 2 matrices tracking gene measurement, bundled as they
+# load and use the same experiment-specific NA tracking matrices.
 
-calc_gene_msr_vec <- function(id, meta, genes) {
+# msr_mat is a binary gene x experiment matrix tracking gene measurement. this
+# is used to describe gene coverage for each experiment.
+
+# comsr_mat is a gene x gene matrix tallying the number of experiments in
+# which pairs of genes were co-measured in at least on cell type. this is used
+# to describe the count of contributing experiments for the TR rankings
+
+
+gen_msr_mat_list <- function(ids, meta, genes) {
   
-  na_mat <- load_agg_mat_list(id, genes = genes, pattern = "_NA_mat_CPM.tsv")[[1]]
-  n_celltype <- filter(meta, ID == id)$N_celltype
-  binary_msr <- as.integer(diag(na_mat) != n_celltype)
-  rm(na_mat)
-  gc(verbose = FALSE)
-    
-  return(binary_msr)
-}
-
-
-
-# Create a binary gene by experiment matrix that tracks whether a given gene
-# was measured (at least one count in at least 20 cells in at least one cell
-# type) for each dataset/id.
-
-calc_gene_msr_mat <- function(ids, meta, genes) {
-  
-  msr_l <- lapply(ids, calc_gene_msr_vec, meta = meta, genes = genes)
-  msr_mat <- do.call(cbind, msr_l)
-  colnames(msr_mat) <- ids
+  # Init tracking matrices
+  msr_mat <- matrix(0, nrow = length(genes), ncol = length(ids))
   rownames(msr_mat) <- genes
+  colnames(msr_mat) <- ids
   
-  return(msr_mat)
+  comsr_mat <- matrix(0, nrow = length(genes), ncol = length(genes))
+  rownames(comsr_mat) <- colnames(comsr_mat) <- genes
+  
+  for (id in ids) {
+    
+    # NA mat counts the NA gene pairs; max value is the count of cell types
+    na_mat <- load_agg_mat_list(id, genes = genes, pattern = "_NA_mat_CPM.tsv")[[1]]
+    n_celltype <- filter(meta, ID == id)$N_celltype
+    
+    # Yes/no if gene pairs were co-measured, and add to tracking mat
+    comsr <- (na_mat < n_celltype) & (na_mat < n_celltype)
+    comsr_mat <- comsr_mat + comsr
+    
+    # Diag (self gene) equal to count of cell types means all cell types were NA
+    msr_mat[, id] <- as.integer(diag(na_mat) != n_celltype)
+    
+    rm(na_mat)
+    gc(verbose = FALSE)
+  }
+  
+  return(list(Msr_mat = msr_mat, Comsr_mat = comsr_mat))
 }
 
 
@@ -146,15 +156,15 @@ stopifnot(is.integer(meta$N_cells), is.integer(meta$N_celltypes))
 
 
 
-# Generate binary measurement matrices
-msr_mat_hg <- calc_gene_msr_mat(ids_hg, meta, pc_hg$Symbol)
-msr_mat_mm <- calc_gene_msr_mat(ids_mm, meta, pc_mm$Symbol)
+# Generate measurement matrices
+msr_l_hg <- gen_msr_mat_list(ids_hg, meta, pc_hg$Symbol)
+msr_l_mm <- gen_msr_mat_list(ids_mm, meta, pc_mm$Symbol)
 
 
 
 # Bind gene measurement counts into meta
-n_msr_hg <- colSums(msr_mat_hg)
-n_msr_mm <- colSums(msr_mat_mm)
+n_msr_hg <- colSums(msr_l_hg$Msr_mat)
+n_msr_mm <- colSums(msr_l_mm$Msr_mat)
 n_msr <- c(n_msr_hg, n_msr_mm)[ids]
 stopifnot(is.numeric(n_msr))
 meta$N_genes <- n_msr
@@ -165,7 +175,7 @@ meta$N_genes <- n_msr
 # ------------------------------------------------------------------------------
 
 
-
+# Meta
 write.table(meta,
             sep = "\t",
             row.names = FALSE,
@@ -173,10 +183,15 @@ write.table(meta,
             file = sc_meta_path)
 
 
+# Cell type counts
 saveRDS(counts_l, file = celltype_list_path)
 
 
-saveRDS(msr_mat_hg, msr_mat_hg_path)
+# Measurement matrices
+saveRDS(msr_l_hg$Msr_mat, msr_mat_hg_path)
+saveRDS(msr_l_mm$Msr_mat, msr_mat_mm_path)
 
 
-saveRDS(msr_mat_mm, msr_mat_mm_path)
+# Co-measurement matrices
+saveRDS(msr_l_hg$Comsr_mat, comsr_mat_hg_path)
+saveRDS(msr_l_mm$Comsr_mat, comsr_mat_mm_path)
