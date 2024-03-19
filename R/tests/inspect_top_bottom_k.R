@@ -1,4 +1,5 @@
-source("R/utils/plot_functions.R")
+## This was used to inspect the raw correlations values of ranks right before 
+## and after ties
 
 library(tidyverse)
 library(data.table)

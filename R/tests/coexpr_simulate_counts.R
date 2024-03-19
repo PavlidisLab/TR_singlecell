@@ -1,5 +1,5 @@
 ## Simulate scRNA-seq counts and explore the relationship of coexpression with
-## mean expression level across different processing stragies.
+## mean expression level across different processing strategies.
 ## -----------------------------------------------------------------------------
 
 
@@ -29,11 +29,11 @@ set.seed(5)
 # ------------------------------------------------------------------------------
 
 
-# dat <- readRDS("/space/scratch/amorin/coexpr_sim/cheng2018_rawcounts_meta.RDS")
-dat <- readRDS("/space/scratch/amorin/coexpr_sim/HPAP_rawcounts_meta.RDS")
+dat <- readRDS("/space/scratch/amorin/coexpr_sim/cheng2018_rawcounts_meta.RDS")
+# dat <- readRDS("/space/scratch/amorin/coexpr_sim/HPAP_rawcounts_meta.RDS")
 
 meta <- dat$Meta
-ct <- "endothelial cell"  # "Merkel cell"  "melanocyte" "pancreatic D cell"
+ct <- "Merkel cell" # "endothelial cell"  "Merkel cell"  "melanocyte" "pancreatic D cell"
 ref_mat <- as.matrix(dat$Mat[, filter(meta, Cell_type == ct)$ID])
 
 

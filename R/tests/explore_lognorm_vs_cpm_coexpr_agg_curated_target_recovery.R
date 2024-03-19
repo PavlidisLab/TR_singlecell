@@ -1,4 +1,4 @@
-## TODO:
+## This compares the observed performance metrics for CPM versus lognorm coexpr
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)

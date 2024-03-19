@@ -1,3 +1,5 @@
+## Comparing TR-gene rankings generated using lognorm or CPM processing
+
 library(tidyverse)
 library(data.table)
 library(WGCNA)

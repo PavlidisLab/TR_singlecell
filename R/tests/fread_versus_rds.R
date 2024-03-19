@@ -1,3 +1,5 @@
+## Comparing speed of reading RDS objects versus fread tables (fread is faster)
+
 library(data.table)
 library(microbenchmark)
 source("R/00_config.R")

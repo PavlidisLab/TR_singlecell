@@ -6,7 +6,6 @@ source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 
-# TODO: cell type of GSE180928 should be lineage
 id <- "GSE180928"
 dat <- readRDS(file.path("/space/scratch/amorin/TR_singlecell", id, paste0(id, "_clean_mat_and_meta.RDS")))
 rsr_all <- readRDS(file.path("/space/scratch/amorin/TR_singlecell", id, paste0(id, "_RSR_allrank.RDS")))
