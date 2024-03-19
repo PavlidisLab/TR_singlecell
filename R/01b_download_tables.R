@@ -12,9 +12,29 @@ library(tidyverse)
 
 # 1) Protein coding tables
 # Ensembl has every TSS for a gene. Refseq select is only using one TSS per gene.
-# All analysis was done on hg38/mm10. Fixing ensembl at V98.
+# All analysis was done on hg38/mm10. Fixing ensembl at V105.
+
+# Refseq
 # Using ensembl range formatting: no 'chr' prefix and strand as 1/-1
 # https://www.ncbi.nlm.nih.gov/refseq/refseq_select/
+# Table schema (mouse) http://genome.ucsc.edu/cgi-bin/hgTables?hgsid=1827432270_fzD31oCmH8TcANzQ82Yzz7h0RKlz&hgta_doSchemaDb=mm10&hgta_doSchemaTable=ncbiRefSeqSelect
+# --- Raw columns
+# bin	
+# V2 == name == Refseq_ID	
+# V3 == chrom == Chromsome	
+# V4 == strand == Strand	
+# V5 == txStart == Start	
+# V6 == txEnd == End	
+# cdsStart	
+# cdsEnd	
+# exonCount	
+# exonStarts	
+# exonEnds	
+# score	
+# V13 == name2 == Symbol	
+# cdsStartStat	
+# cdsEndStat	
+# exonFrames
 # ------------------------------------------------------------------------------
 
 
