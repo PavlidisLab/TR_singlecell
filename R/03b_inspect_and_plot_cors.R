@@ -125,7 +125,8 @@ meta_mm <- dat_mm$Meta
 ct_scatter_hg <- all_celltype_scatter(mat_hg, meta_hg, gene1_hg, gene2_hg)
 ct_scatter_mm <- all_celltype_scatter(mat_mm, meta_mm, gene1_mm, gene2_mm)
 
-# TODO: this should not be hard coded
+
+
 max_ct_hg <- ct_scatter_hg$`neural cell` +
   ggtitle(label = "GarciaAlonso2022Human: neural cell",
           subtitle = paste("r=0.54")) +
