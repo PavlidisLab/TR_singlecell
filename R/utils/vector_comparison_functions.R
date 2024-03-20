@@ -552,11 +552,11 @@ summarize_obs_and_null_auc <- function(tf,
     Symbol = tf,
     N_targets = n_target,
     AUPRC = auc$AUPRC,
-    AUPRC_percentile = ecdf(null_auprc)(auc$AUPRC),
+    AUPRC_quantile = ecdf(null_auprc)(auc$AUPRC),
     AUPRC_ratio = auc$AUPRC / median(null_auprc),
     AUPRC_diff = auc$AUPRC - median(null_auprc),
     AUROC = auc$AUROC,
-    AUROC_percentile = ecdf(null_auroc)(auc$AUROC),
+    AUROC_quantile = ecdf(null_auroc)(auc$AUROC),
     AUROC_ratio = auc$AUROC / median(null_auroc),
     AUROC_diff = auc$AUROC - median(null_auroc)
   )
@@ -745,8 +745,8 @@ summarize_avg_and_individual_auc <- function(auc_df, labels) {
   summary_df <- data.frame(
     N_targets = length(labels),
     N_datasets = nrow(auc_df_no_avg),
-    AUROC_percentile = ecdf(auc_df_no_avg$AUROC)(auroc_avg),
-    AUPRC_percentile = ecdf(auc_df_no_avg$AUPRC)(auprc_avg)
+    AUROC_quantile = ecdf(auc_df_no_avg$AUROC)(auroc_avg),
+    AUPRC_quantile = ecdf(auc_df_no_avg$AUPRC)(auprc_avg)
   )
   
   return(list(AUC_df = auc_df, Summary_df = summary_df))
@@ -786,8 +786,7 @@ get_colwise_curated_auc_list <- function(tfs,
     }
     
     # Prepare matrix of aggregate coexpr vectors and their average score
-    score_mat <- gene_vec_to_mat(agg_l, tf)
-    score_mat <- subset_to_measured(score_mat, msr_mat = msr_mat, gene = tf)
+    score_mat <- gene_vec_to_mat(agg_l, gene = tf, msr_mat = msr_mat)
     score_mat <- cbind(score_mat, Average = rowMeans(score_mat))
     
     # Calculating the AUC by using each column as a score
