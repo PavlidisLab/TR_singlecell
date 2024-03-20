@@ -46,5 +46,6 @@ Originally Seurat's log normalization was used on all datasets with raw count
 matrices, but we switched over to CPM for a few reasons: consistency with 
 prior works like Harris 2021, Eric's work on showing that log emphasizes 
 correlations of lowly expressed genes, the CPM data had (very slightly) better
-performance on the curation benchmark, and the log norm data had a larger
-magnitude of Topk overlap compared to CPM.
+performance on the curation benchmark, and, most importantly for analysis here, 
+the log norm data had a larger magnitude of Topk overlap in the null comparisons
+compared to CPM.
