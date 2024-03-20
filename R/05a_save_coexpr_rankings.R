@@ -67,29 +67,30 @@ calc_topk_count <- function(gene_mat, k, check_k_arg = TRUE) {
 
 
 
-# agg_l: list of gene x TF RSR matrices for each experiment
+# agg_l: list of gene x TF aggr coexpr matrices for each experiment
 # msr_mat: gene x experiment binary matrix indicating gene measurement
 # comsr_mat: gene x gene matrix count gene pair comeasurement across experiments
-# genes: the list of genes (assumed TFs) to generate a summary df for
+# genes: the list of genes to generate a rank summary df for each
 # k: integer used as the index for the cut-off of the "top" of each list
 # verbose: declare time for each calculated
 
 # returns a list of dataframes for each gene in genes that contains:
-# 1) Symbol: all genes in the rows of the RSR matrices of agg_l
+# 1) Symbol: all genes in the rows of the aggr coexpr matrices of agg_l
 # 2) N_comeasured: How many datasets the TF and gene were both measured in
-# 3) Avg_RSR: Average RSR across experiments after imputation
-# 4) Rank_RSR: Rank of the average RSR (higher RSR = lower/better rank)
+# 3) Avg_aggr_coexpr: Average aggr coexpr across experiments after imputation
+# 4) Rank_aggr_coexpr: Rank of the aggr coexpr (higher coexpr = lower rank)
 # 5) Best_rank: The single best rank a gene obtained across experiments
 # 6) Topk_count: Count of times a gene was in the top K across experiments
 # 7) Topk_proportion: Topk_count divided by the count of comeasured experiments
 
-# NOTE: When a TF-gene is not co-measured, its RSR is imputed to the median
-# of the entire gene x experiment RSR matrix for the given TF (in practice 
-# ~0.51). This is done to set these non-measured genes to the "middle of the 
-# pack" as some will have an artificially high RSR (0.8+) for a given dataset 
-# because ties (NA values) were encountered early in the ranking due to shallow
-# measurement. This imputation down weights this artifact and still preserves 
-# the bottom of the list for the most consistently negative TF-gene pairs.
+# --- NOTE about median imputation: 
+# When a TF-gene is not co-measured, its aggr coexpr is imputed to the median
+# of the entire gene x experiment aggr coexpr matrix for the given TF (in 
+# practice ~0.51). This is done to set these non-measured genes to the "middle 
+# of the pack" as some will have an artificially high aggr coexpr (0.8+) for a 
+# given dataset because ties (NA values) were encountered early in the ranking.
+# This imputation down weights this artifact and still preserves the bottom of
+# the list for the most consistently negative TF-gene pairs.
 
 gen_rank_list <- function(agg_l,
                           msr_mat,
@@ -141,7 +142,7 @@ gen_rank_list <- function(agg_l,
       Topk_count = topk_count
     )
     
-    # Make K explicit, order by rank, and set TF stats other than msr to NA
+    # Actual k value in col name and set TF's self stats (self-cor) to NAs
     rank_df <- rank_df %>% 
       dplyr::rename(!!(paste0("Top", k, "_count")) := Topk_count) %>% 
       arrange(Rank_aggr_coexpr) 
@@ -162,7 +163,7 @@ gen_rank_list <- function(agg_l,
 
 # Gene is assumed to be an ortho gene found in pc_df. Retrieve and join the 
 # corresponding gene rank dfs from the mouse and human rank lists. Re-rank
-# average RSR just using ortho genes
+# average aggr coexpr just using ortho genes
 
 join_ortho_ranks <- function(pc_ortho,
                              rank_hg,
