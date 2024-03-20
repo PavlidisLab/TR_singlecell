@@ -1,4 +1,6 @@
-## Examining the overlap of human and mouse aggregate TF coexpression profiles
+## Examining how similar ortho TF aggregate profiles are between species.
+## This explicitly considers only ortho genes, with each ranking generated only
+## from data from the respective species.
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -33,7 +35,6 @@ msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
 # Within species cross-dataset similarity lists
-# TODO: config
 topk_l <- readRDS(paste0("/space/scratch/amorin/R_objects/human_mouse_topk=", k, "_similarity_df.RDS"))
 
 
@@ -49,7 +50,9 @@ calc_ortho_cor <- function(ortho_rank_l, ncores = 1) {
   symbols <- names(ortho_rank_l)
   
   cor_l <- mclapply(ortho_rank_l, function(x) {
-    cor(x$Avg_aggr_coexpr_hg, x$Avg_aggr_coexpr_mm, method = "spearman")
+    cor(x$Avg_aggr_coexpr_hg, x$Avg_aggr_coexpr_mm, 
+        method = "spearman",
+        use = "pairwise.complete.obs")
   }, mc.cores = ncores)
   
   cor_df <- data.frame(Symbol = symbols, Cor = unlist(cor_l))
@@ -181,7 +184,9 @@ calc_null_cor <- function(ortho_l, ncores = 1) {
       filter(Symbol_hg %in% genes) %>% 
       arrange(match(Symbol_hg, genes))
     
-    cor(tf1$Rank_aggr_coexpr_hg, tf2$Rank_aggr_coexpr_mm, method = "spearman")
+    cor(tf1$Rank_aggr_coexpr_hg, tf2$Rank_aggr_coexpr_mm, 
+        method = "spearman",
+        use = "pairwise.complete.obs")
     
   }, mc.cores = ncore)
   
@@ -407,23 +412,96 @@ most_specific <- list(
 )
 
 
+
 # Plots
 # ------------------------------------------------------------------------------
 
 
-# Histogram of ortho TF spearman cors
+# Histogram of similarity overlaid with median of null overlap
 
-p1 <- plot_hist(sim_df,
-                stat_col = "Cor",
-                xlab = "Spearman's correlation",
-                title = paste0("n=", nrow(sim_df), " orthologous TFs")) +
-  geom_vline(xintercept = median(null_cor), linewidth = 1.4, col = "red") +
-  geom_vline(xintercept = median(sim_df$Cor), linewidth = 1.4, col = "black") +
-  xlim(c(-0.4, 1))
+hist_ortho_similarity <- function(sim_df, 
+                                  stat, 
+                                  null_vec, 
+                                  title = NULL,
+                                  xlab, 
+                                  colour) {
+  
+  
+  ggplot(sim_df, aes(x = !!sym(stat))) +
+    geom_histogram(bins = 100, col = colour, fill = colour) +
+    geom_vline(xintercept = median(sim_df[[stat]]), linewidth = 1.4, col = "black") +
+    geom_vline(xintercept = median(null_vec), linewidth = 1.4, col = "grey") +
+    ggtitle(title) +
+    xlab(xlab) +
+    ylab("Frequency") +
+    theme_classic() +
+    theme(text = element_text(size = 20),
+          plot.title = element_text(hjust = 0.5))
+  
+}
 
 
-ggsave(p1, height = 5, width = 7, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "ortho_rank_similarity.png"))
+
+p1a <- hist_ortho_similarity(sim_df, 
+                             stat = "Cor", 
+                             null_vec = null_cor, 
+                             title = "Cross-species coexpression agreement",
+                             xlab = "Spearman's correlation", 
+                             # xlim = c(-0.4, 1), 
+                             colour = "slategrey") 
+p1a <- p1a + xlim(c(-0.4, 1))
+
+
+p1b <- hist_ortho_similarity(sim_df, 
+                             stat = "Topk_Count", 
+                             null_vec = null_topk, 
+                             xlab = expr("Top"[!!k]),
+                             colour = "#d53e4f")
+
+
+p1c <- hist_ortho_similarity(sim_df, 
+                             stat = "Bottomk_Count", 
+                             null_vec = null_bottomk, 
+                             xlab = expr("Bottom"[!!k]),
+                             colour = "#3288bd")
+
+
+p1 <- plot_grid(p1a, p1b, p1c, ncol = 1)
+
+ggsave(p1, height = 12, width = 9, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "ortho_similarity_hist.png"))
+
+
+
+# As overlaid density
+
+density_ortho_similarity <- function(sim_df, 
+                                     stat, 
+                                     null_vec, 
+                                     xlab, 
+                                     xlim, 
+                                     colours) {
+  
+  df <- data.frame(
+    Stat = c(sim_df[[stat]], null_vec),
+    Group = c(rep("TR", nrow(sim_df)), rep("Null", length(null_vec)))
+  )
+  
+  ggplot(df, aes(x = Stat, fill = Group)) + 
+    geom_density(alpha = 0.6) +
+    xlim(xlim) +
+    xlab(xlab) +
+    ylab("Density") +
+    theme_classic() +
+    scale_fill_manual(values = colours) +
+    theme(text = element_text(size = 20),
+          legend.title = element_blank(),
+          legend.text = element_text(size = 20),
+          legend.position = c(0.92, 0.85))
+  
+}
+
+
 
 
 # Scatter of mouse versus human RSR for a given TF
@@ -434,11 +512,14 @@ p2 <- qplot(rank_tf_ortho[[check_tf]],
             title = check_tf)
 
 
+
 # Scatter of overlap quantiles in mouse/human
 
 p3a <- qplot(sim_df, xvar = "Topk_Quant_hg_in_mm", yvar = "Topk_Quant_mm_in_hg") +
-  xlab(expr("Top"[!!k] ~ "quantile human in mouse")) + 
-  ylab(expr("Top"[!!k] ~ "quantile mouse in human"))
+  # xlab(expr("Top"[!!k] ~ "quantile human in mouse")) + 
+  xlab("Ortholog retrieval score (human in mouse)") + 
+  # ylab(expr("Top"[!!k] ~ "quantile mouse in human"))
+  ylab("Ortholog retrieval score (mouse in human)")
 
 
 p3b <- qplot(sim_df, xvar = "Bottomk_Quant_mm_in_hg", yvar = "Bottomk_Quant_hg_in_mm") +
@@ -462,33 +543,6 @@ ggsave(p3b, height = 7, width = 7, device = "png", dpi = 300,
 ggsave(p3c, height = 7, width = 7, device = "png", dpi = 300,
        filename = file.path(plot_dir, paste0("top_vs_bottom", k, "_quantile_between_species.png")))
 
-
-# Hist of the overlap counts overlaid with median of null overlap
-
-p4a <- ggplot(sim_df, aes(x = Topk_Count)) +
-  geom_histogram(bins = 100, col = "#d53e4f", fill = "#d53e4f") +
-  geom_vline(xintercept = median(null_topk), linewidth = 1.4, col = "black") +
-  xlab(expr("Top"[!!k] ~ "orthologous overlap")) +
-  ylab("Frequency") +
-  theme_classic() +
-  theme(text = element_text(size = 20))
-
-
-p4b <- ggplot(sim_df, aes(x = Bottomk_Count)) +
-  geom_histogram(bins = 100, col = "#3288bd", fill = "#3288bd") +
-  geom_vline(xintercept = median(null_bottomk), linewidth = 1.4, col = "black") +
-  xlab(expr("Bottom"[!!k] ~ "orthologous overlap")) +
-  ylab("Frequency") +
-  theme_classic() +
-  theme(text = element_text(size = 20))
-
-
-ggsave(p4a, height = 5, width = 7, device = "png", dpi = 300,
-       filename = file.path(plot_dir, paste0("top", k, "_count_between_species.png")))
-
-
-ggsave(p4b, height = 5, width = 7, device = "png", dpi = 300,
-       filename = file.path(plot_dir, paste0("bottom", k, "_count_between_species.png")))
 
 
 # Scatter of topk vs bottom, and raw overlap vs quantile
@@ -528,6 +582,7 @@ p6 <-
     size = 5,
     segment.size = 0.1,
     segment.color = "grey50") +
+  ggtitle(paste0(check_tf, " ortholog retrieval")) +
   xlab(expr("Top"[!!k] ~ "human in mouse")) +
   ylab(expr("Top"[!!k] ~ "mouse in human")) +
   theme_classic() +
