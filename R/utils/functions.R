@@ -613,7 +613,7 @@ mat_to_df <- function(mat, symmetric = TRUE, value_name = NULL) {
 
 # TODO:
 
-subset_to_measured <- function(mat, msr_mat, gene) {
+subset_to_measured <- function(mat, gene, msr_mat) {
   
   stopifnot(gene %in% rownames(msr_mat), 
             length(intersect(rownames(mat), rownames(msr_mat))) > 0,
