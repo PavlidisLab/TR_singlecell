@@ -202,13 +202,15 @@ all_corplot <- function(cor_l) {
   ggplot(cor_df, aes(x = Cor, y = reorder(ID, Cor, FUN = median))) +
     geom_point(alpha = 0.4, shape = 21, size = 2.4) +
     geom_boxplot(outlier.shape = NA, coef = 0, fill = "slategrey") +
-    geom_vline(xintercept = 0, colour = "black") +
+    geom_vline(xintercept = 0, colour = "black", linetype = "dashed") +
     xlab("Pearson's correlation") +
+    ylab("Datasets") +
     theme_classic() +
-    theme(axis.title.y = element_blank(),
-          axis.title.x = element_text(size = 30),
-          axis.text.x = element_text(size = 25),
-          axis.text.y = element_text(size = 10),
+    theme(axis.title.x = element_text(size = 30),
+          axis.text.x = element_text(size = 20),
+          axis.title.y = element_text(size = 30),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
           plot.margin = margin(c(10, 20, 10, 10)))
   
 }
