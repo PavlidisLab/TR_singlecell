@@ -106,42 +106,42 @@ target_mm <- union(
 
 
 # Human
-# save_function_results(
-#   path = avg_vs_ind_auc_hg_path,
-#   fun = get_colwise_curated_auc_list,
-#   args = list(
-#     tfs = tf_hg,
-#     agg_l = agg_tf_hg,
-#     msr_mat = msr_hg,
-#     curated_df = curated,
-#     ortho_df = pc_ortho,
-#     pc_df = pc_hg,
-#     species = "Human",
-#     ncores = ncore,
-#     verbose = TRUE
-#   ),
-#   force_resave = force_resave
-# )
+save_function_results(
+  path = avg_vs_ind_auc_hg_path,
+  fun = get_colwise_curated_auc_list,
+  args = list(
+    tfs = tf_hg,
+    agg_l = agg_tf_hg,
+    msr_mat = msr_hg,
+    curated_df = curated,
+    ortho_df = pc_ortho,
+    pc_df = pc_hg,
+    species = "Human",
+    ncores = ncore,
+    verbose = TRUE
+  ),
+  force_resave = force_resave
+)
 
 
 
 # Mouse
-# save_function_results(
-#   path = avg_vs_ind_auc_mm_path,
-#   fun = get_colwise_curated_auc_list,
-#   args = list(
-#     tfs = tf_mm,
-#     agg_l = agg_tf_mm,
-#     msr_mat = msr_mm,
-#     curated_df = curated,
-#     ortho_df = pc_ortho,
-#     pc_df = pc_mm,
-#     species = "Mouse",
-#     ncores = ncore,
-#     verbose = TRUE
-#   ),
-#   force_resave = force_resave
-# )
+save_function_results(
+  path = avg_vs_ind_auc_mm_path,
+  fun = get_colwise_curated_auc_list,
+  args = list(
+    tfs = tf_mm,
+    agg_l = agg_tf_mm,
+    msr_mat = msr_mm,
+    curated_df = curated,
+    ortho_df = pc_ortho,
+    pc_df = pc_mm,
+    species = "Mouse",
+    ncores = ncore,
+    verbose = TRUE
+  ),
+  force_resave = force_resave
+)
 
 
 
@@ -150,46 +150,46 @@ target_mm <- union(
 
 
 # Human
-# save_function_results(
-#   path = coexpr_auc_hg_path,
-#   fun = curated_obs_and_null_auc_list,
-#   args = list(
-#     tfs = tf_hg,
-#     rank_l = rank_tf_hg,
-#     score_col = "Avg_aggr_coexpr",
-#     curated_df = curated,
-#     label_all = target_hg,
-#     ortho_df = pc_ortho,
-#     pc_df = pc_hg,
-#     species = "Human",
-#     n_samps = n_samps,
-#     ncores = ncore,
-#     verbose = TRUE
-#   ),
-#   force_resave = force_resave
-# )
-# 
-# 
-# 
+save_function_results(
+  path = coexpr_auc_hg_path,
+  fun = curated_obs_and_null_auc_list,
+  args = list(
+    tfs = tf_hg,
+    rank_l = rank_tf_hg,
+    score_col = "Avg_aggr_coexpr",
+    curated_df = curated,
+    label_all = target_hg,
+    ortho_df = pc_ortho,
+    pc_df = pc_hg,
+    species = "Human",
+    n_samps = n_samps,
+    ncores = ncore,
+    verbose = TRUE
+  ),
+  force_resave = force_resave
+)
+
+
+
 # # Mouse
-# save_function_results(
-#   path = coexpr_auc_mm_path,
-#   fun = curated_obs_and_null_auc_list,
-#   args = list(
-#     tfs = tf_mm,
-#     rank_l = rank_tf_mm,
-#     score_col = "Avg_aggr_coexpr",
-#     curated_df = curated,
-#     label_all = target_mm,
-#     ortho_df = pc_ortho,
-#     pc_df = pc_mm,
-#     species = "Mouse",
-#     n_samps = n_samps,
-#     ncores = ncore,
-#     verbose = TRUE
-#   ),
-#   force_resave = force_resave
-# )
+save_function_results(
+  path = coexpr_auc_mm_path,
+  fun = curated_obs_and_null_auc_list,
+  args = list(
+    tfs = tf_mm,
+    rank_l = rank_tf_mm,
+    score_col = "Avg_aggr_coexpr",
+    curated_df = curated,
+    label_all = target_mm,
+    ortho_df = pc_ortho,
+    pc_df = pc_mm,
+    species = "Mouse",
+    n_samps = n_samps,
+    ncores = ncore,
+    verbose = TRUE
+  ),
+  force_resave = force_resave
+)
 
 
 
@@ -275,6 +275,11 @@ split_bindmat_to_list <- function(mat) {
 # List of TF binding scores
 bind_hg <- split_bindmat_to_list(bind_summary$Human_TF)
 bind_mm <- split_bindmat_to_list(bind_summary$Mouse_TF)
+
+
+# Smaller subset of TFs with binding evidence
+tf_hg <- intersect(tf_hg, names(bind_hg))
+tf_mm <- intersect(tf_mm, names(bind_mm))
 
 
 
