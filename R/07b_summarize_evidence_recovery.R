@@ -3,8 +3,6 @@
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
-# library(data.table)
-# library(WGCNA)
 library(parallel)
 library(pheatmap)
 library(RColorBrewer)
@@ -17,30 +15,18 @@ source("R/00_config.R")
 # The minimum count of curated targets for a TF for reporting
 min_targets <- 5
 
-# Table of assembled scRNA-seq datasets
-# sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
-
-# IDs for scRNA-seq datasets
-# ids_hg <- filter(sc_meta, Species == "Human")$ID
-# ids_mm <- filter(sc_meta, Species == "Mouse")$ID
-
 # Protein coding genes 
-# pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
-# pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
+pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
+pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 pc_ortho <- read.delim(pc_ortho_path)
-
-# Transcription Factors
-# tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% pc_hg$Symbol)
-# tfs_mm <- filter(read.delim(tfs_mm_path, stringsAsFactors = FALSE), Symbol %in% pc_mm$Symbol)
-# tfs_mm <- distinct(tfs_mm, Symbol, .keep_all = TRUE)
 
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
-# Saved list RDS of the summaries
-# rank_tf_hg <- readRDS(rank_tf_hg_path)
-# rank_tf_mm <- readRDS(rank_tf_mm_path)
+# Saved list RDS of the integrated rankings
+rank_tf_hg <- readRDS(rank_int_hg_path)
+rank_tf_mm <- readRDS(rank_int_mm_path)
 
 # Curated low throughput targets
 curated <- read.delim(curated_all_path, stringsAsFactors = FALSE)
@@ -60,10 +46,6 @@ rev_coexpr_auc_mm <- readRDS(rev_coexpr_auc_mm_path)
 # Aggregate binding profiles versus null
 bind_auc_hg <- readRDS(unibind_auc_hg_path)
 bind_auc_mm <- readRDS(unibind_auc_mm_path)
-
-# Binding data
-# bind_dat <- readRDS(bind_dat_path)
-bind_summary <- readRDS(bind_summary_path)
 
 
 # Functions
@@ -359,44 +341,7 @@ null_coexpr_auroc_hg <- summarize_null_auc(coexpr_auc_hg, agg_df_hg)
 null_coexpr_auroc_mm <- summarize_null_auc(coexpr_auc_mm, agg_df_mm)
 
 null_bind_auroc_hg <- summarize_null_auc(bind_auc_hg, agg_df_hg)
-null_bind_auroc_hg <- summarize_null_auc(bind_auc_mm, agg_df_mm)
-
-
-
-# null_coexpr_auroc_hg <- 
-#   lapply(coexpr_auc_hg, function(x) summary(unlist(lapply(x$Null, `[[`, "AUROC")))) %>% 
-#   do.call(rbind, .) %>%
-#   as.data.frame() %>% 
-#   rownames_to_column(var = "Symbol") %>% 
-#   filter(Symbol %in% agg_df_hg$Symbol) %>% 
-#   arrange(desc(Median))
-# 
-# 
-# null_coexpr_auroc_mm <- 
-#   lapply(coexpr_auc_mm, function(x) summary(unlist(lapply(x$Null, `[[`, "AUROC")))) %>% 
-#   do.call(rbind, .) %>%
-#   as.data.frame() %>% 
-#   rownames_to_column(var = "Symbol") %>% 
-#   filter(Symbol %in% agg_df_mm$Symbol) %>% 
-#   arrange(desc(Median))
-# 
-# 
-# null_binding_auroc_hg <- 
-#   lapply(bind_auc_hg, function(x) summary(unlist(lapply(x$Null, `[[`, "AUROC")))) %>% 
-#   do.call(rbind, .) %>%
-#   as.data.frame() %>% 
-#   rownames_to_column(var = "Symbol") %>% 
-#   filter(Symbol %in% agg_df_hg$Symbol) %>% 
-#   arrange(desc(Median))
-# 
-# 
-# null_binding_auroc_mm <- 
-#   lapply(bind_auc_mm, function(x) summary(unlist(lapply(x$Null, `[[`, "AUROC")))) %>% 
-#   do.call(rbind, .) %>%
-#   as.data.frame() %>% 
-#   rownames_to_column(var = "Symbol") %>% 
-#   filter(Symbol %in% agg_df_mm$Symbol) %>% 
-#   arrange(desc(Median))
+null_bind_auroc_mm <- summarize_null_auc(bind_auc_mm, agg_df_mm)
 
 
 # Note that the TFs with the highest null AUROCs still exceeded the null
@@ -422,27 +367,8 @@ make_rev_coexpr_df <- function(rev_l, agg_df, min_targets) {
 }
 
 
-# TODO: double check: are you throwing away TFs because of binding data?
 rev_coexpr_hg <- make_rev_coexpr_df(rev_coexpr_auc_hg, agg_df_hg, min_targets)
 rev_coexpr_mm <- make_rev_coexpr_df(rev_coexpr_auc_mm, agg_df_mm, min_targets)
-
-
-# rev_coexpr_hg <- lapply(rev_coexpr_auc_hg, `[[`, "Perf_df") %>%
-#   do.call(rbind, .) %>% 
-#   as.data.frame() %>% 
-#   rename_with(~paste0(., "_reverse_coexpr"), -c("Symbol", "N_targets")) %>% 
-#   left_join(agg_df_hg, by = c("Symbol", "N_targets")) %>% 
-#   filter(N_targets >= min_targets)
-# 
-# 
-# 
-# rev_coexpr_mm <- lapply(rev_coexpr_auc_mm, `[[`, "Perf_df") %>%
-#   do.call(rbind, .) %>% 
-#   as.data.frame() %>% 
-#   rename_with(~paste0(., "_reverse_coexpr"), -c("Symbol", "N_targets")) %>% 
-#   left_join(agg_df_mm, by = c("Symbol", "N_targets")) %>% 
-#   filter(N_targets >= min_targets)
-
 
 
 only_rev_hg <- filter(
@@ -500,6 +426,10 @@ both_coexpr_mm <- filter(
 # Checking the ranks of curated targets for each aggregate for a given TF
 # ------------------------------------------------------------------------------
 
+# LEF1 used in paper: performant in coexpr but not ChIP-seq in both species
+# filter(agg_df_common_hg, Symbol == "LEF1")
+# filter(agg_df_common_mm, Symbol == "Lef1")
+
 
 check_tf <- "LEF1"
 
@@ -511,26 +441,13 @@ targets <- get_curated_labels(tf = check_tf,
                               species = "Human",
                               remove_self = TRUE)
 
-
-filter(agg_df_common_hg, Symbol == check_tf)
-filter(agg_df_common_mm, Symbol == str_to_title(check_tf))
+rank_df <- filter(rank_tf_hg[[check_tf]], Symbol %in% targets)
 
 
-targets_rank_coexpr <- rank_tf_hg[[check_tf]] %>% 
-  filter(Symbol %in% targets) %>% 
-  arrange(Rank_RSR)
 
-
-targets_rank_binding <- 
-  data.frame(Bind = bind_summary$Human_TF[, check_tf]) %>% 
-  rownames_to_column(var = "Symbol") %>% 
-  mutate(Rank_bind = rank(-Bind, ties.method = "min")) %>% 
-  filter(Symbol %in% targets) %>% 
-  arrange(Rank_bind)
-
-
-n_coexpr <- sum(targets_rank_coexpr$Rank_RSR <= 500)
-n_bind <- sum(targets_rank_binding$Rank_bind <= 500)
+# N targets at k=500 cutoff
+n_coexpr <- sum(rank_df$Rank_aggr_coexpr <= 500)
+n_bind <- sum(rank_df$Rank_bind <= 500)
 
 
 
@@ -763,52 +680,6 @@ ggsave(p8b, height = 9, width = 18, device = "png", dpi = 300,
 
 
 
-# # plot_df6 <- filter(rev_coexpr_hg, Symbol %in% agg_df_common_hg$Symbol)
-# plot_df6 <- filter(rev_coexpr_mm, Symbol %in% agg_df_common_mm$Symbol)
-# 
-# 
-# plot_df6 <- data.frame(
-#   Quantile = c(
-#     plot_df6$AUPRC_quantile_coexpr,
-#     plot_df6$AUPRC_quantile_bind,
-#     plot_df6$AUPRC_quantile_reverse_coexpr,
-#     plot_df6$AUROC_quantile_coexpr,
-#     plot_df6$AUROC_quantile_bind,
-#     plot_df6$AUROC_quantile_reverse_coexpr
-#   ),
-#   Group1 = c(
-#     rep("(+) Coexpression", length(plot_df6$AUPRC_quantile_coexpr)),
-#     rep("Binding", length(plot_df6$AUPRC_quantile_bind)),
-#     rep("(-) Coexpression", length(plot_df6$AUPRC_quantile_bind)),
-#     rep("(+) Coexpression", length(plot_df6$AUROC_quantile_coexpr)),
-#     rep("Binding", length(plot_df6$AUROC_quantile_bind)),
-#     rep("(-) Coexpression", length(plot_df6$AUROC_ratio_reverse_coexpr))
-#   )
-# )
-# 
-# plot_df6$Group2 <- c(rep("AUPRC", nrow(plot_df6) / 2), rep("AUROC", nrow(plot_df6) / 2))
-# plot_df6$Group1 <- factor(plot_df6$Group1, levels = unique(plot_df6$Group1))
-# 
-# 
-# p6 <- ggplot(plot_df6, aes(x = Group1, y = Quantile)) +
-#   facet_wrap(~Group2, scales = "free") +
-#   geom_violin(fill = "slategrey") +
-#   geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
-#   ylab("AUC quantile") +
-#   theme_classic() +
-#   theme(axis.text = element_text(size = 25),
-#         axis.title.x = element_blank(),
-#         axis.title = element_text(size = 25),
-#         strip.text = element_text(size = 25),
-#         plot.title = element_text(size = 25))
-# 
-# 
-# ggsave(p6, height = 9, width = 18, device = "png", dpi = 300,
-#        # filename = file.path(paste0(plot_dir, "coexpr_vs_binding_quantile_vbplot_human.png")))
-#        filename = file.path(paste0(plot_dir, "coexpr_vs_binding_quantile_vbplot_mouse.png")))
-
-
-
 # Plotting distribution of the median null versus observed AUROCs
 # Note that this currently fixed to AUROC, which is shown in the paper.
 
@@ -841,49 +712,6 @@ auc_density <- function(agg_df, null_df, title, colour) {
 p9a <- auc_density(agg_df_hg, null_coexpr_auroc_hg, "Human coexpression", "royalblue")
 p9b <- auc_density(agg_df_mm, null_coexpr_auroc_mm, "Mouse coexpression", "goldenrod")
 
-
-# p7a <- 
-#   data.frame(
-#   AUROC = c(agg_df_hg$AUROC_coexpr, null_coexpr_auroc_hg$Median),
-#   Group = c(rep("Aggregate", nrow(agg_df_hg)), 
-#             rep("Median null", nrow(agg_df_hg)))) %>% 
-#   ggplot(., aes(x = AUROC, fill = Group)) +
-#   geom_density() +
-#   ylab("Density") +
-#   ggtitle("Human coexpression") +
-#   scale_fill_manual(values = c("royalblue", "lightgrey")) +
-#   scale_x_continuous(breaks = seq(0, 1, 0.25)) +
-#   theme_classic() +
-#   theme(axis.text = element_text(size = 25),
-#         axis.title = element_text(size = 25),
-#         plot.title = element_text(size = 25),
-#         legend.position = c(0.8, 0.8),
-#         legend.title = element_blank(),
-#         legend.text = element_text(size = 25),
-#         plot.margin = margin(c(10, 10, 10, 10)))
-# 
-# 
-# p7b <- 
-#   data.frame(
-#   AUROC = c(agg_df_mm$AUROC_coexpr, null_coexpr_auroc_mm$Median),
-#   Group = c(rep("Aggregate", nrow(agg_df_mm)), 
-#             rep("Median null", nrow(agg_df_mm)))) %>% 
-#   ggplot(., aes(x = AUROC, fill = Group)) +
-#   geom_density() +
-#   ylab("Density") +
-#   ggtitle("Mouse coexpression") +
-#   scale_fill_manual(values = c("goldenrod", "lightgrey")) +
-#   scale_x_continuous(breaks = seq(0, 1, 0.25)) +
-#   theme_classic() +
-#   theme(axis.text = element_text(size = 25),
-#         axis.title = element_text(size = 25),
-#         plot.title = element_text(size = 25),
-#         legend.position = c(0.8, 0.8),
-#         legend.title = element_blank(),
-#         legend.text = element_text(size = 25),
-#         plot.margin = margin(c(10, 10, 10, 10)))
-
-
 p9 <- plot_grid(p9a, p9b, ncol = 1)
 
 ggsave(p9, height = 12, width = 9, device = "png", dpi = 300,
@@ -893,7 +721,7 @@ ggsave(p9, height = 12, width = 9, device = "png", dpi = 300,
 # Scatter showing the range of null AUCs
 
 p10a <-
-  left_join(agg_df_hg, null_coexpr_auroc, by = "Symbol") %>%
+  left_join(agg_df_hg, null_coexpr_auroc_hg, by = "Symbol") %>%
   qplot(., xvar = "Median", yvar = "AUROC_coexpr") +
   geom_hline(yintercept = 0.5, col = "red") +
   geom_vline(xintercept = 0.5, col = "red") +
@@ -902,7 +730,7 @@ p10a <-
 
 
 p10b <-
-  left_join(agg_df_hg, null_binding_auroc, by = "Symbol") %>%
+  left_join(agg_df_hg, null_bind_auroc_hg, by = "Symbol") %>%
   qplot(., xvar = "Median", yvar = "AUROC_bind") +
   geom_hline(yintercept = 0.5, col = "red") +
   geom_vline(xintercept = 0.5, col = "red") +
