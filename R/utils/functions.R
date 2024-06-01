@@ -199,27 +199,52 @@ allrank_mat <- function(mat, ties_arg = "random", na_arg = "keep", seed = 3) {
 # Generate column-wise correlation of mat, with arguments for whether to return
 # the full symmetric matrix or a lower triangular with NAs on diagonal and upper.
 
-get_cor_mat <- function(mat, 
+get_cor_mat <- function(mat,
                         cor_method = "pearson",
                         lower_tri = FALSE,
                         ncores = 1) {
-  
+
   if (cor_method == "bicor") {
     cmat <- WGCNA::bicor(
       mat, use = "pairwise.complete.obs", nThreads = ncores)
-    
+
+
+  } else if (cor_method == "spearman") {  # pairwise prohib. slow for scor
+    cmat <- WGCNA::cor(
+      mat, method = "spearman", use = "everything", nThreads = ncores)
+
   } else {
     cmat <- WGCNA::cor(
-      mat, method = cor_method, use = "pairwise.complete.obs", nThreads = ncores)
+      mat, method = cor_method, use = "everything", nThreads = ncores)
   }
-  
+
   if (lower_tri) {
     diag(cmat) <- NA
     cmat[upper.tri(cmat)] <- NA
   }
-  
+
   return(cmat)
 }
+
+
+# get_cor_mat <- function(mat, cor_method = "pearson", ncores = 1) {
+#   
+#     cmat <- WGCNA::cor(
+#       mat, method = cor_method, use = "everything", nThreads = ncores)
+# 
+#   return(cmat)
+# }
+
+
+
+
+calc_sparse_cor <- function(mat) {
+  
+  cmat <- proxyC::simil(mat, margin = 2, method = "correlation", use_nan = TRUE)
+  cmat <- suppressWarnings(as.matrix(cmat))
+  return(cmat)
+}
+
 
 
 
@@ -238,12 +263,35 @@ lowertri_to_symm <- function(mat, na_diag = FALSE) {
 # all NAs. This is done to produce an NA during correlation, instead of 
 # allowing values resulting from fewer observations.
 
+# under_min_count_to_na <- function(mat, min_count = 20) {
+# 
+#   na_genes <- apply(mat, 2, function(x) sum(x != 0)) < min_count
+#   mat[, na_genes] <- NA
+#   return(mat)
+# }
+
+
 under_min_count_to_na <- function(mat, min_count = 20) {
   
-  na_genes <- apply(mat, 2, function(x) sum(x != 0)) < min_count
-  mat[, na_genes] <- NA
+  binary_counts <- mat > 0
+  nonzero_cells <- colSums(binary_counts)
+  filt_genes <- nonzero_cells < min_count
+  mat[, filt_genes] <- NA
   return(mat)
 }
+
+
+
+
+under_min_count_to_zero <- function(mat, min_count = 20) {
+  
+  binary_counts <- mat > 0
+  nonzero_cells <- colSums(binary_counts)
+  filt_genes <- nonzero_cells < min_count
+  mat[, filt_genes] <- 0
+  return(mat)
+}
+
 
 
 
@@ -259,6 +307,17 @@ subset_and_filter <- function(mat, meta, cell_type, min_count = 20) {
   return(ct_mat)
 }
 
+
+
+
+subset_and_filter_sparse <- function(mat, meta, cell_type, min_count = 20) {
+  
+  ids <- dplyr::filter(meta, Cell_type == cell_type)$ID
+  ct_mat <- t(mat[, ids])
+  ct_mat <- under_min_count_to_zero(ct_mat, min_count)
+  stopifnot(all(rownames(ct_mat) %in% meta$ID))
+  return(ct_mat)
+}
 
 
 # Assumes mat is a gene x cell count matrix and returns a gene x gene matrix of 
@@ -337,8 +396,10 @@ upper_to_na <- function(mat) {
 
 RSR_allrank <- function(mat,
                         meta,
+                        cor_method = "pearson",
                         min_cell = 20,
-                        standardize = TRUE) {
+                        standardize = TRUE,
+                        ncores = 1) {
   
   stopifnot(c("Cell_type", "ID") %in% colnames(meta), length(rownames(mat)) > 0)
   
@@ -366,7 +427,10 @@ RSR_allrank <- function(mat,
     # Get cell-type cor matrix and increment count of NAs before imputing to 0,
     # set diag (self-cor) to 1, and set to triangular to prevent symmetric ranking
     
-    cmat <- get_cor_mat(ct_mat, lower_tri = FALSE)
+    cmat <- get_cor_mat(ct_mat, 
+                        lower_tri = FALSE, 
+                        cor_method = cor_method,
+                        ncores = ncores)
     
     na_ix <- which(is.na(cmat), arr.ind = TRUE)
     na_mat[na_ix] <- na_mat[na_ix] + 1
@@ -397,6 +461,79 @@ RSR_allrank <- function(mat,
   
   return(list(Agg_mat = amat, NA_mat = na_mat))
 }
+
+
+
+
+
+RSR_allrank_sparse <- function(mat,
+                               meta,
+                               cor_method = "pearson",
+                               min_cell = 20,
+                               standardize = TRUE,
+                               ncores = 1) {
+  
+  stopifnot(c("Cell_type", "ID") %in% colnames(meta), length(rownames(mat)) > 0)
+  
+  cts <- unique(meta$Cell_type)
+  
+  # Matrices of 0s for tracking aggregate correlation and count of NAs
+  
+  amat <- init_agg_mat(mat)
+  na_mat <- amat  
+  
+  for (ct in cts) {
+    
+    message(paste(ct, Sys.time()))
+    
+    # Get count matrix for current cell type, coercing low count genes to NAs
+    
+    ct_mat <- subset_and_filter_sparse(mat, meta, ct, min_cell)
+    
+    if (identical(sum(ct_mat == 0), length(ct_mat))) {
+      message(paste(ct, "skipped due to insufficient counts"))
+      na_mat <- na_mat + 1
+      next()
+    }
+    
+    # Get cell-type cor matrix and increment count of NAs before imputing to 0,
+    # set diag (self-cor) to 1, and set to triangular to prevent symmetric ranking
+    
+    cmat <- calc_sparse_cor(ct_mat)
+    
+    na_ix <- which(is.na(cmat), arr.ind = TRUE)
+    na_mat[na_ix] <- na_mat[na_ix] + 1
+    
+    cmat <- cmat %>%
+      na_to_zero() %>%
+      diag_to_one() %>%
+      upper_to_na()
+    
+    # Rank the tri matrix and add to aggregate matrix
+    
+    rmat <- allrank_mat(cmat, ties_arg = "min")
+    amat <- amat + rmat
+    rm(cmat, ct_mat, rmat)
+    gc(verbose = FALSE)
+    
+  }
+  
+  # Final rank of aggregate and convert triangular matrix back to symmetric
+  
+  if (standardize) {
+    amat <- allrank_mat(amat, ties_arg = "min") / sum(!is.na(amat))
+  } else {
+    amat <- allrank_mat(amat, ties_arg = "min")
+  }
+  
+  amat <- lowertri_to_symm(amat)
+  
+  return(list(Agg_mat = amat, NA_mat = na_mat))
+}
+
+
+
+
 
 
 
@@ -459,21 +596,21 @@ RSR_colrank <- function(mat,
 
 
 # Here, correlations are transformed using Fisher' Z transformation, and these 
-# are then averaged across cell types. A list of three matrices are returned: 
-# the average calculated across all cell types, the average using only non-NA 
-# observations, and a matrix tracking the count of NAs for each gene-gene pair 
+# are then averaged across cell types. A list of two matrices are returned: 
+# the average using only non-NA observations, and a matrix tracking the count of NAs for each gene-gene pair 
 # across cell types.
 # https://bookdown.org/mwheymans/bookmi/pooling-correlation-coefficients-1.html
 # https://rdrr.io/cran/DescTools/man/FisherZ.html
 
 fishersZ_aggregate <- function(mat,
                                meta,
-                               min_cell = 20) {
+                               min_cell = 20,
+                               ncores = 1) {
   
   stopifnot(c("Cell_type", "ID") %in% colnames(meta), length(rownames(mat)) > 0)
   
   cts <- unique(meta$Cell_type)
-
+  
   # Matrices of 0s for tracking aggregate correlation and count of NAs
   
   amat <- init_agg_mat(mat)
@@ -485,17 +622,18 @@ fishersZ_aggregate <- function(mat,
     
     # Get count matrix for current cell type, coercing low count genes to NAs
     
-    ct_mat <- subset_and_filter(mat, meta, ct, min_cell)
+    ct_mat <- subset_and_filter_sparse(mat, meta, ct, min_cell)
     
-    if (sum(is.na(ct_mat)) == length(ct_mat)) {
+    if (identical(sum(ct_mat == 0), length(ct_mat))) {
       message(paste(ct, "skipped due to insufficient counts"))
       na_mat <- na_mat + 1
       next()
     }
     
-    # Generate cor matrix, and count NAs before setting to 0
+    # Get cell-type cor matrix and increment count of NAs before imputing to 0,
+    # set diag (self-cor) to 1, and set to triangular to prevent symmetric ranking
     
-    cmat <- get_cor_mat(ct_mat, lower_tri = FALSE)
+    cmat <- calc_sparse_cor(ct_mat)
     
     na_ix <- which(is.na(cmat), arr.ind = TRUE)
     na_mat[na_ix] <- na_mat[na_ix] + 1
@@ -513,13 +651,12 @@ fishersZ_aggregate <- function(mat,
     
   }
   
-  agg_list <- list(
-    Avg_all = (amat / length(cts)),
-    Avg_nonNA = (amat / (length(cts) - na_mat)),
-    NA_mat = na_mat)
+  # Divide by count of non-NA measurements
+  agg_mat <- (amat / (length(cts) - na_mat))
   
-  return(agg_list)
+  return(list(Agg_mat = agg_mat, NA_mat = na_mat))
 }
+
 
 
 
