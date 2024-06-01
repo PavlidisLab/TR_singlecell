@@ -717,8 +717,8 @@ p12a <- qplot(ortho_rank_sim$Topk, xvar = "Mean_human", yvar = "Mean_mouse") +
 
 p12b <- qplot(ortho_rank_sim$Bottomk, xvar = "Mean_human", yvar = "Mean_mouse") +
   geom_smooth(method = "lm", colour = "red") +
-  xlab(expr("Human Mean Top"[!!k])) +
-  ylab(expr("Mouse Mean Top"[!!k])) +
+  xlab(expr("Human Mean Bottom"[!!k])) +
+  ylab(expr("Mouse Mean Bottom"[!!k])) +
   ggtitle("Consistency of negative profiles")
 
 p12 <- plot_grid(p12a, p12b, nrow = 1)
