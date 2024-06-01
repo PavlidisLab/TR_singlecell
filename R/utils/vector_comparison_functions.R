@@ -14,7 +14,7 @@ library(ROCR)
 # and so selecting the top k elements may include uninformative NAs. This checks
 # for ties at the kth position, and if found, returns the first non-tied k index
 # of vec_sort
-# vec: named numeric vector
+# vec_sort: named numeric vector assumed to be sorted
 # k: an integer
 # returns: an integer
 
@@ -24,12 +24,14 @@ check_k <- function(vec_sort, k, decreasing = TRUE) {
   
   vec_rank <- rank(-vec_sort, ties.method = "min")
   tally_ranks <- sort(table(vec_rank), decreasing = TRUE)
-  tie_start <- as.integer(names(head(tally_ranks)[1]))
-  k <- min(k, tie_start - 1)
+  
+  if (tally_ranks[1] > 1) {  # ties were found, check position relative to k
+    tie_start <- as.integer(names(head(tally_ranks)[1]))
+    k <- min(k, tie_start - 1)
+  }
   
   return(k)
 }
-
 
 
 
