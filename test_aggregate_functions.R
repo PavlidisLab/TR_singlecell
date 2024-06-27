@@ -140,6 +140,7 @@ test_that("sparse_pcor works correctly with valid input", {
     suppressWarnings(cor(mat_dense, method = "pearson", use = "everything"))
   
   expect_equal(result_sparse, result_dense, tolerance = 1e-6)
+  
 })
 
 
@@ -153,6 +154,43 @@ test_that("sparse_pcor throws an error with invalid input", {
   
 })
 
+
+
+
+# sparse_scor()
+# ------------------------------------------------------------------------------
+
+
+
+test_that("sparse_scor works correctly with valid input", {
+  
+  set.seed(1)
+  
+  mat_sparse <- Matrix::rsparsematrix(10, 10, density = 0.5)
+  mat_sparse[, 1] <- 0
+  colnames(mat_sparse) <- paste0("gene", 1:10)
+  
+  mat_dense <- as.matrix(mat_sparse)
+  
+  result_sparse <- sparse_scor(mat_sparse)
+  
+  result_dense <- 
+    suppressWarnings(cor(mat_dense, method = "spearman", use = "everything"))
+  
+  expect_equal(result_sparse, result_dense, tolerance = 1e-6)
+  
+})
+
+
+
+
+test_that("sparse_pcor throws an error with invalid input", {
+  
+  mat_dense <- matrix(c(1, 0, 3, 0, 5, 6, 0, 8, 9), nrow = 3)
+  
+  expect_error(sparse_pcor(mat_dense))
+  
+})
 
 
 

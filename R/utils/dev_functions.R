@@ -191,7 +191,7 @@ allrank_mat <- function(mat, ties_arg = "min", na_arg = "keep") {
 
 
 
-# Pearson's correlation for sparse matrices. 
+# Column-wise Pearson's correlation for sparse matrices. 
 # Wrapper for qlcMatrix::sparseCor() to format resulting matrix
 
 sparse_pcor <- function(mat) {
@@ -208,7 +208,7 @@ sparse_pcor <- function(mat) {
 
 
 # Column rank matrix while preserving sparsity, which is then fed into sparse
-# Pearson's cor impl. to get a sparse Spearman's impl.
+# Pearson's cor to get a sparse Spearman's impl.
 # https://saket-choudhary.me/blog/2022/03/09/sparsespearman/
 # https://github.com/saketkc/blog/blob/main/2022-03-10/SparseSpearmanCorrelation2.ipynb
 
@@ -236,8 +236,7 @@ sparse_rank <- function(mat) {
 
 
 
-
-# Spearman's correlation for sparse matrices. 
+# Column-wise Spearman's correlation for sparse matrices. 
 # Note: This is only calculated over nonzero columns, as all zero columns affect
 # the offset logic employed by sparse_rank(). All zero columns are maintained as
 # NAs, with 1 on the diagonal
@@ -261,37 +260,23 @@ sparse_scor <- function(mat) {
 
 
 
+# Wrapper for calling sparse correlation
+# cor_method must be one of [pearson, spearman]
 
-
-
-# Generate column-wise correlation of mat
-# cor_method must be one of [pearson, spearman, sparse]
-# pearson and spearman use WGCNA and assume a dense matrix; use="everything"
-# sparse uses proxyC for pearson only; use_nan=TRUE returns NA for invalid cors
-# Note that a dense matrix is returned in all cases
-
-calc_correlation <- function(mat,
-                             cor_method,
-                             ncores = 1) {
+calc_sparse_correlation <- function(mat, cor_method) {
   
-  stopifnot(cor_method %in% c("pearson", "spearman", "sparse"))
+  stopifnot(inherits(mat, "dgCMatrix"))
+  stopifnot(cor_method %in% c("pearson", "spearman"))
   
-  if (cor_method == "sparse") {
-    
-    stopifnot(inherits(mat, "dgCMatrix"))
-    cmat <- proxyC::simil(mat, margin = 2, method = "correlation", use_nan = TRUE)
-    cmat <- suppressWarnings(as.matrix(cmat))  # make result dense
-    
+  cmat <- if (cor_method == "pearson") {
+    sparse_pcor(mat) 
   } else {
-    
-    stopifnot(is.matrix(mat))
-    cmat <- WGCNA::cor(
-      mat, method = cor_method, use = "everything", nThreads = ncores)
-    
+    sparse_scor(mat)
   }
-  
+
   return(cmat)
 }
+
 
 
 
@@ -493,13 +478,11 @@ aggregate_celltype_correlation <- function(mat,
                                            meta,
                                            cor_method,
                                            agg_method,
-                                           min_cell = 20,
-                                           ncores = 1) {
+                                           min_cell = 20) {
   
-  stopifnot(cor_method %in% c("pearson", "spearman", "sparse"))
+  stopifnot(cor_method %in% c("pearson", "spearman"))
   stopifnot(agg_method %in% c("allrank", "colrank", "FZ"))
   
-  sparse_arg <- (cor_method == "sparse")
   cts <- unique(meta$Cell_type)
   n_cts <- length(cts)
   
@@ -514,7 +497,7 @@ aggregate_celltype_correlation <- function(mat,
     
     # Get count matrix for current cell type, coercing low count genes to NA/0
     
-    ct_mat <- subset_celltype_and_filter(mat, meta, ct, min_cell, sparse = sparse_arg)
+    ct_mat <- subset_celltype_and_filter(mat, meta, ct, min_cell)
     n_nonmsr <- max(sum(ct_mat == 0), sum(is.na(ct_mat)))
     
     if (identical(n_nonmsr, length(ct_mat))) {
@@ -525,7 +508,7 @@ aggregate_celltype_correlation <- function(mat,
     
     # Get cell-type cor matrix and increment count of NAs before imputing to 0
     
-    cmat <- calc_correlation(ct_mat, cor_method = cor_method, ncores = ncores)
+    cmat <- calc_sparse_correlation(ct_mat, cor_method)
     na_mat <- increment_na_mat(cmat, na_mat)
     
     # Transform raw correlation matrix, add to aggregate and clean up
@@ -589,256 +572,3 @@ aggregate_celltype_correlation <- function(mat,
 # across cell types.
 # https://bookdown.org/mwheymans/bookmi/pooling-correlation-coefficients-1.html
 # https://rdrr.io/cran/DescTools/man/FisherZ.html
-
-
-
-
-
-
-# Get correlation of gene1 and gene2 across cell types represented in meta
-
-all_celltype_cor <- function(mat,
-                             meta,
-                             gene1,
-                             gene2,
-                             min_cell = 20,
-                             cor_method = "pearson") {
-  
-  
-  stopifnot(c("Cell_type", "ID") %in% colnames(meta),
-            c(gene1, gene2) %in% rownames(mat))
-  
-  cts <- unique(meta$Cell_type)
-  
-  cor_l <- lapply(cts, function(ct) {
-    
-    ct_mat <- t(mat[c(gene1, gene2), filter(meta, Cell_type == ct)$ID])
-    
-    if (sum(ct_mat[, 1] != 0) < min_cell || sum(ct_mat[, 2] != 0) < min_cell) {
-      return(NA)
-    }
-    
-    WGCNA::cor(ct_mat[, gene1], ct_mat[, gene2], method = cor_method)
-    
-  })
-  names(cor_l) <- cts
-  
-  cor_vec <- round(sort(unlist(cor_l), decreasing = TRUE), 5)
-  
-  return(cor_vec)
-}
-
-
-
-# Get a list of correlations of gene1 and gene2 across cell types for every
-# experiment in ids.
-
-get_all_cor_l <- function(ids, gene1, gene2, cor_method = "pearson") {
-  
-  cor_l <- lapply(ids, function(x) {
-    dat <- load_dat_list(x)[[1]]
-    mat <- dat$Mat
-    meta <- dat$Meta
-    all_celltype_cor(mat, meta, gene1, gene2, cor_method = cor_method)
-  })
-  
-  names(cor_l) <- ids
-  keep <- vapply(cor_l, function(x) length(x) > 0, logical(1))
-  cor_l <- cor_l[keep]
-  
-  return(cor_l)
-}
-
-
-
-# Misc helpers
-# ------------------------------------------------------------------------------
-
-
-# Convert a matrix into a long and skinny df. If symmetric, only return the
-# unique values.
-
-mat_to_df <- function(mat, symmetric = TRUE, value_name = NULL) {
-  
-  if (symmetric) {
-    df <- data.frame(
-      Row = rownames(mat)[row(mat)[lower.tri(mat)]],
-      Col = colnames(mat)[col(mat)[lower.tri(mat)]],
-      Value = mat[lower.tri(mat)],
-      stringsAsFactors = FALSE
-    )
-  } else {
-    df <- data.frame(
-      Row = rownames(mat)[row(mat)],
-      Col = colnames(mat)[col(mat)],
-      Value = c(mat),
-      stringsAsFactors = FALSE
-    )
-  }
-  
-  if (!is.null(value_name)) colnames(df)[colnames(df) == "Value"] <- value_name
-  
-  return(df)
-}
-
-
-
-# TODO:
-
-subset_to_measured <- function(mat, gene, msr_mat) {
-  
-  stopifnot(gene %in% rownames(msr_mat), 
-            length(intersect(rownames(mat), rownames(msr_mat))) > 0,
-            length(intersect(colnames(mat), colnames(msr_mat))) > 0)
-  
-  msr_exps <- names(which(msr_mat[gene, ] == 1))
-  mat <- mat[, msr_exps, drop = FALSE]
-  
-  return(mat)
-}
-
-
-
-# For the given gene, bind its coexpression profiles for all datasets in agg_l
-# into a matrix, keeping only the profiles that are measured.
-gene_vec_to_mat <- function(agg_l, gene, msr_mat) {
-  
-  genes <- rownames(agg_l[[1]])
-  stopifnot(gene %in% genes)
-  
-  gene_mat <- do.call(cbind, lapply(agg_l, function(x) x[genes, gene]))
-  gene_mat <- subset_to_measured(gene_mat, msr_mat = msr_mat, gene = gene)
-  
-  return(gene_mat)
-}
-
-
-
-
-# Functions for QC/preprocessing count matrices and metadata
-# ------------------------------------------------------------------------------
-
-
-
-# Gives a matrix with ENSEMBL IDs as rownames, return the matrix with the 
-# corresponding gene symbols as rownames. Blank gene symbols are removed
-
-ensembl_to_symbol <- function(mat, ensembl_df) {
-  
-  stopifnot(c("Gene_ID", "Symbol") %in% colnames(ensembl_df))
-  
-  ids <- intersect(pc$Gene_ID, rownames(mat))
-  
-  if (length(ids) == 0) stop("No common ENSEMBL IDs in rownames of matrix")
-  
-  common_genes <- data.frame(
-    ID = ids,
-    Symbol = pc$Symbol[match(ids, pc$Gene_ID)]) %>% 
-    filter(Symbol != "")
-  
-  # dupl_genes <- common_genes$Symbol[which(duplicated(common_genes$Symbol))]
-  
-  mat <- mat[common_genes$ID, ]
-  rownames(mat) <- common_genes$Symbol
-  
-  return(mat)
-}
-
-
-
-# Assumes that mat is sparse gene x cell count matrix. Filters the matrix for 
-# unique gene symbols in pcoding_df, and fills the missing genes as 0s. 
-
-get_pcoding_only <- function(mat, pcoding_df) {
-  
-  stopifnot("Symbol" %in% colnames(pcoding_df))
-  
-  genes <- unique(pcoding_df$Symbol)
-  common <- intersect(rownames(mat), genes)
-  missing <- setdiff(genes, rownames(mat))
-  
-  if (length(common) == 0) stop("No common symbols in rownames of mat")
-  
-  pc_mat <- mat[common, ]
-  pc_mat <- rbind(pc_mat, Matrix(0, nrow = length(missing), ncol = ncol(mat)))
-  rownames(pc_mat) <- c(common, missing)
-  pc_mat <- pc_mat[genes, ]
-  
-  return(pc_mat)
-}
-
-
-
-# Given a vector of genes that have either common gene symbols or ensembl
-# ids, return a subst of gene_vec only containing the mitochondrial genes. 
-# Assumes gene_vec has only mouse or human symbols/ensembl IDs.
-
-get_mt_genes <- function(gene_vec,
-                         mt_path = "/home/amorin/Data/Metadata/mitochondrial_genes_all.tsv") {
-  
-  mt_table <- read.delim(mt_path, stringsAsFactors = FALSE)
-  mt_genes <- gene_vec[gene_vec %in% c(mt_table$Gene_stable_ID, mt_table$Gene_name)]
-  
-  return(mt_genes)
-}
-
-
-
-# This adds columns to metadata: the number of total UMI counts for each 
-# cell/column of mat, the number of non-zero expressing genes, and the RNA
-# novelty/compexity, which is the ratio of the log10 gene counts to log10 umi 
-# counts. It additionally adds ratio of mitochondrial if available. 
-# https://hbctraining.github.io/scRNA-seq_online/lessons/04_SC_quality_control.html
-
-add_count_info <- function(mat, meta) {
-  
-  mt_genes <- get_mt_genes(rownames(mat))
-  
-  meta <- meta %>% 
-    mutate(
-      UMI_counts = colSums(mat),
-      Gene_counts = colSums(mat > 0),
-      RNA_novelty = log10(Gene_counts) / log10(UMI_counts)
-    )
-  
-  if (length(mt_genes) > 0) {
-    mt_ratio <- colSums(mat[mt_genes, , drop = FALSE]) / meta$UMI_counts
-    meta$MT_ratio = mt_ratio
-  }
-  
-  # Remove cell x gene features of this type, if present
-  meta <- meta[, !(colnames(meta) %in% c("nFeature_RNA", "nCount_RNA"))]
-  
-  return(meta)
-}
-
-
-
-# This subsets mat to remove cells that fail any of the filters laid out in: 
-# https://hbctraining.github.io/scRNA-seq_online/lessons/04_SC_quality_control.html
-# The RNA novelty filter is relaxed for Smart-seq runs as more reads can go to
-# genes like mitochondrial https://pubmed.ncbi.nlm.nih.gov/33662621/
-
-rm_low_qc_cells <- function(mat, 
-                            meta,
-                            min_counts = 500,
-                            min_genes = 250,
-                            min_novelty = NULL,
-                            max_mt_ratio = 0.2) {
-  
-  keep_id <- meta %>%
-    mutate(Is_smartseq = str_detect(str_to_lower(assay), "smart-seq")) %>%
-    filter(
-      UMI_counts >= min_counts,
-      Gene_counts >= min_genes,
-      ifelse(Is_smartseq, RNA_novelty > 0.5, RNA_novelty > 0.8)) %>%
-    pull(ID)
-  
-  if ("MT_ratio" %in% colnames(meta)) {
-    keep_id <- intersect(keep_id, filter(meta, MT_ratio < max_mt_ratio)$ID)
-  }
-  
-  if (length(keep_id) == 0) stop("No remaining cells after filtering")
-  
-  return(mat[, keep_id])
-}
