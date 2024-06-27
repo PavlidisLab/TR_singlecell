@@ -244,22 +244,10 @@ test_that("calc_correlation throws an error for dense matrix with sparse method"
 
 
 
-test_that("set_under_min_count sets columns to NA correctly for dense matrix", {
-  
-  mat <- matrix(c(1, 0, 3, 0, 5, 0, 7, 0, 0, 0), nrow = 5, ncol = 2)
-  result <- set_under_min_count(mat, sparse = FALSE, min_count = 2)
-  
-  expect_true(all(is.na(result[, 2])))
-  expect_false(any(is.na(result[, 1])))
-
-})
-
-
-
 test_that("set_under_min_count sets columns to 0 correctly for sparse matrix", {
   
   mat <- Matrix(c(1, 0, 3, 0, 5, 0, 7, 0, 0, 0), nrow = 5, ncol = 2, sparse = TRUE)
-  result <- set_under_min_count(mat, sparse = TRUE, min_count = 2)
+  result <- set_under_min_count(mat, min_count = 2)
   
   expect_true(all(result[, 2] == 0))
   expect_equal(mat[, 1], result[, 1])
@@ -268,35 +256,13 @@ test_that("set_under_min_count sets columns to 0 correctly for sparse matrix", {
 
 
 
-test_that("set_under_min_count handles edge cases for dense matrix", {
-  
-  mat <- matrix(c(1, 2, 3, 4, 5), nrow = 5, ncol = 1)
-  result <- set_under_min_count(mat, sparse = FALSE, min_count = 5)
-  
-  expect_false(any(is.na(result[, 1])))
-  expect_error(set_under_min_count(mat, sparse = FALSE, min_count = 6))
-
-})
-
-
-
 test_that("set_under_min_count handles edge cases for sparse matrix", {
   
   mat <- Matrix(c(1, 2, 3, 4, 5, 1, 2, 3, 4, 0), nrow = 5, ncol = 2, sparse = TRUE)
-  result <- set_under_min_count(mat, sparse = TRUE, min_count = 5)
+  result <- set_under_min_count(mat, min_count = 5)
 
   expect_true(all(result[, 2] == 0))
-  expect_error(set_under_min_count(mat, sparse = TRUE, min_count = 6))
-  
-})
-
-
-
-test_that("set_under_min_count handles minimum count of 0 for dense matrix", {
-  
-  mat <- matrix(c(1, 2, 3, 4, 5), nrow = 5, ncol = 1)
-  result <- set_under_min_count(mat, sparse = FALSE, min_count = 0)
-  expect_false(any(is.na(result[, 1])))
+  expect_error(set_under_min_count(mat, min_count = 6))
   
 })
 
@@ -305,7 +271,7 @@ test_that("set_under_min_count handles minimum count of 0 for dense matrix", {
 test_that("set_under_min_count handles minimum count of 0 for sparse matrix", {
   
   mat <- Matrix(c(1, 2, 3, 4, 5), nrow = 5, ncol = 1, sparse = TRUE)
-  result <- set_under_min_count(mat, sparse = TRUE, min_count = 0)
+  result <- set_under_min_count(mat, min_count = 0)
   expect_false(any(result[, 1] == 0))
   
 })
@@ -317,14 +283,10 @@ test_that("set_under_min_count checks arguments", {
   mat_dense <- matrix(c(1, 2, 3, 4, 5), nrow = 5, ncol = 1)
   mat_sparse <- Matrix(c(1, 2, 3, 4, 5), nrow = 5, ncol = 1, sparse = TRUE)
   
-  expect_error(set_under_min_count(mat_dense, sparse = FALSE, min_count = -1))
-  expect_error(set_under_min_count(mat_dense, sparse = FALSE, min_count = 10))
-  expect_error(set_under_min_count(mat_dense, sparse = TRUE, min_count = 1))
-  
-  expect_error(set_under_min_count(mat_sparse, sparse = TRUE, min_count = -1))
-  expect_error(set_under_min_count(mat_sparse, sparse = TRUE, min_count = 10))
-  expect_error(set_under_min_count(mat_sparse, sparse = FALSE, min_count = 2))
-  
+  expect_error(set_under_min_count(mat_dense, min_count = 1))
+  expect_error(set_under_min_count(mat_sparse, min_count = -1))
+  expect_error(set_under_min_count(mat_sparse, min_count = 10))
+
 })
 
 
@@ -335,22 +297,9 @@ test_that("set_under_min_count checks arguments", {
 
 
 
-test_that("subset_celltype_and_filter works with dense matrix and default settings", {
-  
-  result <- subset_celltype_and_filter(mat_dense, meta, cell_type = "Type1", sparse = FALSE)
-  
-  expect_true(all(is.na(result[, 1])))
-  expect_equal(nrow(result), 50)
-  expect_equal(ncol(result), 100)
-  expect_true(all(rownames(result) %in% meta$ID))
-  
-})
-
-
-
 test_that("subset_celltype_and_filter works with sparse matrix and default settings", {
   
-  result <- subset_celltype_and_filter(mat_sparse, meta, "Type1", sparse = TRUE)
+  result <- subset_celltype_and_filter(mat_sparse, meta, "Type1")
  
   expect_true(all(result[, 1] == 0))
   expect_equal(nrow(result), 50)
@@ -367,10 +316,8 @@ test_that("subset_celltype_and_filter handles case where no genes meet the min_c
   mat_dense[2:100, ] <- mat_dense[1, ]
   mat_sparse <- Matrix(mat_dense, sparse = TRUE)
   
-  result_dense <- subset_celltype_and_filter(mat_dense, meta, "Type1", sparse = FALSE)
-  result_sparse <- subset_celltype_and_filter(mat_sparse, meta, "Type1", sparse = TRUE)
+  result_sparse <- subset_celltype_and_filter(mat_sparse, meta, "Type1")
   
-  expect_true(all(is.na(result_dense)))
   expect_true(all(result_sparse == 0))
   
 })
@@ -378,22 +325,22 @@ test_that("subset_celltype_and_filter handles case where no genes meet the min_c
 
 
 test_that("subset_celltype_and_filter handles invalid cell_type", {
-  expect_error(subset_celltype_and_filter(mat_dense, meta, cell_type = "InvalidType"))
+  expect_error(subset_celltype_and_filter(mat_sparse, meta, cell_type = "InvalidType"))
 })
 
 
 
 test_that("subset_celltype_and_filter handles incorrect metadata format", {
   invalid_meta <- data.frame(ID = paste0("Cell", 1:10), stringsAsFactors = FALSE)
-  expect_error(subset_celltype_and_filter(mat_dense, invalid_meta, "Type1"))
+  expect_error(subset_celltype_and_filter(mat_sparse, invalid_meta, "Type1"))
 })
 
 
 
 test_that("subset_celltype_and_filter handles arguments", {
-  expect_error(subset_celltype_and_filter(mat_dense, meta, "Type1", sparse = "not logical"))
-  expect_error(subset_celltype_and_filter(mat_dense, meta, "Type1", min_count = -1, sparse = FALSE))
-  expect_error(subset_celltype_and_filter(mat_dense, meta, "Type1", min_count = nrow(mat_dense) + 1, sparse = FALSE))
+  expect_error(subset_celltype_and_filter(mat_dense, meta, "Type1"))
+  expect_error(subset_celltype_and_filter(mat_sparse, meta, "Type1", min_count = -1))
+  expect_error(subset_celltype_and_filter(mat_sparse, meta, "Type1", min_count = nrow(mat_dense) + 1))
 })
 
 
@@ -405,8 +352,7 @@ test_that("subset_celltype_and_filter checks all cell IDs are in matrix", {
   
   meta <- rbind(meta, add_mock)
   
-  expect_error(subset_celltype_and_filter(mat_dense, meta, "Type1", sparse = FALSE))
-  expect_error(subset_celltype_and_filter(mat_sparse, meta, "Type1", sparse = TRUE))
+  expect_error(subset_celltype_and_filter(mat_sparse, meta, "Type1"))
 
 })
 

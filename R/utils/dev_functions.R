@@ -296,29 +296,17 @@ calc_correlation <- function(mat,
 
 
 # If a col of mat has fewer non-zero elements than min_count, set that col to
-# NA for dense matrices or 0 for sparse matrices (session hangs when trying to
-# assign NA). This is done to produce an NA during correlation, instead of 
-# allowing cors derived from small n. 
+# 0. This is done to produce an NA during correlation, instead of allowing cors 
+# derived from small n. 
 
-set_under_min_count <- function(mat, sparse, min_count = 20) {
+set_under_min_count <- function(mat, min_count = 20) {
   
-  stopifnot(is.logical(sparse))
+  stopifnot(inherits(mat, "dgCMatrix"))
   stopifnot(is.numeric(min_count), min_count >= 0 & min_count <= nrow(mat))
   
-  if (sparse) {
-    stopifnot(inherits(mat, "dgCMatrix"))
-    set_value <- 0
-  } else {
-    stopifnot(is.matrix(mat))
-    set_value <- NA
-  }
-
   nonzero_cells <- colSums(mat != 0)
   filt_genes <- nonzero_cells < min_count
-  
-  if (any(filt_genes)) {
-    mat[, filt_genes] <- set_value
-  }
+  if (any(filt_genes)) mat[, filt_genes] <- 0
 
   return(mat)
 }
@@ -326,24 +314,19 @@ set_under_min_count <- function(mat, sparse, min_count = 20) {
 
 
 
-# Subset mat to cell_type, set under min count genes to NA/0, and transpose.
+# Subset mat to cell_type, set under min count genes to 0 and transpose.
 # Expects mat is genes x cells, and will return a cells x genes mat for corr.
-# sparse controls if genes under min count are set to NA (dense) or 0 (sparse)
 
-subset_celltype_and_filter <- function(mat, 
-                                       meta, 
-                                       cell_type, 
-                                       min_count = 20, 
-                                       sparse = TRUE) {
+subset_celltype_and_filter <- function(mat, meta, cell_type, min_count = 20) {
   
-  stopifnot(is.logical(sparse))
+  stopifnot(inherits(mat, "dgCMatrix"))
   stopifnot(c("ID", "Cell_type") %in% colnames(meta), cell_type %in% meta$Cell_type)
   
   ids <- dplyr::filter(meta, Cell_type == cell_type)[["ID"]]
   stopifnot(all(ids %in% colnames(mat)))
   
   ct_mat <- t(mat[, ids])
-  ct_mat <- set_under_min_count(ct_mat, sparse, min_count)
+  ct_mat <- set_under_min_count(ct_mat, min_count)
   stopifnot(all(rownames(ct_mat) %in% meta$ID))
   
   return(ct_mat)
