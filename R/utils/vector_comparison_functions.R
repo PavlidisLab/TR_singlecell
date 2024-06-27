@@ -132,7 +132,6 @@ colwise_cor <- function(mat, cor_method = "spearman", ncores = 1) {
 # TODO:
 # https://stackoverflow.com/a/66594545 Jaccard; outer faster than nested loop 
 
-
 colwise_jaccard <- function(mat, k, check_k_arg = TRUE) {
   
   jaccard <- function(vec1, vec2) {
@@ -167,6 +166,80 @@ colwise_topk_auprc <- function(mat, k) {
   
   return(auprc_mat)
 }
+
+
+
+
+# TODO:
+
+pair_colwise_cor <- function(mat1, mat2, cor_method = "spearman", ncores = 1) {
+  
+  stopifnot(identical(colnames(mat1), colnames(mat2)))
+  
+  cor_l <- mclapply(1:ncol(mat1), function(x) {
+    cor(mat1[, x], mat2[, x], method = cor_method, use = "pairwise.complete.obs")
+  }, mc.cores = ncores)
+  
+  names(cor_l) <- colnames(mat1)
+  return(unlist(cor_l))
+}
+
+
+
+# TODO:
+
+pair_colwise_topk <- function(mat1, mat2, k = 200, ncores = 1) {
+  
+  stopifnot(identical(colnames(mat1), colnames(mat2)))
+  
+  topk_l <- mclapply(1:ncol(mat1), function(x) {
+    topk_intersect(topk_sort(vec = mat1[, x], k = k),
+                   topk_sort(vec = mat2[, x], k = k))
+  }, mc.cores = ncores)
+  
+  names(topk_l) <- colnames(mat1)
+  return(unlist(topk_l))
+}
+
+
+
+# TODO:
+
+pair_shuffle_cor <- function(mat1, mat2, cor_method = "spearman", ncores = 1) {
+  
+  stopifnot(identical(colnames(mat1), colnames(mat2)))
+  sample1 <- sample(1:ncol(mat1), ncol(mat1), replace = TRUE)
+  sample2 <- sample(1:ncol(mat2), ncol(mat2), replace = TRUE)
+  
+  cor_l <- mclapply(1:ncol(mat1), function(x) {
+    cor(mat1[, sample1[x]], mat2[, sample2[x]], 
+        method = cor_method, use = "pairwise.complete.obs")
+  }, mc.cores = ncores)
+  
+  return(unlist(cor_l))
+}
+
+
+
+# TODO:
+
+pair_shuffle_topk <- function(mat1, mat2, k = 200, ncores = 1) {
+  
+  stopifnot(identical(colnames(mat1), colnames(mat2)))
+  sample1 <- sample(1:ncol(mat1), ncol(mat1), replace = TRUE)
+  sample2 <- sample(1:ncol(mat2), ncol(mat2), replace = TRUE)
+  
+  
+  topk_l <- mclapply(1:ncol(mat1), function(x) {
+    topk_intersect(topk_sort(vec = mat1[, sample1[x]], k = k),
+                   topk_sort(vec = mat2[, sample2[x]], k = k))
+  }, mc.cores = ncores)
+  
+  return(unlist(topk_l))
+}
+
+
+
 
 
 
