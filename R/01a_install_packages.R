@@ -4,6 +4,7 @@
 
 
 packages <- c(
+  "testthat",
   "parallel",
   "tidyverse",
   "BiocManager",
@@ -27,7 +28,9 @@ packages <- c(
   "googlesheets4",
   "ROCR",
   "data.table",
-  "ggrepel"
+  "ggrepel",
+  "proxyC",
+  "qlcMatrix"
 )
 
 
