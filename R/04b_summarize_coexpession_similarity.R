@@ -365,8 +365,8 @@ point_plot_similarity <- function(summary_df,
                     hjust = 1,
                     direction = "y",
                     size = 5,
-                    segment.size = 0.1,
-                    segment.color = "grey50") +
+                    segment.size = 0.15,
+                    segment.color = "black") +
     geom_hline(yintercept = null_line, colour = "firebrick") +
     annotate("text", x = 60, y = null_line + 1, label = "Null", colour = "firebrick", size = 5) +
     ggtitle(plot_title) +
