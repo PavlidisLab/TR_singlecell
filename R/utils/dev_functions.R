@@ -17,6 +17,10 @@ library(DescTools)
 
 
 
+# Loading and saving data objects
+# ------------------------------------------------------------------------------
+
+
 # Execute a function with provided args and save an RDS to path
 
 save_function_results <- function(path, 
@@ -38,8 +42,22 @@ save_function_results <- function(path,
 
 
 
-# Loading data objects
-# ------------------------------------------------------------------------------
+# Wrapper around data.table::fwrite() to save a matrix as a tab delim data.frame
+# so that matrix rownames are saved as the first column
+
+fwrite_mat <- function(mat, path) {
+  
+  fwrite(
+    data.frame(mat, check.names = FALSE),
+    sep = "\t",
+    row.names = TRUE,
+    quote = FALSE,
+    verbose = FALSE,
+    showProgress = FALSE,
+    file = path
+  )
+}
+
 
 
 # Calls data.table::fread() to read in a table where the first column corresponds
