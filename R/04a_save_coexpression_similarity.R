@@ -9,7 +9,7 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/functions.R")
 source("R/00_config.R")
 
-k <- 500
+k <- 200
 n_samps <- 1000
 force_resave <- FALSE
 set.seed(5)
