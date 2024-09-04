@@ -302,7 +302,7 @@ calc_sparse_correlation <- function(mat, cor_method) {
 # 0. This is done to produce an NA during correlation, instead of allowing cors 
 # derived from small n. 
 
-set_under_min_count <- function(mat, min_count = 20) {
+zero_sparse_cols <- function(mat, min_count = 20) {
   
   stopifnot(inherits(mat, "dgCMatrix"))
   stopifnot(is.numeric(min_count), min_count >= 0 & min_count <= nrow(mat))
@@ -320,7 +320,7 @@ set_under_min_count <- function(mat, min_count = 20) {
 # Subset mat to cell_type, set under min count genes to 0 and transpose.
 # Expects mat is genes x cells, and will return a cells x genes mat for corr.
 
-subset_celltype_and_filter <- function(mat, meta, cell_type, min_count = 20) {
+prepare_celltype_mat <- function(mat, meta, cell_type, min_count = 20) {
   
   stopifnot(inherits(mat, "dgCMatrix"))
   stopifnot(c("ID", "Cell_type") %in% colnames(meta), cell_type %in% meta$Cell_type)
@@ -329,7 +329,7 @@ subset_celltype_and_filter <- function(mat, meta, cell_type, min_count = 20) {
   stopifnot(all(ids %in% colnames(mat)))
   
   ct_mat <- t(mat[, ids])
-  ct_mat <- set_under_min_count(ct_mat, min_count)
+  ct_mat <- zero_sparse_cols(ct_mat, min_count)
   stopifnot(all(rownames(ct_mat) %in% meta$ID))
   
   return(ct_mat)
@@ -515,7 +515,7 @@ aggregate_celltype_correlation <- function(mat,
     
     # Get count matrix for current cell type, coercing low count genes to NA/0
     
-    ct_mat <- subset_celltype_and_filter(mat, meta, ct, min_cell)
+    ct_mat <- prepare_celltype_mat(mat, meta, ct, min_cell)
     n_nonmsr <- max(sum(ct_mat == 0), sum(is.na(ct_mat)))
     
     if (identical(n_nonmsr, length(ct_mat))) {
