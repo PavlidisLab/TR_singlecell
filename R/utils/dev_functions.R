@@ -367,7 +367,7 @@ prepare_celltype_mat <- function(mat, meta, cell_type, min_count = 20) {
   stopifnot(inherits(mat, "dgCMatrix"))
   stopifnot(c("ID", "Cell_type") %in% colnames(meta), cell_type %in% meta$Cell_type)
   
-  ids <- dplyr::filter(meta, Cell_type == cell_type)[["ID"]]
+  ids <- dplyr::filter(meta, Cell_type %in% cell_type)[["ID"]]
   stopifnot(all(ids %in% colnames(mat)))
   
   ct_mat <- t(mat[, ids])
@@ -494,7 +494,8 @@ aggregate_celltype_correlation <- function(mat,
                                            meta,
                                            cor_method,
                                            agg_method,
-                                           min_cell = 20) {
+                                           min_cell = 20,
+                                           verbose = TRUE) {
   
   stopifnot(cor_method %in% c("pearson", "spearman"))
   stopifnot(agg_method %in% c("allrank", "colrank", "FZ"))
@@ -509,7 +510,7 @@ aggregate_celltype_correlation <- function(mat,
   
   for (ct in cts) {
     
-    message(paste(ct, Sys.time()))
+    if (verbose) message(paste(ct, Sys.time()))
     
     # Get count matrix for current cell type, coercing low count genes to NA/0
     
