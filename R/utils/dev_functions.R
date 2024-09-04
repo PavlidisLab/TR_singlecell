@@ -297,46 +297,6 @@ calc_sparse_correlation <- function(mat, cor_method) {
 
 
 
-
-# If a col of mat has fewer non-zero elements than min_count, set that col to
-# 0. This is done to produce an NA during correlation, instead of allowing cors 
-# derived from small n. 
-
-zero_sparse_cols <- function(mat, min_count = 20) {
-  
-  stopifnot(inherits(mat, "dgCMatrix"))
-  stopifnot(is.numeric(min_count), min_count >= 0 & min_count <= nrow(mat))
-  
-  nonzero_cells <- colSums(mat != 0)
-  filt_genes <- nonzero_cells < min_count
-  if (any(filt_genes)) mat[, filt_genes] <- 0
-
-  return(mat)
-}
-
-
-
-
-# Subset mat to cell_type, set under min count genes to 0 and transpose.
-# Expects mat is genes x cells, and will return a cells x genes mat for corr.
-
-prepare_celltype_mat <- function(mat, meta, cell_type, min_count = 20) {
-  
-  stopifnot(inherits(mat, "dgCMatrix"))
-  stopifnot(c("ID", "Cell_type") %in% colnames(meta), cell_type %in% meta$Cell_type)
-  
-  ids <- dplyr::filter(meta, Cell_type == cell_type)[["ID"]]
-  stopifnot(all(ids %in% colnames(mat)))
-  
-  ct_mat <- t(mat[, ids])
-  ct_mat <- zero_sparse_cols(ct_mat, min_count)
-  stopifnot(all(rownames(ct_mat) %in% meta$ID))
-  
-  return(ct_mat)
-}
-
-
-
 # Set NAs in matrix to 0
 
 na_to_zero <- function(mat) {
@@ -377,6 +337,44 @@ lowertri_to_symm <- function(mat) {
   stopifnot(is.matrix(mat), ncol(mat) == nrow(mat))
   mat[upper.tri(mat)] <-  t(mat)[upper.tri(mat)]
   return(mat)
+}
+
+
+
+# If a col of mat has fewer non-zero elements than min_count, set that col to
+# 0. This is done to produce an NA during correlation, instead of allowing cors 
+# derived from small n. 
+
+zero_sparse_cols <- function(mat, min_count = 20) {
+  
+  stopifnot(inherits(mat, "dgCMatrix"))
+  stopifnot(is.numeric(min_count), min_count >= 0 & min_count <= nrow(mat))
+  
+  nonzero_cells <- colSums(mat != 0)
+  filt_genes <- nonzero_cells < min_count
+  if (any(filt_genes)) mat[, filt_genes] <- 0
+
+  return(mat)
+}
+
+
+
+# Subset mat to cell_type, set under min count genes to 0 and transpose.
+# Expects mat is genes x cells, and will return a cells x genes mat for corr.
+
+prepare_celltype_mat <- function(mat, meta, cell_type, min_count = 20) {
+  
+  stopifnot(inherits(mat, "dgCMatrix"))
+  stopifnot(c("ID", "Cell_type") %in% colnames(meta), cell_type %in% meta$Cell_type)
+  
+  ids <- dplyr::filter(meta, Cell_type == cell_type)[["ID"]]
+  stopifnot(all(ids %in% colnames(mat)))
+  
+  ct_mat <- t(mat[, ids])
+  ct_mat <- zero_sparse_cols(ct_mat, min_count)
+  stopifnot(all(rownames(ct_mat) %in% meta$ID))
+  
+  return(ct_mat)
 }
 
 
