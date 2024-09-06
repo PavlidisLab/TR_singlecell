@@ -4,7 +4,6 @@
 library(tidyverse, quietly = TRUE)
 library(data.table, quietly = TRUE)
 library(parallel)
-library(WGCNA)
 library(Matrix)
 library(qlcMatrix)
 library(DescTools)
@@ -512,12 +511,13 @@ aggregate_celltype_correlation <- function(mat,
     
     if (verbose) message(paste(ct, Sys.time()))
     
-    # Get count matrix for current cell type, coercing low count genes to NA/0
+    # Get count matrix for current cell type, coercing low count genes to 0
     
     ct_mat <- prepare_celltype_mat(mat, meta, ct, min_cell)
-    n_nonmsr <- max(sum(ct_mat == 0), sum(is.na(ct_mat)))
     
-    if (identical(n_nonmsr, length(ct_mat))) {
+    no_msr <- all(ct_mat == 0)
+    
+    if (no_msr) {
       message(paste(ct, "skipped due to insufficient counts"))
       na_mat <- na_mat + 1
       next()
