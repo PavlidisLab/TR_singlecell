@@ -2,6 +2,8 @@
 ## -----------------------------------------------------------------------------
 
 
+options(repos = "http://cran.rstudio.com/")
+
 
 packages <- c(
   "testthat",
@@ -10,7 +12,6 @@ packages <- c(
   "BiocManager",
   "remotes",
   "Seurat",
-  "WGCNA",
   "umap",
   "pheatmap",
   "RcppTOML",
@@ -18,7 +19,6 @@ packages <- c(
   "RANN",
   "WeightedCluster",
   "corpcor",
-  "weights",
   "Hmisc",
   "Matrix",
   "patchwork",
@@ -30,7 +30,8 @@ packages <- c(
   "data.table",
   "ggrepel",
   "proxyC",
-  "qlcMatrix"
+  "qlcMatrix",
+  "microbenchmark"
 )
 
 
@@ -43,6 +44,7 @@ if (any(installed_packages == FALSE)) {
 
 
 
+BiocManager::install("WGCNA")
 BiocManager::install("preprocessCore")
 BiocManager::install("GenomicRanges")
 BiocManager::install("limma")
