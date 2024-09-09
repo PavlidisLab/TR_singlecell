@@ -217,8 +217,7 @@ sparse_pcor <- function(mat) {
   
   cmat <- qlcMatrix::corSparse(mat)
   colnames(cmat) <- rownames(cmat) <- colnames(mat)
-  cmat <- diag_to_one(cmat)
-  
+
   return(cmat)
 }
 
@@ -270,8 +269,7 @@ sparse_scor <- function(mat) {
   rmat <- sparse_rank(mat)
   cmat <- sparse_pcor(rmat)
   cmat_all[which_nonzero, which_nonzero] <- cmat
-  cmat_all <- diag_to_one(cmat_all)
-  
+
   return(cmat_all)
 }
 
