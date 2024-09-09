@@ -31,7 +31,8 @@ packages <- c(
   "ggrepel",
   "proxyC",
   "qlcMatrix",
-  "microbenchmark"
+  "microbenchmark",
+  "credentials"
 )
 
 
