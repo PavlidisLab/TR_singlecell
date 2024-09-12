@@ -136,6 +136,7 @@ load_dat_list <- function(ids,
 }
 
 
+
 # Uses fread() to read from path, assuming that the introduced V1 (rownames)
 # column is for genes. Coerces to matrix and assigns gene rownames. Columns
 # are assumed to be cell IDs (thus distinct from fread_to_mat())
@@ -227,26 +228,6 @@ get_cor_mat <- function(mat,
 }
 
 
-# get_cor_mat <- function(mat, cor_method = "pearson", ncores = 1) {
-#   
-#     cmat <- WGCNA::cor(
-#       mat, method = cor_method, use = "everything", nThreads = ncores)
-# 
-#   return(cmat)
-# }
-
-
-
-
-calc_sparse_cor <- function(mat) {
-  
-  cmat <- proxyC::simil(mat, margin = 2, method = "correlation", use_nan = TRUE)
-  cmat <- suppressWarnings(as.matrix(cmat))
-  return(cmat)
-}
-
-
-
 
 # Replace upper tri of mat with lower tri.
 
@@ -274,19 +255,6 @@ under_min_count_to_na <- function(mat, min_count = 20) {
 
 
 
-
-under_min_count_to_zero <- function(mat, min_count = 20) {
-  
-  binary_counts <- mat > 0
-  nonzero_cells <- colSums(binary_counts)
-  filt_genes <- nonzero_cells < min_count
-  mat[, filt_genes] <- 0
-  return(mat)
-}
-
-
-
-
 # Subset mat to cell_type, set under min count genes to NA, and transpose.
 # Expects mat is genes x cells, and will return a cells x genes mat for corr.
 
@@ -299,17 +267,6 @@ subset_and_filter <- function(mat, meta, cell_type, min_count = 20) {
   return(ct_mat)
 }
 
-
-
-
-subset_and_filter_sparse <- function(mat, meta, cell_type, min_count = 20) {
-  
-  ids <- dplyr::filter(meta, Cell_type == cell_type)$ID
-  ct_mat <- t(mat[, ids])
-  ct_mat <- under_min_count_to_zero(ct_mat, min_count)
-  stopifnot(all(rownames(ct_mat) %in% meta$ID))
-  return(ct_mat)
-}
 
 
 # Assumes mat is a gene x cell count matrix and returns a gene x gene matrix of 
@@ -456,202 +413,6 @@ RSR_allrank <- function(mat,
 
 
 
-
-
-RSR_allrank_sparse <- function(mat,
-                               meta,
-                               cor_method = "pearson",
-                               min_cell = 20,
-                               standardize = TRUE,
-                               ncores = 1) {
-  
-  stopifnot(c("Cell_type", "ID") %in% colnames(meta), length(rownames(mat)) > 0)
-  
-  cts <- unique(meta$Cell_type)
-  
-  # Matrices of 0s for tracking aggregate correlation and count of NAs
-  
-  amat <- init_agg_mat(mat)
-  na_mat <- amat  
-  
-  for (ct in cts) {
-    
-    message(paste(ct, Sys.time()))
-    
-    # Get count matrix for current cell type, coercing low count genes to NAs
-    
-    ct_mat <- subset_and_filter_sparse(mat, meta, ct, min_cell)
-    
-    if (identical(sum(ct_mat == 0), length(ct_mat))) {
-      message(paste(ct, "skipped due to insufficient counts"))
-      na_mat <- na_mat + 1
-      next()
-    }
-    
-    # Get cell-type cor matrix and increment count of NAs before imputing to 0,
-    # set diag (self-cor) to 1, and set to triangular to prevent symmetric ranking
-    
-    cmat <- calc_sparse_cor(ct_mat)
-    
-    na_ix <- which(is.na(cmat), arr.ind = TRUE)
-    na_mat[na_ix] <- na_mat[na_ix] + 1
-    
-    cmat <- cmat %>%
-      na_to_zero() %>%
-      diag_to_one() %>%
-      upper_to_na()
-    
-    # Rank the tri matrix and add to aggregate matrix
-    
-    rmat <- allrank_mat(cmat, ties_arg = "min")
-    amat <- amat + rmat
-    rm(cmat, ct_mat, rmat)
-    gc(verbose = FALSE)
-    
-  }
-  
-  # Final rank of aggregate and convert triangular matrix back to symmetric
-  
-  if (standardize) {
-    amat <- allrank_mat(amat, ties_arg = "min") / sum(!is.na(amat))
-  } else {
-    amat <- allrank_mat(amat, ties_arg = "min")
-  }
-  
-  amat <- lowertri_to_symm(amat)
-  
-  return(list(Agg_mat = amat, NA_mat = na_mat))
-}
-
-
-
-
-
-
-
-# Here, ranking is done column-wise such that each column/gene vector is ranked
-# only within that vector.  This does not track NA counts (assumed to already be
-# done with allrank) and returns the aggregate matrix directly. 
-
-RSR_colrank <- function(mat,
-                        meta,
-                        min_cell = 20,
-                        standardize = TRUE) {
-  
-  stopifnot(c("Cell_type", "ID") %in% colnames(meta), length(rownames(mat)) > 0)
-  
-  cts <- unique(meta$Cell_type)
-
-  amat <- init_agg_mat(mat)
-  
-  for (ct in cts) {
-    
-    message(paste(ct, Sys.time()))
-    
-    # Get count matrix for current cell type, coercing low count genes to NAs
-    
-    ct_mat <- subset_and_filter(mat, meta, ct, min_cell)
-    
-    if (sum(is.na(ct_mat)) == length(ct_mat)) {
-      message(paste(ct, "skipped due to insufficient counts"))
-      next()
-    }
-    
-    # Get cell-type cor matrix: full symmetric for ranking, NA cors to 0, and
-    # diag (self-cor) coerced to 1
-    
-    cmat <- ct_mat %>% 
-      get_cor_mat(lower_tri = FALSE) %>% 
-      na_to_zero() %>% 
-      diag_to_one()
-    
-    # Column-wise rank the correlations and add to aggregate matrix
-    
-    rmat <- colrank_mat(cmat, ties_arg = "min")
-    amat <- amat + rmat
-    rm(cmat, ct_mat)
-    gc(verbose = FALSE)
-    
-  }
-  
-  if (standardize) {
-    amat <- colrank_mat(amat, ties_arg = "min")
-    ngene <- nrow(amat)
-    amat <- apply(amat, 2, function(x) x/ngene)
-  } else {
-    amat <- colrank_mat(amat, ties_arg = "min")
-  }
-  
-  return(amat)
-}
-
-
-
-# Here, correlations are transformed using Fisher' Z transformation, and these 
-# are then averaged across cell types. A list of two matrices are returned: 
-# the average using only non-NA observations, and a matrix tracking the count of NAs for each gene-gene pair 
-# across cell types.
-# https://bookdown.org/mwheymans/bookmi/pooling-correlation-coefficients-1.html
-# https://rdrr.io/cran/DescTools/man/FisherZ.html
-
-fishersZ_aggregate <- function(mat,
-                               meta,
-                               min_cell = 20,
-                               ncores = 1) {
-  
-  stopifnot(c("Cell_type", "ID") %in% colnames(meta), length(rownames(mat)) > 0)
-  
-  cts <- unique(meta$Cell_type)
-  
-  # Matrices of 0s for tracking aggregate correlation and count of NAs
-  
-  amat <- init_agg_mat(mat)
-  na_mat <- amat  
-  
-  for (ct in cts) {
-    
-    message(paste(ct, Sys.time()))
-    
-    # Get count matrix for current cell type, coercing low count genes to NAs
-    
-    ct_mat <- subset_and_filter_sparse(mat, meta, ct, min_cell)
-    
-    if (identical(sum(ct_mat == 0), length(ct_mat))) {
-      message(paste(ct, "skipped due to insufficient counts"))
-      na_mat <- na_mat + 1
-      next()
-    }
-    
-    # Get cell-type cor matrix and increment count of NAs before imputing to 0,
-    # set diag (self-cor) to 1, and set to triangular to prevent symmetric ranking
-    
-    cmat <- calc_sparse_cor(ct_mat)
-    
-    na_ix <- which(is.na(cmat), arr.ind = TRUE)
-    na_mat[na_ix] <- na_mat[na_ix] + 1
-    
-    cmat <- cmat %>% 
-      na_to_zero() %>% 
-      diag_to_one()
-    
-    # Fisher's z transformation and add result to aggregate matrix
-    
-    zmat <- DescTools::FisherZ(cmat)
-    amat <- amat + zmat
-    rm(cmat, zmat, ct_mat)
-    gc(verbose = FALSE)
-    
-  }
-  
-  # Divide by count of non-NA measurements
-  agg_mat <- (amat / (length(cts) - na_mat))
-  
-  return(list(Agg_mat = agg_mat, NA_mat = na_mat))
-}
-
-
-
-
 # Get correlation of gene1 and gene2 across cell types represented in meta
 
 all_celltype_cor <- function(mat,
@@ -740,7 +501,11 @@ mat_to_df <- function(mat, symmetric = TRUE, value_name = NULL) {
 
 
 
-# TODO:
+# Mat assumed to be a gene by experiment matrix of the aggregate profiles for 
+# the given gene across experiments, and msr_mat a binary gene by experiment 
+# matrix tracking whether or not genes were measured in a given dataset. Subset
+# the input mat to only include the experiments/columns in which the given gene
+# is measured.
 
 subset_to_measured <- function(mat, gene, msr_mat) {
   
@@ -756,18 +521,9 @@ subset_to_measured <- function(mat, gene, msr_mat) {
 
 
 
-# Bind given gene vectors from all matrices in agg_l into its own matrix
-# TODO: remove when everything updated
-
-# gene_vec_to_mat <- function(agg_l, gene) {
-#   genes <- rownames(agg_l[[1]])
-#   stopifnot(gene %in% genes)
-#   do.call(cbind, lapply(agg_l, function(x) x[genes, gene]))
-# }
-
-
 # For the given gene, bind its coexpression profiles for all datasets in agg_l
 # into a matrix, keeping only the profiles that are measured.
+
 gene_vec_to_mat <- function(agg_l, gene, msr_mat) {
   
   genes <- rownames(agg_l[[1]])
