@@ -10,34 +10,8 @@ library(DescTools)
 
 
 
-# Not in
-
-'%!in%' <- function(x, y) !('%in%'(x, y))
-
-
-
 # Loading and saving data objects
 # ------------------------------------------------------------------------------
-
-
-# Execute a function with provided args and save an RDS to path
-
-save_function_results <- function(path, 
-                                  fun,
-                                  args,
-                                  force_resave = FALSE) {
-  
-  if (!file.exists(path) || force_resave) {
-    
-    result <- do.call(fun, args)
-    
-    if (!is.null(result)) {
-      saveRDS(result, path)
-    }
-    
-    return(invisible(NULL))
-  }
-}
 
 
 
@@ -69,7 +43,7 @@ fread_to_mat <- function(path, genes, sub_genes = NULL) {
     
     dat <- fread(path, sep = "\t", select = c("V1", sub_genes))
     mat <- as.matrix(dat[, -1, drop = FALSE])
-    rownames(mat) <- dat$V1
+    rownames(mat) <- dat[["V1"]]
     colnames(mat) <- sub_genes
     mat <- mat[genes, sub_genes, drop = FALSE]
     
@@ -77,82 +51,13 @@ fread_to_mat <- function(path, genes, sub_genes = NULL) {
     
     dat <- fread(path, sep = "\t")
     mat <- as.matrix(dat[, -1, drop = FALSE])
-    rownames(mat) <- colnames(mat) <- dat$V1
+    rownames(mat) <- colnames(mat) <- dat[["V1"]]
     mat <- mat[genes, genes, drop = FALSE]
   }
   
   return(mat)
 }
 
-
-
-# Loads aggregate correlation matrices or NA count matrices for the given dataset
-# ids into a list. 
-# Pattern: "_NA_mat.tsv" for NA counts
-
-load_agg_mat_list  <- function(ids,
-                               dir = "/space/scratch/amorin/TR_singlecell/",
-                               pattern = "_RSR_allrank_CPM.tsv",  
-                               genes,
-                               sub_genes = NULL,
-                               verbose = TRUE) {
-  
-  mat_l <- lapply(ids, function(x) {
-    if (verbose) message(paste(x, Sys.time()))
-    path <- file.path(dir, x, paste0(x, pattern))
-    fread_to_mat(path, genes, sub_genes)
-  })
-  
-  names(mat_l) <- ids
-  gc(verbose = FALSE)
-  
-  return(mat_l)
-}
-
-
-
-# Call load_agg_mat_list to load/save a local copy
-
-load_or_generate_agg <- function(path, 
-                                 ids, 
-                                 dir = "/space/scratch/amorin/TR_singlecell/",
-                                 pattern = "_RSR_allrank_CPM.tsv",
-                                 genes, 
-                                 sub_genes = NULL) {
-  
-  if (!file.exists(path)) {
-    
-    agg_l <- load_agg_mat_list(ids = ids, 
-                               dir = dir,
-                               genes = genes, 
-                               pattern = pattern,
-                               sub_genes = sub_genes)
-    
-    saveRDS(agg_l, path)
-  } else {
-    agg_l <- readRDS(path)
-  }
-  
-  return(agg_l)
-}
-
-
-
-# Given a vector of ids, will load the associated list of normalized matrices
-# and metadata into a list. 
-
-load_dat_list <- function(ids,
-                          sc_dir = "/space/scratch/amorin/TR_singlecell/",
-                          pattern = "_clean_mat_and_meta_CPM.RDS") {
-  
-  dat_l <- lapply(ids, function(x) {
-    path <- file.path(sc_dir, x, paste0(x, pattern))
-    dat <- readRDS(path)
-  })
-  names(dat_l) <- ids
-  
-  return(dat_l)
-}
 
 
 # Uses fread() to read from path, assuming that the introduced V1 (rownames)
@@ -162,8 +67,8 @@ load_dat_list <- function(ids,
 read_count_mat <- function(dat_path) {
   
   dat <- suppressWarnings(fread(dat_path))
-  genes <- dat$V1
-  dat$V1 <- NULL
+  genes <- dat[["V1"]]
+  dat[["V1"]] <- NULL
   mat <- as.matrix(dat)
   rownames(mat) <- genes
   
@@ -361,44 +266,33 @@ zero_sparse_cols <- function(mat, min_count = 20) {
 
 prepare_celltype_mat <- function(mat, meta, cell_type, min_count = 20) {
   
-  stopifnot(inherits(mat, "dgCMatrix"))
-  stopifnot(c("ID", "Cell_type") %in% colnames(meta), cell_type %in% meta$Cell_type)
+  stopifnot(inherits(mat, "dgCMatrix"),
+            c("ID", "Cell_type") %in% colnames(meta), 
+            cell_type %in% meta[["Cell_type"]])
   
   ids <- dplyr::filter(meta, Cell_type %in% cell_type)[["ID"]]
   stopifnot(all(ids %in% colnames(mat)))
   
   ct_mat <- t(mat[, ids])
   ct_mat <- zero_sparse_cols(ct_mat, min_count)
-  stopifnot(all(rownames(ct_mat) %in% meta$ID))
+  stopifnot(all(rownames(ct_mat) %in% meta[["ID"]]))
   
   return(ct_mat)
 }
 
 
 
-# TODO 
-init_agg_mat <- function(pc_df) {
+# Initates a gene by gene matrix of 0s for holding aggregate correlations. 
+# pc_df assumed to be protein coding table with "Symbol" as a column and unique
+# genes within Symbol.
+
+inFit_agg_mat <- function(pc_df) {
   
   stopifnot("Symbol" %in% colnames(pc_df))
   amat <- matrix(0, nrow = nrow(pc_df), ncol = nrow(pc_df))
   rownames(amat) <- colnames(amat) <- pc_df[["Symbol"]]
   return(amat)
 }
-
-
-
-# Initate a matrix of 0s for holding aggregate correlations. Assumes mat is a 
-# gene x cell count matrix and returns a gene x gene matrix of 0s with the names
-# and dimension of the gene rows of mat
-
-# init_agg_mat <- function(mat) {
-#   
-#   stopifnot(is.matrix(mat) || inherits(mat, "dgCMatrix")) 
-#   stopifnot(!is.null(rownames(mat)))
-#   amat <- matrix(0, nrow = nrow(mat), ncol = nrow(mat))
-#   rownames(amat) <- colnames(amat) <- rownames(mat)
-#   return(amat)
-# }
 
 
 
@@ -509,7 +403,7 @@ aggr_coexpr_within_dataset <- function(mat,
   stopifnot(cor_method %in% c("pearson", "spearman"))
   stopifnot(agg_method %in% c("allrank", "colrank", "FZ"))
   
-  cts <- unique(meta$Cell_type)
+  cts <- unique(meta[["Cell_type"]])
   n_cts <- length(cts)
   
   # Matrices of 0s for tracking aggregate correlation and count of NAs
@@ -563,9 +457,9 @@ aggr_coexpr_within_dataset <- function(mat,
 load_dataset <- function(path) {
   
   dat <- readRDS(path)
-  meta <- dat$Meta
-  mat <- dat$Mat
-  stopifnot(identical(colnames(mat), meta$ID))
+  meta <- dat[["Meta"]]
+  mat <- dat[["Mat"]]
+  stopifnot(identical(colnames(mat), meta[["ID"]]))
   
   return(list(Mat = mat, Meta = meta))
 }
@@ -603,8 +497,8 @@ aggr_coexpr_across_datasets <- function(input_df,
     
     dat = load_dataset(dat_path)
     
-    ct_mat <- prepare_celltype_mat(mat = dat$Mat, 
-                                   meta = dat$Meta, 
+    ct_mat <- prepare_celltype_mat(mat = dat[["Mat"]], 
+                                   meta = dat[["Meta"]], 
                                    cell_type = ct, 
                                    min_count = min_cell)
     
