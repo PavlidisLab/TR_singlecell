@@ -59,21 +59,24 @@ go_enrich_list <- function(dat_l, species, topn = 50, ncores = 1) {
 # uses human symbols
 
 if (!file.exists(go_coexpr_hg_path)) {
+  message(paste("Human", Sys.time()))
   coexpr_hg <- readRDS(rank_tf_hg_path)
   go_coexpr_hg <- go_enrich_list(dat_l = coexpr_hg, species = "org.Hs.eg.db", ncores = ncore)
-  saveRDS(go_hg, go_coexpr_hg_path)
+  saveRDS(go_coexpr_hg, go_coexpr_hg_path)
 }
   
 
 if (!file.exists(go_coexpr_mm_path)) {
+  message(paste("Mouse", Sys.time()))
   coexpr_mm <- readRDS(rank_tf_mm_path)
   go_coexpr_mm <- go_enrich_list(dat_l = coexpr_mm, species = "org.Mm.eg.db", ncores = ncore)
-  saveRDS(go_mm, go_coexpr_mm_path)
+  saveRDS(go_coexpr_mm, go_coexpr_mm_path)
 }
 
 
 if (!file.exists(go_coexpr_ortho_path)) {
+  message(paste("Ortho", Sys.time()))
   coexpr_ortho <- readRDS(rank_tf_ortho_path)
   go_coexpr_ortho <- go_enrich_list(dat_l = coexpr_ortho, species = "org.Hs.eg.db", ncores = ncore)
-  saveRDS(go_ortho, go_coexpr_ortho_path)
+  saveRDS(go_coexpr_ortho, go_coexpr_ortho_path)
 }
