@@ -1,3 +1,6 @@
+## TODO
+## -----------------------------------------------------------------------------
+
 # BiocManager::install("clusterProfiler")
 # BiocManager::install("org.Hs.eg.db")
 # BiocManager::install("org.Mm.eg.db")
@@ -79,6 +82,12 @@ if (!file.exists(go_coexpr_mm_path)) {
 if (!file.exists(go_coexpr_ortho_path)) {
   message(paste("Ortho", Sys.time()))
   coexpr_ortho <- readRDS(rank_tf_ortho_path)
+  
+  # Coerce to expected column names
+  coexpr_ortho <- lapply(coexpr_ortho, function(x) {
+    dplyr::rename(x, Symbol = Symbol_hg, Rank_aggr_coexpr = Rank_aggr_coexpr_ortho)
+  })
+  
   go_coexpr_ortho <- go_enrich_list(dat_l = coexpr_ortho, species = "org.Hs.eg.db", ncores = ncore)
   saveRDS(go_coexpr_ortho, go_coexpr_ortho_path)
 }
