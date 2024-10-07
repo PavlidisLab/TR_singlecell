@@ -37,14 +37,16 @@ go_enrich_list <- function(dat_l, species, topn = 50, ncores = 1) {
     top_genes <- slice_min(dat_l[[tf]], Rank_aggr_coexpr, n = topn)[["Symbol"]]
     top_genes <- filter(gene_entrez, SYMBOL %in% top_genes)
     
-    enrichGO(gene = top_genes$ENTREZID,
-             universe = gene_entrez$ENTREZID,
-             OrgDb = species,
-             ont = "BP",
-             pAdjustMethod = "BH",
-             pvalueCutoff = 0.05,
-             qvalueCutoff = 0.05,
-             readable = TRUE)
+    go <- enrichGO(gene = top_genes$ENTREZID,
+                   universe = gene_entrez$ENTREZID,
+                   OrgDb = species,
+                   ont = "BP",
+                   pAdjustMethod = "BH",
+                   pvalueCutoff = 0.05,
+                   qvalueCutoff = 0.05,
+                   readable = TRUE)
+    
+    go@result  # only return results table, rest of object is bulky
 
     
   }, mc.cores = ncores)
