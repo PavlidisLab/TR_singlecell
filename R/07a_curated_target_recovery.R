@@ -75,7 +75,7 @@ tf_hg <- union(
   ortho_tf_hg)
 
 target_hg <- union(
-  intersect(rownames(rank_tf_hg[[1]]), str_to_upper(curated$Target_Symbol)),
+  intersect(rank_tf_hg[[1]]$Symbol, str_to_upper(curated$Target_Symbol)),
   ortho_target_hg)
 
 
@@ -96,7 +96,7 @@ tf_mm <- union(
   ortho_tf_mm)
 
 target_mm <- union(
-  intersect(rownames(rank_tf_mm[[1]]), str_to_title(curated$Target_Symbol)),
+  intersect(rank_tf_mm[[1]]$Symbol, str_to_title(curated$Target_Symbol)),
   ortho_target_mm)
 
 
