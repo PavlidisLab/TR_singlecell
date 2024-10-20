@@ -10,16 +10,6 @@ source("R/00_config.R")
 source("R/utils/plot_functions.R")
 
 
-# go_coexpr_hg_path <- "/space/scratch/amorin/R_objects/coexpr_goenrich_hg.RDS"
-# go_coexpr_mm_path <- "/space/scratch/amorin/R_objects/coexpr_goenrich_mm.RDS"
-# go_coexpr_ortho_path <- "/space/scratch/amorin/R_objects/coexpr_goenrich_ortho.RDS"
-# score_col <- "p.adjust"
-# term_col <- "Description"
-
-# go_coexpr_hg_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_hg.RDS"
-# go_coexpr_mm_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_mm.RDS"
-# go_coexpr_ortho_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_ortho.RDS"
-
 go_coexpr_hg_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_pr_hg.RDS"
 go_coexpr_mm_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_pr_mm.RDS"
 go_coexpr_ortho_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_pr_ortho.RDS"
@@ -39,39 +29,6 @@ go_coexpr_ortho <- readRDS(go_coexpr_ortho_path)
 # go_coexpr_hg[[example_hg]]
 # go_coexpr_mm[[example_mm]]
 # go_coexpr_ortho[[example_hg]]
-
-
-# ErmineR sporadic bug that shifts columns over by one for a subset of terms 
-# such that Name/term column is all NAs. This bug results in loss of GeneMembers
-# data for affected elements. Check and shift all columns over by one.
-
-check_and_fix_shifted_cols <- function(go_l, term_col) {
-  
-  tfs <- names(go_l)
-  
-  go_l <- lapply(tfs, function(x) {
-    
-    df <- go_l[[x]]
-    na_terms <- which(is.na(df[[term_col]]))
-    
-    if (length(na_terms) > 0) {
-      fix_df <- as.data.frame(df)  # tibble throws error if mismatch types
-      fix_df[na_terms, 1:(ncol(fix_df) - 1)] <- fix_df[na_terms, 2:ncol(fix_df)]
-      df <- as_tibble(fix_df)
-    }
-    
-   return(df)
-  })
-  
-  names(go_l) <- tfs
-  return(go_l)
-}
-
-
-
-go_coexpr_hg <- check_and_fix_shifted_cols(go_coexpr_hg, term_col)
-go_coexpr_mm <- check_and_fix_shifted_cols(go_coexpr_mm, term_col)
-go_coexpr_ortho <- check_and_fix_shifted_cols(go_coexpr_ortho, term_col)
 
 
 # Only consider results reaching sig. cut-off
@@ -127,20 +84,6 @@ fisher.test(table(human0, mouse0))
 
 # How well overlapping are the terms for ortho TFs?
 
-# jacc_terms <- function(all_df, term_col, hg_l, mm_l) {
-#   
-#   jacc <- NA
-#   tf_hg <- all_df$Symbol_hg[x]
-#   tf_mm <- all_$Symbol_mm[x]
-#   terms_hg <- hg_l[[tf_hg]][[term_col]]
-#   terms_mm <- mm_l[[tf_mm]][[term_col]]
-#   
-#   
-#   length(intersect(terms_hg, terms_mm)) / length(union(terms_hg, terms_mm))
-#   
-# }
-
-
 tf_n_all$Jaccard <- unlist(lapply(1:nrow(tf_n_all), function(x) {
   tf_hg <- tf_n_all$Symbol_hg[x]
   tf_mm <- tf_n_all$Symbol_mm[x]
@@ -183,11 +126,9 @@ n_tfs_per_term <- function(go_l, term_col) {
 
 
 
-
-# TODO Note: running on subset of list with at least 1 sig. term (error if include 0)
-term_n_hg <- n_tfs_per_term(go_coexpr_filt_hg[tf_n_hg[tf_n_hg$N > 0, "Symbol"]], term_col)
-term_n_mm <- n_tfs_per_term(go_coexpr_filt_mm[tf_n_mm[tf_n_mm$N > 0, "Symbol"]], term_col)
-term_n_ortho <- n_tfs_per_term(go_coexpr_filt_ortho[tf_n_ortho[tf_n_ortho$N > 0, "Symbol"]], term_col)
+term_n_hg <- n_tfs_per_term(go_coexpr_filt_hg, term_col)
+term_n_mm <- n_tfs_per_term(go_coexpr_filt_mm, term_col)
+term_n_ortho <- n_tfs_per_term(go_coexpr_filt_ortho, term_col)
 
 
 
@@ -284,7 +225,7 @@ ggplot(term_n_all, aes(x = N_hg, y = N_mm)) +
   geom_smooth(method = "lm") +
   xlab("Count of associated TRs (human)") +
   ylab("Count of associated TRs (mouse)") +
-  ggtitle("N=5,692 unique terms between species") +
+  ggtitle("N=5,692 unique terms between species")
   
 
 
@@ -323,43 +264,8 @@ go_coexpr_filt_ortho$ASCL1 %>%
         axis.title.y = element_blank(),
         plot.title = element_text(size = 20),
         plot.margin = margin(c(10, 20, 10, 10)))
-  
 
 
 
-## Indidvidual
 
-
-# dat_l <- readRDS(rank_tf_hg_path)
-# dat_l <- readRDS(rank_tf_mm_path)
-dat_l <- readRDS(rank_tf_ortho_path)
-
-species <- "org.Hs.eg.db"
-# species <- "org.Mm.eg.db"
-
-tf <- "ASCL1"
-# tf <- "Ascl1"
-
-# universe <- dat_l[[1]]$Symbol
-universe <- dat_l[[1]]$Symbol_hg
-
-gene_entrez <- bitr(universe, 
-                    fromType = "SYMBOL", 
-                    toType = "ENTREZID", 
-                    OrgDb = species)
-
-# top_genes <- slice_min(dat_l[[tf]], Rank_aggr_coexpr, n = topn)[["Symbol"]]
-top_genes <- slice_min(dat_l[[tf]], Rank_aggr_coexpr_ortho, n = topn)[["Symbol_hg"]]
-top_genes <- filter(gene_entrez, SYMBOL %in% top_genes)
-  
-go <- enrichGO(gene = top_genes$ENTREZID,
-               universe = gene_entrez$ENTREZID,
-               OrgDb = species,
-               ont = "BP",
-               pAdjustMethod = "BH",
-               pvalueCutoff = 0.05,
-               qvalueCutoff = 0.05,
-               readable = TRUE)
-
-
-dotplot(go, font.size = 17, showCategory = 20)
+# Ortho using 
