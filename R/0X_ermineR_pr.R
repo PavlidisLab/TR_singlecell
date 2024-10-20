@@ -93,8 +93,7 @@ erminer_enrich_list <- function(dat_l,
 
 
 
-# Note that ortho (ranking placing equal weight on mouse and human aggregate)
-# uses human symbols
+
 
 if (!file.exists(erminer_coexpr_hg_path)) {
   
@@ -107,18 +106,6 @@ if (!file.exists(erminer_coexpr_hg_path)) {
                                            go_path = go_path,
                                            anno_path = anno_hg_path,
                                            ncores = ncore)
-  
-  
-  # Note I did this interactively to inspect failures (which are random)
-  which_na <- which(is.na(erminer_coexpr_hg))
-  
-  
-  erminer_coexpr_hg[which_na] <- erminer_enrich_list(dat_l = coexpr_hg[which_na], 
-                                                     score_col = "Rank_aggr_coexpr",
-                                                     go_path = go_path,
-                                                     anno_path = anno_hg_path,
-                                                     ncores = ncore)
-  
   
   saveRDS(erminer_coexpr_hg, erminer_coexpr_hg_path)
 }
@@ -138,23 +125,12 @@ if (!file.exists(erminer_coexpr_mm_path)) {
                                            anno_path = anno_mm_path,
                                            ncores = ncore)
   
-  
-  # Note I did this interactively to inspect failures (which are random)
-  which_na <- which(is.na(erminer_coexpr_mm))
-  
-  
-  erminer_coexpr_mm[which_na] <- erminer_enrich_list(dat_l = coexpr_mm[which_na], 
-                                                     score_col = "Rank_aggr_coexpr",
-                                                     go_path = go_path,
-                                                     anno_path = anno_mm_path,
-                                                     ncores = ncore)
-  
-  
   saveRDS(erminer_coexpr_mm, erminer_coexpr_mm_path)
 }
 
 
-
+# Note that for ortho (ranking placing equal weight on mouse and human aggregate)
+# uses human symbols/annotations. Inspection using mouse anno gave similar results
 
 if (!file.exists(erminer_coexpr_ortho_path)) {
   
@@ -172,16 +148,6 @@ if (!file.exists(erminer_coexpr_ortho_path)) {
                                               go_path = go_path,
                                               anno_path = anno_hg_path,
                                               ncores = ncore)
-  
-  # Note I did this interactively to inspect failures (which are random)
-  which_na <- which(is.na(erminer_coexpr_ortho))
-  
-  
-  erminer_coexpr_ortho[which_na] <- erminer_enrich_list(dat_l = coexpr_ortho[which_na], 
-                                                        score_col = "Rank_aggr_coexpr",
-                                                        go_path = go_path,
-                                                        anno_path = anno_hg_path,
-                                                        ncores = ncore)
   
   saveRDS(erminer_coexpr_ortho, erminer_coexpr_ortho_path)
 }
