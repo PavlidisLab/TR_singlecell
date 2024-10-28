@@ -70,9 +70,9 @@ erminer_enrich_list <- function(dat_l,
                           scores = df,
                           scoreColumn = score_col,
                           geneSetDescription = go_path,
-                          aspects = "B",
+                          aspects = "B",  # biological process
                           iterations = 10000,
-                          bigIsBetter = FALSE)
+                          bigIsBetter = FALSE)  # integer rank smaller better
         
         res$results
         
@@ -157,7 +157,7 @@ if (!file.exists(erminer_coexpr_ortho_path)) {
       dat_l = coexpr_ortho,
       score_col = "Rank_aggr_coexpr",
       go_path = go_path,
-      anno_path = anno_ortho_path,
+      anno_path = anno_hg_path,
       ncores = ncore
     )
   )
