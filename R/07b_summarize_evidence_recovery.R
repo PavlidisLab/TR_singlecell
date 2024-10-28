@@ -457,10 +457,10 @@ n_bind <- sum(rank_df$Rank_bind <= 500)
 
 # Histograms of Average versus individual AUCs
 
-p1a <- plot_hist(avi_df_hg, stat_col = paste0("AUPRC", "_quantile"), xlab = "AUPRC quantile", title = "Human")
-p1b <- plot_hist(avi_df_hg, stat_col = paste0("AUROC", "_quantile"), xlab = "AUROC quantile", title = "Human")
-p1c <- plot_hist(avi_df_mm, stat_col = paste0("AUPRC", "_quantile"), xlab = "AUPRC quantile", title = "Mouse")
-p1d <- plot_hist(avi_df_mm, stat_col = paste0("AUROC", "_quantile"), xlab = "AUROC quantile", title = "Mouse")
+p1a <- plot_hist(avi_df_hg, stat_col = paste0("AUPRC", "_quantile"), xlab = "AUPRC quantile", title = "Human") + geom_vline(xintercept = median(avi_df_hg$AUPRC_quantile))
+p1b <- plot_hist(avi_df_hg, stat_col = paste0("AUROC", "_quantile"), xlab = "AUROC quantile", title = "Human") + geom_vline(xintercept = median(avi_df_hg$AUROC_quantile))
+p1c <- plot_hist(avi_df_mm, stat_col = paste0("AUPRC", "_quantile"), xlab = "AUPRC quantile", title = "Mouse") + geom_vline(xintercept = median(avi_df_mm$AUPRC_quantile))
+p1d <- plot_hist(avi_df_mm, stat_col = paste0("AUROC", "_quantile"), xlab = "AUROC quantile", title = "Mouse") + geom_vline(xintercept = median(avi_df_mm$AUROC_quantile))
 
 p1 <- plot_grid(p1a, p1b, p1c, p1d, nrow = 2)
 
