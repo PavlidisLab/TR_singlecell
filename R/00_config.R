@@ -129,3 +129,15 @@ rev_coexpr_auc_mm_path <- "/space/scratch/amorin/R_objects/reverse_coexpr_recove
 # Tiered evidence based on K cutoff
 tiered_evidence_path <- "/space/scratch/amorin/R_objects/tiered_evidence_list.RDS"
 tiered_evidence_flat_path <- "/space/scratch/amorin/R_objects/tiered_evidence_flat_list.RDS"
+
+
+# GO annotations
+go_date <- "2024-09-08"
+go_path <- paste0("/space/scratch/amorin/R_objects/go_terms_", go_date, ".xml")
+anno_hg_path <- "/space/scratch/amorin/R_objects/gemma_generic_human_anno"
+anno_mm_path <- "/space/scratch/amorin/R_objects/gemma_generic_mouse_anno"
+
+# GO output results
+erminer_coexpr_hg_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_pr_hg.RDS"
+erminer_coexpr_mm_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_pr_mm.RDS"
+erminer_coexpr_ortho_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_pr_ortho.RDS"
