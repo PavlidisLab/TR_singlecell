@@ -469,7 +469,7 @@ p1c <- hist_ortho_similarity(sim_df,
 p1 <- plot_grid(p1a, p1b, p1c, ncol = 1)
 
 ggsave(p1, height = 12, width = 9, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "ortho_similarity_hist.png"))
+       filename = file.path(plot_dir, paste0("ortho_similarity_hist_k=", k, ".png")))
 
 
 
@@ -516,20 +516,19 @@ p2 <- qplot(rank_tf_ortho[[check_tf]],
 # Scatter of overlap quantiles in mouse/human
 
 p3a <- qplot(sim_df, xvar = "Topk_Quant_hg_in_mm", yvar = "Topk_Quant_mm_in_hg") +
-  # xlab(expr("Top"[!!k] ~ "quantile human in mouse")) + 
   xlab("Ortholog retrieval score (human in mouse)") + 
-  # ylab(expr("Top"[!!k] ~ "quantile mouse in human"))
   ylab("Ortholog retrieval score (mouse in human)")
 
 
-p3b <- qplot(sim_df, xvar = "Bottomk_Quant_mm_in_hg", yvar = "Bottomk_Quant_hg_in_mm") +
-  xlab(expr("Bottom"[!!k] ~ "quantile mouse in human")) +
-  ylab(expr("Bottom"[!!k] ~ "quantile human in mouse"))
+p3b <- qplot(sim_df, xvar = "Bottomk_Quant_hg_in_mm", yvar = "Bottomk_Quant_mm_in_hg") +
+  xlab(expr("Ortholog retrieval score (human in mouse)")) +
+  ylab(expr("Ortholog retrieval score (mouse in human)")) +
+  ggtitle(expr("Bottom"[!!k] ~ "(negative coexpresson)"))
 
 
 p3c <- qplot(sim_df, xvar = "Bottomk_Quant_ortho", yvar = "Topk_Quant_ortho") +
-  xlab(expr("Bottom"[!!k] ~ "quantile orthologous")) +
-  ylab(expr("Top"[!!k] ~ "quantile orthologous"))
+  xlab(expr("Bottom"[!!k] ~ "average ortholog retrieval score")) +
+  ylab(expr("Top"[!!k] ~ "average ortholog retrieval score"))
 
 
 ggsave(p3a, height = 7, width = 7, device = "png", dpi = 300,
@@ -593,7 +592,7 @@ p6 <-
 
 
 ggsave(p6, height = 7, width = 7, device = "png", dpi = 300,
-       filename = file.path(plot_dir, paste0(check_tf, "_topk_count_between_species.png")))
+       filename = file.path(plot_dir, paste0(check_tf, "_top", k, "_count_between_species.png")))
 
   
 # Hist of topk counts for each species for check TF
