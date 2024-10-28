@@ -32,7 +32,8 @@ packages <- c(
   "proxyC",
   "qlcMatrix",
   "microbenchmark",
-  "credentials"
+  "credentials",
+  "rJava"
 )
 
 
@@ -51,3 +52,5 @@ BiocManager::install("GenomicRanges")
 BiocManager::install("limma")
 BiocManager::install("edgeR")
 BiocManager::install("ComplexHeatmap")
+
+devtools::install_github('PavlidisLab/ermineR')
