@@ -1,30 +1,23 @@
-## TODO
+## Perform GO enrichment of biological processes on all aggregate coexpression
+## profiles using ermineR's precision recall implementation
+## https://github.com/PavlidisLab/ermineR
 ## -----------------------------------------------------------------------------
 
-# https://github.com/PavlidisLab/ermineR
-# devtools::install_github('PavlidisLab/ermineR')
-# install.packages("rJava")
 library(ermineR)
 library(rJava)
 library(tidyverse)
 library(parallel)
 source("R/00_config.R")
 
-erminer_coexpr_hg_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_pr_hg.RDS"
-erminer_coexpr_mm_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_pr_mm.RDS"
-erminer_coexpr_ortho_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_pr_ortho.RDS"
+set.seed(5)
 
 
-go_date <- "2024-09-08"
-go_path <- paste0("/space/scratch/amorin/R_objects/go_terms_", go_date, ".xml")
+# Download GO terms and human/mouse gene to GO map
 
 if (!file.exists(go_path)) {
   goAtDate(go_path, go_date, overwrite = FALSE)
 }
 
-
-anno_hg_path <- "/space/scratch/amorin/R_objects/gemma_generic_human_anno"
-anno_mm_path <- "/space/scratch/amorin/R_objects/gemma_generic_mouse_anno"
 
 
 if (!file.exists(anno_hg_path)) {
@@ -48,6 +41,9 @@ if (!file.exists(anno_mm_path)) {
 
 # Assumes dat_l as named list of TF coexpression rankings
 # Assumes summary df has Rank_aggr_coexpr and Symbol in column names
+# Iterates through each aggregate ranking in dat_l, performing GO enrichment
+# of biological process terms using ermineR::precRecall
+# ------------------------------------------------------------------------------
 
 
 erminer_enrich_list <- function(dat_l, 
