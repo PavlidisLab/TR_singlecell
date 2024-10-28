@@ -249,23 +249,79 @@ plot_hist(term_n_hg,
 
 # Demo simple barchart of GO terms and sig
 
-go_coexpr_filt_ortho$ASCL1 %>% 
-  mutate(Score = -log10(CorrectedMFPvalue)) %>% 
-  arrange(Score) %>% 
-  mutate(Name = factor(Name, levels = unique(Name))) %>% 
-  ggplot(., aes(x = Score, y = Name)) +
-  geom_bar(stat = "identity") +
-  xlab("-log10 adjusted p-value") +
-  ggtitle("ASCL1 orthologous rankings") +
-  theme_classic() +
-  theme(axis.text.y = element_text(size = 15),
-        axis.text.x = element_text(size = 20),
-        axis.title.x = element_text(size = 20),
-        axis.title.y = element_blank(),
-        plot.title = element_text(size = 20),
-        plot.margin = margin(c(10, 20, 10, 10)))
+go_barplot <- function(df, topn = 15, title) {
+  
+  df %>% 
+    mutate(Score = -log10(CorrectedMFPvalue)) %>% 
+    slice_max(Score, n = topn) %>% 
+    arrange(Score) %>%
+    mutate(Name = factor(Name, levels = unique(Name))) %>% 
+    ggplot(., aes(x = Score, y = Name)) +
+    geom_bar(stat = "identity", col = "black", fill = "slategrey") +
+    geom_vline(xintercept = -log10(0.05), linetype = "dashed") +
+    xlab(expr("-log"[!!10] ~ "adjusted p-value")) +
+    ggtitle(title) +
+    theme_classic() +
+    theme(axis.text.y = element_text(size = 15),
+          axis.text.x = element_text(size = 15),
+          axis.title.x = element_text(size = 20),
+          axis.title.y = element_blank(),
+          plot.title = element_text(size = 20),
+          plot.margin = margin(c(10, 20, 10, 10)))
+  
+}
 
 
+go_barplot(go_coexpr_filt_hg$ASCL1, title = "ASCL1 human ranking")
+go_barplot(go_coexpr_filt_mm$Ascl1, title = "ASCL1 mouse ranking")
 
 
-# Ortho using 
+px1 <- go_barplot(go_coexpr_filt_ortho$ASCL1, title = "ASCL1 orthologous ranking")
+
+ggsave(px1, height = 7, width = 10, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "GO_ASCL1_ortho_coexpr.png"))
+
+
+px2 <- go_barplot(go_coexpr_filt_hg$OLIG1, title = "Human OLIG1")
+
+ggsave(px2, height = 7, width = 14, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "GO_OLIG1_human_coexpr.png"))
+
+px3 <- go_barplot(go_coexpr_filt_mm$Irf8, title = "Mouse Irf8")
+
+ggsave(px3, height = 7, width = 14, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "GO_Irf8_mouse_coexpr.png"))
+
+
+px4 <- go_barplot(go_coexpr_filt_hg$NEUROD6, title = "Human NEUROD6")
+
+ggsave(px4, height = 7, width = 14, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "GO_NEUROD6_human_coexpr.png"))
+
+
+px5 <- go_barplot(go_coexpr_filt_mm$Gata1, title = "Mouse Gata1")
+
+ggsave(px5, height = 7, width = 14, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "GO_Gata1_mouse_coexpr.png"))
+
+
+px6 <- go_barplot(go_coexpr_filt_mm$Pax6, title = "Mouse Pax6")
+
+
+ggsave(px6, height = 7, width = 14, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "GO_Pax6_mouse_coexpr.png"))
+
+
+px7 <- go_barplot(go_coexpr_filt_hg$SOX4, title = "Human SOX4")
+
+
+ggsave(px7, height = 7, width = 14, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "GO_SOX4_human_coexpr.png"))
+
+
+px8 <- go_barplot(go_coexpr_filt_hg$E2F8, title = "Human E2F8")
+
+
+ggsave(px8, height = 7, width = 14, device = "png", dpi = 300,
+       filename = file.path(plot_dir, "GO_E2F8_human_coexpr.png"))
+
