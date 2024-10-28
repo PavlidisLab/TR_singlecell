@@ -1,34 +1,21 @@
-## TODO
+## Inspect the results of GO enrichment and export barplots of sig. terms
 ## -----------------------------------------------------------------------------
 
-library(clusterProfiler)
-library(parallel)
 library(tidyverse)
-library(org.Hs.eg.db)
-library(org.Mm.eg.db)
 source("R/00_config.R")
 source("R/utils/plot_functions.R")
 
 
-go_coexpr_hg_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_pr_hg.RDS"
-go_coexpr_mm_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_pr_mm.RDS"
-go_coexpr_ortho_path <- "/space/scratch/amorin/R_objects/coexpr_erminer_pr_ortho.RDS"
-
+# The score/significance and GO process column names of the results
 score_col <- "CorrectedMFPvalue"
 term_col <- "Name"
 
+# Loading ortho gene table and GO result lists
 pc_ortho <- read.delim(pc_ortho_path)
-go_coexpr_hg <- readRDS(go_coexpr_hg_path)
-go_coexpr_mm <- readRDS(go_coexpr_mm_path)
-go_coexpr_ortho <- readRDS(go_coexpr_ortho_path)
+go_coexpr_hg <- readRDS(erminer_coexpr_hg_path)
+go_coexpr_mm <- readRDS(erminer_coexpr_mm_path)
+go_coexpr_ortho <- readRDS(erminer_coexpr_ortho_path)
 
-
-# Example of one table - ASCL1 used in paper
-# example_hg <- "ASCL1"
-# example_mm <- "Ascl1"
-# go_coexpr_hg[[example_hg]]
-# go_coexpr_mm[[example_mm]]
-# go_coexpr_ortho[[example_hg]]
 
 
 # Only consider results reaching sig. cut-off
@@ -76,9 +63,10 @@ tf_n_all <- pc_ortho %>%
   dplyr::rename(N_ortho = N) 
 
 
-cor.test(tf_n_all$N_hg, tf_n_all$N_mm)
 human0 <- tf_n_all$N_hg == 0
 mouse0 <- tf_n_all$N_mm == 0
+
+cor.test(tf_n_all$N_hg, tf_n_all$N_mm)
 fisher.test(table(human0, mouse0))
 
 
@@ -171,42 +159,47 @@ plot_bar <- function(df, count_col, group_col, xlab, ylab, title) {
 
 
 
-plot_bar(tf_n_hg, 
-         count_col = "N", 
-         group_col = "Symbol", 
-         xlab = "Count of GO terms (biological process)", 
-         ylab = "TR", 
-         title = "Human")
+# Count of terms per TR
+
+p1a <- plot_bar(tf_n_hg, 
+                count_col = "N", 
+                group_col = "Symbol", 
+                xlab = "Count of GO terms (biological process)", 
+                ylab = "TR", 
+                title = "Human")
 
 
-plot_bar(tf_n_mm, 
-         count_col = "N", 
-         group_col = "Symbol", 
-         xlab = "Count of GO terms (biological process)", 
-         ylab = "TR", 
-         title = "Mouse")
+p1b <- plot_bar(tf_n_mm, 
+                count_col = "N", 
+                group_col = "Symbol", 
+                xlab = "Count of GO terms (biological process)", 
+                ylab = "TR", 
+                title = "Mouse")
+
+
+# Count of TRs per term
+
+p2a <- plot_bar(term_n_hg, 
+                count_col = "N", 
+                group_col = "Term", 
+                xlab = "Count of TRs belonging to term", 
+                ylab = "GO terms (biological process)",
+                title = "Human")
+
+
+p2b <- plot_bar(term_n_mm, 
+                count_col = "N", 
+                group_col = "Term", 
+                xlab = "Count of TRs belonging to term",
+                ylab = "GO terms (biological process)", 
+                title = "Mouse")
 
 
 
-plot_bar(term_n_hg, 
-         count_col = "N", 
-         group_col = "Term", 
-         xlab = "Count of TRs belonging to term", 
-         ylab = "GO terms (biological process)", 
-         title = "Human")
+# Scatter of count of terms between ortho TRs
 
-
-plot_bar(term_n_mm, 
-         count_col = "N", 
-         group_col = "Term", 
-         xlab = "Count of TRs belonging to term", 
-         ylab = "GO terms (biological process)", 
-         title = "Mouse")
-
-
-
-
-ggplot(tf_n_all, aes(x = N_hg, y = N_mm)) +
+p3 <- 
+  ggplot(tf_n_all, aes(x = N_hg, y = N_mm)) +
   geom_point(shape = 21, size = 2.4) +
   geom_smooth(method = "lm") +
   xlab("Count of significant terms (human)") +
@@ -219,35 +212,25 @@ ggplot(tf_n_all, aes(x = N_hg, y = N_mm)) +
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
+# Scatter of count of TRs per term
 
-ggplot(term_n_all, aes(x = N_hg, y = N_mm)) +
+p4 <- 
+  ggplot(term_n_all, aes(x = N_hg, y = N_mm)) +
   geom_point(shape = 21, size = 2.4) +
   geom_smooth(method = "lm") +
   xlab("Count of associated TRs (human)") +
   ylab("Count of associated TRs (mouse)") +
-  ggtitle("N=5,692 unique terms between species")
+  ggtitle("N=5,692 unique terms between species") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
   
 
 
-plot_hist(tf_n_hg,
-          stat_col = "N",
-          xlab = "Count of GO terms (biological process)",
-          title = "Human") +
-  ylab("Count of TRs")
 
-
-
-
-plot_hist(term_n_hg,
-          stat_col = "N",
-          xlab = "Count of TRs",
-          title = "Human") +
-  ylab("Count of GO terms (biological process)")
-
-
-
-
-# Demo simple barchart of GO terms and sig
+# Simple bar chart of GO terms and -log10(adj.pval)
 
 go_barplot <- function(df, topn = 15, title) {
   
@@ -272,56 +255,33 @@ go_barplot <- function(df, topn = 15, title) {
 }
 
 
-go_barplot(go_coexpr_filt_hg$ASCL1, title = "ASCL1 human ranking")
-go_barplot(go_coexpr_filt_mm$Ascl1, title = "ASCL1 mouse ranking")
+
+generate_and_save_plot <- function(params) {
+  
+  plot <- go_barplot(params$data, title = params$title)
+  
+  ggsave(
+    plot, height = 7, width = 14, device = "png", dpi = 300,
+    filename = file.path(plot_dir, params$filename)
+  )
+}
 
 
-px1 <- go_barplot(go_coexpr_filt_ortho$ASCL1, title = "ASCL1 orthologous ranking")
-
-ggsave(px1, height = 7, width = 10, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "GO_ASCL1_ortho_coexpr.png"))
-
-
-px2 <- go_barplot(go_coexpr_filt_hg$OLIG1, title = "Human OLIG1")
-
-ggsave(px2, height = 7, width = 14, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "GO_OLIG1_human_coexpr.png"))
-
-px3 <- go_barplot(go_coexpr_filt_mm$Irf8, title = "Mouse Irf8")
-
-ggsave(px3, height = 7, width = 14, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "GO_Irf8_mouse_coexpr.png"))
+# Examples called in paper
+plot_params <- list(
+  list(data = go_coexpr_filt_hg$ASCL1, title = "ASCL1 human ranking", filename = "GO_ASCL1_human_coexpr.png"),
+  list(data = go_coexpr_filt_mm$Ascl1, title = "ASCL1 mouse ranking", filename = "GO_ASCL1_mouse_coexpr.png"),
+  list(data = go_coexpr_filt_ortho$ASCL1, title = "ASCL1 orthologous ranking", filename = "GO_ASCL1_ortho_coexpr.png"),
+  list(data = go_coexpr_filt_hg$OLIG1, title = "Human OLIG1", filename = "GO_OLIG1_human_coexpr.png"),
+  list(data = go_coexpr_filt_mm$Irf8, title = "Mouse Irf8", filename = "GO_Irf8_mouse_coexpr.png"),
+  list(data = go_coexpr_filt_hg$NEUROD6, title = "Human NEUROD6", filename = "GO_NEUROD6_human_coexpr.png"),
+  list(data = go_coexpr_filt_mm$Gata1, title = "Mouse Gata1", filename = "GO_Gata1_mouse_coexpr.png"),
+  list(data = go_coexpr_filt_mm$Pax6, title = "Mouse Pax6", filename = "GO_Pax6_mouse_coexpr.png"),
+  list(data = go_coexpr_filt_hg$SOX4, title = "Human SOX4", filename = "GO_SOX4_human_coexpr.png"),
+  list(data = go_coexpr_filt_hg$E2F8, title = "Human E2F8", filename = "GO_E2F8_human_coexpr.png")
+)
 
 
-px4 <- go_barplot(go_coexpr_filt_hg$NEUROD6, title = "Human NEUROD6")
+# Saving out
 
-ggsave(px4, height = 7, width = 14, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "GO_NEUROD6_human_coexpr.png"))
-
-
-px5 <- go_barplot(go_coexpr_filt_mm$Gata1, title = "Mouse Gata1")
-
-ggsave(px5, height = 7, width = 14, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "GO_Gata1_mouse_coexpr.png"))
-
-
-px6 <- go_barplot(go_coexpr_filt_mm$Pax6, title = "Mouse Pax6")
-
-
-ggsave(px6, height = 7, width = 14, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "GO_Pax6_mouse_coexpr.png"))
-
-
-px7 <- go_barplot(go_coexpr_filt_hg$SOX4, title = "Human SOX4")
-
-
-ggsave(px7, height = 7, width = 14, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "GO_SOX4_human_coexpr.png"))
-
-
-px8 <- go_barplot(go_coexpr_filt_hg$E2F8, title = "Human E2F8")
-
-
-ggsave(px8, height = 7, width = 14, device = "png", dpi = 300,
-       filename = file.path(plot_dir, "GO_E2F8_human_coexpr.png"))
-
+invisible(lapply(plot_params, generate_and_save_plot))
