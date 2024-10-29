@@ -232,7 +232,7 @@ p4 <-
 
 # Simple bar chart of GO terms and -log10(adj.pval)
 
-go_barplot <- function(df, topn = 15, title) {
+go_barplot <- function(df, topn = 10, title) {
   
   df %>% 
     mutate(Score = -log10(CorrectedMFPvalue)) %>% 
@@ -245,8 +245,8 @@ go_barplot <- function(df, topn = 15, title) {
     xlab(expr("-log"[!!10] ~ "adjusted p-value")) +
     ggtitle(title) +
     theme_classic() +
-    theme(axis.text.y = element_text(size = 15),
-          axis.text.x = element_text(size = 15),
+    theme(axis.text.y = element_text(size = 18),
+          axis.text.x = element_text(size = 18),
           axis.title.x = element_text(size = 20),
           axis.title.y = element_blank(),
           plot.title = element_text(size = 20),
