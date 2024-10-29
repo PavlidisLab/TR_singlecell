@@ -115,7 +115,7 @@ bind_summary_path <- "/space/scratch/amorin/R_objects/unibind_Permissive_bindsco
 bind_model_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_modelfit.RDS"
 
 
-# List of ROCR performances
+# List of literature curation benchmark performances
 coexpr_auc_hg_path <- "/space/scratch/amorin/R_objects/coexpr_recover_curated_hg.RDS"
 coexpr_auc_mm_path <- "/space/scratch/amorin/R_objects/coexpr_recover_curated_mm.RDS"
 unibind_auc_hg_path <- "/space/scratch/amorin/R_objects/unibind_recover_curated_hg.RDS"
@@ -126,6 +126,11 @@ rev_coexpr_auc_hg_path <- "/space/scratch/amorin/R_objects/reverse_coexpr_recove
 rev_coexpr_auc_mm_path <- "/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_mm.RDS"
 int_auc_hg_path <- "/space/scratch/amorin/R_objects/integrated_recover_curated_hg.RDS"
 int_auc_mm_path <- "/space/scratch/amorin/R_objects/integrated_recover_curated_mm.RDS"
+
+
+# Summary tables of literature curation benchmark performance
+auc_table_hg_path <- "/space/scratch/amorin/R_objects/curation_benchmark_summary_hg.tsv"
+auc_table_mm_path <- "/space/scratch/amorin/R_objects/curation_benchmark_summary_mm.tsv"
 
 
 # Tiered evidence based on K cutoff
