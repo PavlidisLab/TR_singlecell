@@ -124,6 +124,8 @@ avg_vs_ind_auc_hg_path <- "/space/scratch/amorin/R_objects/individual_vs_average
 avg_vs_ind_auc_mm_path <- "/space/scratch/amorin/R_objects/individual_vs_average_recover_curated_mm.RDS"
 rev_coexpr_auc_hg_path <- "/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_hg.RDS"
 rev_coexpr_auc_mm_path <- "/space/scratch/amorin/R_objects/reverse_coexpr_recover_curated_mm.RDS"
+int_auc_hg_path <- "/space/scratch/amorin/R_objects/integrated_recover_curated_hg.RDS"
+int_auc_mm_path <- "/space/scratch/amorin/R_objects/integrated_recover_curated_mm.RDS"
 
 
 # Tiered evidence based on K cutoff
