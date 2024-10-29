@@ -1,4 +1,6 @@
-## TODO
+## Perform the literature curation benchmark on the integrated rankings 
+## (positive coexpression and binding). Note that this was based on a reviewer
+## request -- this script has a lot of repetition with 07a_curated_target_recovery.R
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -39,11 +41,6 @@ rank_tf_mm <- readRDS(rank_int_mm_path)
 
 # Curated low throughput targets
 curated <- read.delim(curated_all_path, stringsAsFactors = FALSE)
-
-
-int_auc_hg_path <- "/space/scratch/amorin/R_objects/integrated_recover_curated_hg.RDS"
-int_auc_mm_path <- "/space/scratch/amorin/R_objects/integrated_recover_curated_mm.RDS"
-
 
 
 # Get ortho-matched symbols of TFs with available data, as well as all ortho
@@ -94,11 +91,12 @@ target_mm <- union(
 
 
 
-# Integrated ranking (coexpr and binding)
+# Integrated ranking (positive coexpr and binding)
 # ------------------------------------------------------------------------------
 
 
-# Reverse integrated rank column: process assumes higher values are more important
+# Reverse integrated rank column (where lower integer ranks are better), as the
+# process assumes higher values are more important
 
 rank_tf_hg <- lapply(rank_tf_hg, function(x) mutate(x, Rank_integrated = -Rank_integrated))
 rank_tf_mm <- lapply(rank_tf_mm, function(x) mutate(x, Rank_integrated = -Rank_integrated))
