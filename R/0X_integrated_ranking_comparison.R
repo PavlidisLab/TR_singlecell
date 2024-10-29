@@ -90,37 +90,147 @@ agg_df_mm <- agg_df_mm %>%
 
 
 
+# TODO: refactor to succint
+test_coexpr_hg <- data.frame(
+  Value = c(agg_df_hg$AUROC_coexpr, agg_df_hg$AUROC_int),
+  # Value = c(agg_df_hg$AUPRC_coexpr, agg_df_hg$AUPRC_int),
+  Group = rep(c("Coexpr", "Integrated"), each = nrow(agg_df_hg)))
+
+test_bind_hg <- data.frame(
+  Value = c(agg_df_hg$AUROC_bind, agg_df_hg$AUROC_int),
+  # Value = c(agg_df_hg$AUPRC_bind, agg_df_hg$AUPRC_int),
+  Group = rep(c("Bind", "Integrated"), each = nrow(agg_df_hg)))
+
+test_coexpr_mm <- data.frame(
+  Value = c(agg_df_mm$AUROC_coexpr, agg_df_mm$AUROC_int),
+  # Value = c(agg_df_mm$AUPRC_coexpr, agg_df_mm$AUPRC_int),
+  Group = rep(c("Coexpr", "Integrated"), each = nrow(agg_df_mm)))
+
+test_bind_mm <- data.frame(
+  Value = c(agg_df_mm$AUROC_bind, agg_df_mm$AUROC_int),
+  # Value = c(agg_df_mm$AUPRC_bind, agg_df_mm$AUPRC_int),
+  Group = rep(c("Coexpr", "Integrated"), each = nrow(agg_df_mm)))
 
 
-auroc_box_hg <- data.frame(
+
+# Specificy less for one-sided test that coexpr/bind is less performant than integrated
+wilcox.test(test_coexpr_hg$Value ~ test_coexpr_hg$Group, alternative = "less")$p.value
+wilcox.test(test_bind_hg$Value ~ test_bind_hg$Group, alternative = "less")$p.value
+wilcox.test(test_coexpr_mm$Value ~ test_coexpr_mm$Group, alternative = "less")$p.value
+wilcox.test(test_bind_mm$Value ~ test_bind_mm$Group, alternative = "less")$p.value
+
+
+
+plot_df_hg <- data.frame(
   Value = c(agg_df_hg$AUROC_coexpr, agg_df_hg$AUROC_bind, agg_df_hg$AUROC_int),
-  Group = rep(c("Coexpr", "Bind", "Int"), each = nrow(agg_df_hg))) %>%
-  mutate(Group = factor(Group, levels = c("Coexpr", "Bind", "Int"))) %>% 
+  # Value = c(agg_df_hg$AUPRC_coexpr, agg_df_hg$AUPRC_bind, agg_df_hg$AUPRC_int),
+  Group = rep(c("Coexpression", "Binding", "Integrated"), each = nrow(agg_df_hg))) %>%
+  mutate(Group = factor(Group, levels = c("Coexpression", "Binding", "Integrated")))
+
+
+med_df_hg <- plot_df_hg %>% 
+  group_by(Group) %>% 
+  summarize(Med = median(Value))
+
+
+auroc_box_hg <- plot_df_hg  %>% 
   ggplot(., aes(x = Group, y = Value)) +
-  geom_boxplot() +
+  geom_violin(fill = "slategrey") +
+  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
   ylab("AUROC") +
+  ggtitle("Human") +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
-        axis.title = element_text(size = 20),
+        axis.title.y = element_text(size = 20),
+        axis.title.x = element_blank(),
         plot.title = element_text(size = 20),
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
 
 
-auroc_box_mm <- data.frame(
+auroc_density_hg <- ggplot(plot_df_hg, aes(colour = Group, x = Value)) +
+  geom_density(linewidth = 1.4) +
+  geom_vline(data = med_df_hg, 
+             aes(xintercept = Med, colour = Group), 
+             linetype = "dashed", size = 1.5) +
+  xlab("AUROC") +
+  ylab("Density") +
+  ggtitle("Human") +
+  scale_colour_manual(values = c('#e41a1c','#377eb8','#4daf4a')) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title = element_text(size = 20),
+        plot.title = element_text(size = 20),
+        legend.position = c(0.2, 0.75),
+        legend.text = element_text(size = 20),
+        legend.title = element_blank(),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+
+ggsave(auroc_box_hg, height = 9, width = 9, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "auroc_integrated_vbplot_hg.png")))
+
+
+ggsave(auroc_density_hg, height = 6, width = 9, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "auroc_integrated_density_hg.png")))
+
+
+
+plot_df_mm <- data.frame(
   Value = c(agg_df_mm$AUROC_coexpr, agg_df_mm$AUROC_bind, agg_df_mm$AUROC_int),
-  Group = rep(c("Coexpr", "Bind", "Int"), each = nrow(agg_df_mm))) %>%
-  mutate(Group = factor(Group, levels = c("Coexpr", "Bind", "Int"))) %>% 
-  ggplot(., aes(x = Group, y = Value)) +
-  geom_boxplot() +
+  # Value = c(agg_df_mm$AUPRC_coexpr, agg_df_mm$AUPRC_bind, agg_df_mm$AUPRC_int),
+  Group = rep(c("Coexpression", "Binding", "Integrated"), each = nrow(agg_df_mm))) %>%
+  mutate(Group = factor(Group, levels = c("Coexpression", "Binding", "Integrated")))
+
+
+med_df_mm <- plot_df_mm %>% 
+  group_by(Group) %>% 
+  summarize(Med = median(Value))
+
+
+
+auroc_box_mm <- ggplot(plot_df_mm, aes(x = Group, y = Value)) +
+  geom_violin(fill = "slategrey") +
+  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
   ylab("AUROC") +
+  ggtitle("Mouse") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 20),
+        axis.title.y = element_text(size = 20),
+        axis.title.x = element_blank(),
+        plot.title = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+auroc_density_mm <- ggplot(plot_df_mm, aes(colour = Group, x = Value)) +
+  geom_density(linewidth = 1.4) +
+  geom_vline(data = med_df_mm, 
+             aes(xintercept = Med, colour = Group), 
+             linetype = "dashed", size = 1.5) +
+  xlab("AUROC") +
+  ylab("Density") +
+  ggtitle("Mouse") +
+  scale_colour_manual(values = c('#e41a1c','#377eb8','#4daf4a')) +
   theme_classic() +
   theme(axis.text = element_text(size = 20),
         axis.title = element_text(size = 20),
         plot.title = element_text(size = 20),
+        legend.position = c(0.2, 0.75),
+        legend.text = element_text(size = 20),
+        legend.title = element_blank(),
         plot.margin = margin(c(10, 20, 10, 10)))
 
+
+ggsave(auroc_box_mm, height = 9, width = 9, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "auroc_integrated_vbplot_mm.png")))
+
+
+ggsave(auroc_density_mm, height = 6, width = 9, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "auroc_integrated_density_mm.png")))
 
 
 
@@ -156,7 +266,10 @@ pheatmap(auroc_mat_hg,
          breaks = seq(min(auroc_mat_hg), max(auroc_mat_hg), length.out = 11),
          border_color = "black",
          gaps_col = c(1:3),
-         fontsize_col = 15)
+         fontsize_col = 15,
+         main = "Human",
+         width = 4,
+         filename = file.path(paste0(plot_dir, "auroc_integrated_heatmap_hg.png")))
 
 
 # pheatmap(t(auroc_mat_hg),
@@ -206,3 +319,4 @@ lines(density(agg_df_hg$AUROC_quantile_bind), col = "black")
 plot(density(agg_df_hg$AUPRC_int), col = "blue")
 lines(density(agg_df_hg$AUPRC_coexpr), col = "red")
 lines(density(agg_df_hg$AUPRC_bind), col = "black")
+
