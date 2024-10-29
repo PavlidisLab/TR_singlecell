@@ -102,3 +102,24 @@ ggsave(p1a, height = 12, width = 18, device = "png", dpi = 300,
 
 ggsave(p1b, height = 12, width = 18, device = "png", dpi = 300,
        filename = file.path(plot_dir, "ribosomal_top_rank_overlap_mouse.png"))
+
+
+
+# Heatmap of binarized topk status
+
+stopifnot(identical(names(rank_ribo_hg), ribo_genes$Symbol_hg))
+
+ribo_mat_hg <- 
+  lapply(rank_ribo_hg, function(x) x[ribo_genes$Symbol_hg, "Rank_aggr_coexpr"]) %>% 
+  do.call(cbind, .)
+
+colnames(ribo_mat_hg) <- rownames(ribo_mat_hg) <- ribo_genes$Symbol_hg
+
+ribo_mat_hg <- (ribo_mat_hg <= 200) * 1
+
+pheatmap(ribo_mat_hg,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = c("white", "black"),
+         na_col = "red",
+         border_color = NA)
