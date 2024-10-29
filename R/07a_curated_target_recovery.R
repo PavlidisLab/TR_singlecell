@@ -1,9 +1,8 @@
 ## Save out lists summarizing the ability of TF-target rankings to recover
-## literature curated targets. 5 comparisons are done: individual coexpr profiles
+## literature curated targets. 4 comparisons are done: individual coexpr profiles
 ## relative to aggregate coexpr; aggregate positive coexpr profiles relative to
 ## a sampled null; ditto but for negative coexpr; Unibind aggregate ChIP-seq
-## bind scores relative to a null; and integrating positive coexpression and
-## binding relative to a null
+## bind scores relative to a null
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
