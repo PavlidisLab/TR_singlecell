@@ -628,11 +628,9 @@ summarize_obs_and_null_auc <- function(tf,
     N_targets = n_target,
     AUPRC = auc$AUPRC,
     AUPRC_quantile = ecdf(null_auprc)(auc$AUPRC),
-    AUPRC_ratio = auc$AUPRC / median(null_auprc),
     AUPRC_diff = auc$AUPRC - median(null_auprc),
     AUROC = auc$AUROC,
     AUROC_quantile = ecdf(null_auroc)(auc$AUROC),
-    AUROC_ratio = auc$AUROC / median(null_auroc),
     AUROC_diff = auc$AUROC - median(null_auroc)
   )
   
