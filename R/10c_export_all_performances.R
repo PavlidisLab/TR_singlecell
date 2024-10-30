@@ -57,12 +57,6 @@ agg_df_mm <- join_auc_df(coexpr_l = coexpr_auc_mm,
                          int_l = int_auc_mm)
 
 
-
-# TODO: remove when performance is ran w/o ratio
-agg_df_hg <- dplyr::select(agg_df_hg, -contains("ratio"))
-agg_df_mm <- dplyr::select(agg_df_mm, -contains("ratio"))
-
-
 write.table(agg_df_hg, sep = "\t", row.names = FALSE, quote = FALSE,
             file = auc_table_hg_path)
 
