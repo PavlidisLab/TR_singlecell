@@ -473,37 +473,6 @@ ggsave(p1, height = 12, width = 9, device = "png", dpi = 300,
 
 
 
-# As overlaid density
-
-density_ortho_similarity <- function(sim_df, 
-                                     stat, 
-                                     null_vec, 
-                                     xlab, 
-                                     xlim, 
-                                     colours) {
-  
-  df <- data.frame(
-    Stat = c(sim_df[[stat]], null_vec),
-    Group = c(rep("TR", nrow(sim_df)), rep("Null", length(null_vec)))
-  )
-  
-  ggplot(df, aes(x = Stat, fill = Group)) + 
-    geom_density(alpha = 0.6) +
-    xlim(xlim) +
-    xlab(xlab) +
-    ylab("Density") +
-    theme_classic() +
-    scale_fill_manual(values = colours) +
-    theme(text = element_text(size = 20),
-          legend.title = element_blank(),
-          legend.text = element_text(size = 20),
-          legend.position = c(0.92, 0.85))
-  
-}
-
-
-
-
 # Scatter of mouse versus human RSR for a given TF
 
 p2 <- qplot(rank_tf_ortho[[check_tf]],
