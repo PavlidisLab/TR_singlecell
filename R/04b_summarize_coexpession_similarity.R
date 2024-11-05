@@ -361,7 +361,6 @@ point_plot_similarity <- function(summary_df,
                     max.overlaps = topn_label,
                     force = 0.5,
                     nudge_x = -500,
-                    nudge_y = 150,
                     hjust = 1,
                     direction = "y",
                     size = 5,
@@ -397,7 +396,8 @@ p2b <- point_plot_similarity(summ_tf_mm$Topk,
 
 p2 <- plot_grid(p2a, p2b, nrow = 1)
 
-ggsave(p2, height = 10, width = 18, device = "png", dpi = 600,
+
+ggsave(p2, height = 9, width = 20, device = "png", dpi = 600,
        filename = file.path(paste0(plot_dir, "mean_topk=", k, "_human_and_mouse.png")))
 
 
@@ -405,7 +405,7 @@ ggsave(p2, height = 10, width = 18, device = "png", dpi = 600,
 # Histogram of mean values for TF, null, and ribosomal
 
 hist_mean <- function(summary_df, null_df, ribo_df, xlabel) {
-  
+
   mean_df <- data.frame(
     Stat = c(summary_df[, "Mean"],
              null_df[, "Mean"],
@@ -414,8 +414,8 @@ hist_mean <- function(summary_df, null_df, ribo_df, xlabel) {
               rep("Null", nrow(null_df)),
               rep("Ribosomal", nrow(ribo_df)))
   )
-  
-  ggplot(mean_df, aes(x = Stat)) + 
+
+  ggplot(mean_df, aes(x = Stat)) +
     facet_wrap(~Group, nrow = 3, scales = "free_y") +
     geom_histogram(bins = 100, fill = "slategrey", colour = "slategrey") +
     xlab(xlabel) +
@@ -446,7 +446,6 @@ p3b <- hist_mean(summary_df = summ_tf_mm$Topk,
 
 # Mean values as a strip plot. We ended up using in the paper, insetting this
 # within the point similarity plot in illustrator
-
 
 strip_mean <- function(summary_df, null_df, ribo_df, ylabel) {
   
@@ -481,22 +480,26 @@ p4b <- strip_mean(summary_df = summ_tf_mm$Topk,
 
 
 ggsave(p4a, height = 6, width = 4, device = "png", dpi = 300,
-       filename = file.path(paste0(plot_dir, "strip_mean_topk_hg.png")))
+       filename = file.path(paste0(plot_dir, "strip_mean_topk=", k, "_hg.png")))
 
 ggsave(p4b, height = 6, width = 4, device = "png", dpi = 300,
-       filename = file.path(paste0(plot_dir, "strip_mean_topk_mm.png")))
+       filename = file.path(paste0(plot_dir, "strip_mean_topk=", k, "_mm.png")))
 
 
 
 # Combining point plot and hist of mean
-# Flip mouse to mirror human (thought this was nifty, didn't end up using)
+# Flip mouse to mirror human
 
 p5a <- plot_grid(p3a, p2a, rel_widths = c(0.5, 1))
 p5b <- plot_grid(p2b, p3b, rel_widths = c(1, 0.5))
 p5 <- plot_grid(p5a, p5b, nrow = 1)
 
 ggsave(p5, height = 10, width = 22, device = "png", dpi = 600,
-       filename = file.path(paste0(plot_dir, "mean_topk=", k, "_human_and_mouse.png")))
+       filename = file.path(paste0(plot_dir, "mean_topk=", k, "_human_and_mouse_hist.png")))
+
+
+ggsave(p5, height = 9, width = 22, device = "png", dpi = 600,
+       filename = file.path(paste0(plot_dir, "mean_topk=", k, "_human_and_mouse_hist.png")))
 
 
 # Again for bottomk
@@ -530,9 +533,8 @@ p8a <- plot_grid(p7a, p6a, rel_widths = c(0.5, 1))
 p8b <- plot_grid(p6b, p7b, rel_widths = c(1, 0.5))
 p8 <- plot_grid(p8a, p8b, nrow = 1)
 
-ggsave(p8, height = 10, width = 22, device = "png", dpi = 600,
-       filename = file.path(paste0(plot_dir, "mean_bottomk=", k, "_human_and_mouse.png")))
-
+ggsave(p8, height = 9, width = 22, device = "png", dpi = 600,
+       filename = file.path(paste0(plot_dir, "mean_bottomk=", k, "_human_and_mouse_hist.png")))
 
 
 # Density plot of topk intersect for select genes + null
@@ -631,7 +633,7 @@ plot_divergent <- function(divergent_l, null_df, k, plot_title, nlabel = 10) {
       aes(x = Group, y = Mean_bottomk, label = Symbol, fontface = "italic"),
       max.overlaps = 30,
       force = 0.5,
-      nudge_x = 500,
+      # nudge_x = 500,
       hjust = 0,
       direction = "y",
       size = 5,
