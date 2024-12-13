@@ -86,19 +86,101 @@ max_cells <- filter(n_cells, Cell_type == ct)$n
 min_cells <- 100
 
 
-# Isolate cell type count matrix and prep for correlation
-ct_mat <- prepare_celltype_mat(mat = dat$Mat, 
-                              meta = dat$Meta, 
-                              cell_type = ct,
-                              pc_df = pc_hg)
+# TODO: into function that does not collide with aggtools::prepare_celltype_mat
+# (removing genes in advance speeds up)
+
+ct_mat <- t(dat$Mat[, ct_ids])
+keep_genes <- names(which(colSums(ct_mat > 0) >= 20))
+keep_tfs <- intersect(tfs_hg$Symbol, keep_genes)
+ct_mat <- ct_mat[, keep_genes]
+
 
 
 # Full correlation matrix
 cor_mat <- sparse_pcor(ct_mat)
 
 
-n
-steps <- dynamic_steps(max_cells = max_cells, min_cells = min_cells)
-iters <- iter
+n_steps <- 10
+min_iter <- 10
+steps <- dynamic_steps(max_cells = max_cells, min_cells = min_cells, max_steps = n_steps)
+iters <- iterations_per_step(max_steps = n_steps, min_iter = min_iter)
 
 
+# sample_cells <- function(cell_ids, steps, iters) {
+#   
+#   
+# }
+
+
+
+topk_at_iter <- lapply(1:iters[1], function(x) {
+  
+  
+  sample_ids <- sample(ct_ids, steps[4], replace = FALSE)
+  ct_mat_sub <- ct_mat[sample_ids, ]
+  cor_mat_sub <- sparse_pcor(ct_mat_sub)
+  
+  # NA cors to 0 to allow overlap and remove self cor
+  cor_mat_sub[is.na(cor_mat_sub)] <- 0  
+  diag(cor_mat) <- diag(cor_mat_sub) <- 0 
+  
+  # Only consider TFs for overlap
+  topk <- pair_colwise_topk(mat1 = cor_mat[, keep_tfs], 
+                            mat2 = cor_mat_sub[, keep_tfs], 
+                            k = k, 
+                            ncores = ncore)
+  
+  gc(verbose = FALSE)
+  
+  return(topk)
+  
+})
+
+
+topk_at_iter <- bind_rows(topk_at_iter)
+
+
+generate_summ_df <- function(topk_l) {
+  
+  summ <- sapply(topk_l, summary)
+  summ <- t(summ)
+  summ <- as.data.frame(summ) %>% rownames_to_column(var = "Symbol")
+  summ <- arrange(summ, Mean)
+  summ$Symbol <- factor(summ$Symbol, levels = unique(summ$Symbol))
+  
+  return(summ)
+}
+
+
+
+
+summ_df <- generate_summ_df(topk_at_iter) 
+
+
+ggplot(summ_df, aes(x = Symbol, y = Mean)) +
+  geom_crossbar(aes(x = Symbol, ymin = `1st Qu.`, ymax = `3rd Qu.`)) +
+  geom_point(aes(x = Symbol, y = Mean), shape = 21, colour = "firebrick") +
+  theme_classic() +
+  theme(text = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+
+
+
+
+##
+
+# sample_ids <- sample(ct_ids, steps[1], replace = FALSE)
+# ct_mat_sub <- ct_mat[sample_ids, ]
+# cor_mat_sub <- sparse_pcor(ct_mat_sub)
+# 
+# # NA cors to 0 to allow overlap and remove self cor
+# cor_mat_sub[is.na(cor_mat_sub)] <- 0  
+# diag(cor_mat) <- diag(cor_mat_sub) <- 0 
+# 
+# # Only consider TFs for overlap
+# topk <- pair_colwise_topk(mat1 = cor_mat[, keep_tfs], 
+#                           mat2 = cor_mat_sub[, keep_tfs], 
+#                           k = k, 
+#                           ncores = ncore)
