@@ -478,7 +478,9 @@ ggsave(p1, height = 12, width = 9, device = "png", dpi = 300,
 p2 <- qplot(rank_tf_ortho[[check_tf]],
             xvar = "Avg_aggr_coexpr_hg",
             yvar = "Avg_aggr_coexpr_mm",
-            title = check_tf)
+            title = check_tf) +
+  xlab("Aggregate coexpression (human)") +
+  ylab("Aggregate coexpression (mouse)")
 
 
 
