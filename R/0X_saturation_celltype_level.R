@@ -14,10 +14,10 @@ set.seed(74)
 k <- 200
 min_cells <- 100
 max_steps <- 10
-n_iter <- 10
+n_iters <- 100
 
 id <- "GSE180928"
-ct <- "Neuron"
+ct <- "Microglia"
 
 
 tfs <- read.delim(tfs_hg_path, stringsAsFactors = FALSE)
@@ -97,7 +97,7 @@ subsample_and_topk_cor <- function(ct_mat,
     
     message(paste("Step =", step, Sys.time()))
     
-    topk_at_iter <- lapply(1:n_iters, function() {
+    topk_at_iter <- lapply(1:n_iters, function(i) {
       
       sample_ids <- sample(ct_ids, step, replace = FALSE)
       ct_mat_sub <- ct_mat[sample_ids, ]
@@ -149,7 +149,7 @@ steps <- dynamic_steps(max_cells = max_cells, min_cells = min_cells)
 
 
 file <- file.path("/space/scratch/amorin/R_objects/TRsc", 
-                  paste("subsample_cor", id, ct, n_iter, "iters.RDS", sep = "_"))
+                  paste("subsample_cor", id, ct, n_iters, "iters.RDS", sep = "_"))
 
 
 
@@ -173,7 +173,6 @@ if (!file.exists(file)) {
 
 
 
-stop()
 
 topk_barplot <- function(summ_df) {
   
