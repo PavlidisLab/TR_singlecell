@@ -146,6 +146,7 @@ topk_at_subsample_steps <- function(tf_mat,
 
 
 # TODO:
+# TODO: remember hard coded parallel
 
 subsample_tf_topk <- function(tf, agg_l, msr_mat, k, ncore) {
   
@@ -166,7 +167,7 @@ subsample_tf_topk <- function(tf, agg_l, msr_mat, k, ncore) {
                                        tf_ids = tf_ids,
                                        steps = steps,
                                        n_iter = n_iter, 
-                                       ncore = ncore)
+                                       ncore = 4)
   
   return(list(Experiments = exp_topk, 
               Steps = topk_summ))
@@ -180,7 +181,7 @@ subsample_tf_topk <- function(tf, agg_l, msr_mat, k, ncore) {
 
 subsample_all_tfs <- function(agg_l, tfs, msr_mat, k, ncore) {
   
-  tf_l <- lapply(tfs, function(tf) {
+  tf_l <- mclapply(tfs, function(tf) {
     
     message(tf, paste(Sys.time()))
     
@@ -195,7 +196,7 @@ subsample_all_tfs <- function(agg_l, tfs, msr_mat, k, ncore) {
         NA
       }
     )
-  })
+  }, mc.cores = ncore)
   
   names(tf_l) <- tfs
   
@@ -212,7 +213,7 @@ file_hg <- "/space/scratch/amorin/R_objects/TRsc/dataset_subsample_cor_hg.RDS"
 if (!file.exists(file_hg)) {
   
   tf_l <- subsample_all_tfs(agg_l = agg_tf_hg,
-                            tfs = tfs,
+                            tfs = tfs_hg$Symbol,
                             msr_mat = msr_hg, 
                             k = k,
                             ncore = ncore)
