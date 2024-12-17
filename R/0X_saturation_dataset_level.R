@@ -39,6 +39,9 @@ agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = p
 # agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
 
 
+exps <- names(agg_tf_hg)
+
+
 
 #
 # ------------------------------------------------------------------------------
@@ -206,6 +209,9 @@ subsample_all_tfs <- function(agg_l, tfs, msr_mat, k, ncore) {
 
 
 
+# 
+# ------------------------------------------------------------------------------
+
 
 file_hg <- "/space/scratch/amorin/R_objects/TRsc/dataset_subsample_cor_hg.RDS"
 
@@ -222,16 +228,150 @@ if (!file.exists(file_hg)) {
   
 } else {
   
-  tf_l <- readRDS(tf_l, file_hg)
+  tf_l <- readRDS(file_hg)
   
 }
 
 
 
+tf_l <- tf_l[!is.na(tf_l)]
 
 
-stop()
 
+
+# How many sampled datasets are required to reach 80% overlap on average?
+# ------------------------------------------------------------------------------
+
+
+ndat_for_recovery <- function(tf_l, recover = 0.8) {
+  
+  tfs <- names(tf_l)
+  
+  rec_l <- lapply(tfs, function(tf) {
+    
+    summ_df <- tf_l[[tf]]$Steps
+    
+    min_step <- summ_df %>% 
+      filter(Mean > (k * recover)) %>% 
+      slice_min(Mean, n = 1) %>% 
+      pull(N_step)
+    
+    data.frame(Min_step = min_step,
+               Prop_total = min_step / (max(summ_df$N_step) + 1))
+    
+  })
+  
+  names(rec_l) <- tfs
+  
+  df <- do.call(rbind, rec_l) %>% rownames_to_column(var = "Symbol")
+  
+  return(df)
+}
+
+
+
+rec_df <- ndat_for_recovery(tf_l)
+
+
+summ_rec <- summary(rec_df)
+
+
+# Check against average pairwise similarity of experiments
+
+pair_sim_l <- readRDS(paste0("/space/scratch/amorin/R_objects/human_mouse_topk=", k, "_similarity_df.RDS"))
+
+
+rec_df <- left_join(rec_df, pair_sim_l$Human, by = "Symbol")
+
+
+# TODO: Note Pax4 -- higher mean and high proportion... n=16, not sure what this means
+plot(rec_df$Prop_total, rec_df$Mean)
+cor(rec_df$Prop_total, rec_df$Mean, method = "spearman", use = "pairwise.complete.obs")
+
+
+
+
+# Tally datasets that had the highest overlap with global
+# ------------------------------------------------------------------------------
+
+
+rank_expwise_topk <- function(tf_l) {
+  
+  tfs <- names(tf_l)
+  
+  rank_l <- lapply(tfs, function(tf) {
+    
+    summ_df <- tf_l[[tf]]$Experiments
+    
+    summ_df %>% 
+      mutate(Rank = rank(-Topk),
+             RS = rank(Topk) / nrow(summ_df))
+    
+  })
+  names(rank_l) <- tfs
+  
+  return(rank_l)
+}
+
+
+
+
+rankstandard_to_mat <- function(rank_l, exps) {
+  
+  tfs <- names(rank_l)
+  exp_vec <- setNames(rep(0, length(exps)), exps)
+  
+  rs_l <- lapply(tfs, function(tf) {
+    tf_rank <- rank_l[[tf]]
+    exp_vec[match(tf_rank$ID, exps)] <- tf_rank$RS
+    exp_vec
+  })
+  
+  rs_mat <- do.call(rbind, rs_l)
+  colnames(rs_mat) <- exps
+  rownames(rs_mat) <- tfs
+  
+  return(rs_mat)
+}
+
+
+
+
+#### Tallying #1
+# rank_expwise_topk <- function(tf_l) {
+#   
+#   tfs <- names(tf_l)
+#   
+#   rank_l <- lapply(tfs, function(tf) {
+#     
+#     summ_df <- tf_l[[tf]]$Experiments
+#     
+#     summ_df %>% 
+#       slice_max(Topk) %>% 
+#       pull(ID)
+#     
+#   })
+#   names(rank_l) <- tfs
+#   
+#   return(rank_l)
+# }
+# 
+# rank_l <- rank_expwise_topk(tf_l)
+# table(unlist(rank_l)) %>% view
+####
+
+
+
+
+
+rank_l <- rank_expwise_topk(tf_l)
+rs_mat <- rankstandard_to_mat(rank_l, exps)
+
+
+# Average rank standardized exp-wise top K overlap with global profile to see
+# which experiments most commonly aligned with global
+
+expwise_mean <- colMeans(rs_mat)
 
 
 
@@ -239,14 +379,12 @@ stop()
 # ------------------------------------------------------------------------------
 
 
-tf <- "ASCL1"
+plot_tf <- "ASCL1"
 
 
-pdf1 <- data.frame(
-  Topk = tt3,
-  Group = factor(1, levels = 1)) %>% 
-  rownames_to_column(var = "ID") %>% 
-  mutate(Label = ID %in% slice_max(., Topk, n = 1)$ID)
+pdf1 <- tf_l[[plot_tf]]$Experiments %>% 
+  mutate(Label = ID %in% slice_max(., Topk, n = 1)$ID,
+         Group = factor(1, levels = 1))
   
 
 
@@ -261,41 +399,28 @@ p1 <-
   ylim(c(0, k)) +
   ylab("Top200") +
   xlab("Individual experiments") +
-  ggtitle(tf) +
+  ggtitle(plot_tf) +
   theme_classic() +
   theme(text = element_text(size = 20),
         axis.text.x = element_blank())
   
 
 
-summ_df <- bind_rows(step_topk_l) %>% 
-  as.matrix() %>%   # Needed for table -> integer data type
-  as.data.frame() %>% 
-  mutate(N_step = steps)
-
-
-# How many sampled datasets are required to reach 80% overlap on average?
-which_rec <- summ_df %>% 
-  filter(Mean > (k * 0.8)) %>% 
-  slice_min(Mean, n = 1) %>% 
-  pull(N_step)
-
-
-#  What proportion of the total number of datasets is this recovery reached?
-prop_rec <- which_rec / length(tf_ids)
+pdf2 <- tf_l[[plot_tf]]$Steps
+min_step <- filter(rec_df, Symbol == plot_tf)$Min_step
 
 
 p2 <- 
-  ggplot(summ_df, aes(x = N_step, y = Mean)) +
+  ggplot(pdf2, aes(x = N_step, y = Mean)) +
   geom_crossbar(aes(x = N_step, ymin = `1st Qu.`, ymax = `3rd Qu.`)) +
   geom_point(shape = 19, colour = "firebrick") +
-  geom_vline(xintercept = which_rec, linetype = "dashed", colour = "black") +
+  geom_vline(xintercept = min_step, linetype = "dashed", colour = "black") +
   geom_hline(yintercept = (k * 0.8), linetype = "dashed", colour = "black") +
   # geom_smooth() +
   ylim(c(0, k)) +
   ylab("Top200") +
   xlab("Count of sampled experiments") +
-  ggtitle(tf) +
+  ggtitle(plot_tf) +
   theme_classic() +
   theme(text = element_text(size = 20),
         axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1))
@@ -307,135 +432,3 @@ p2_reduced <- p2 +
 
 
 egg::ggarrange(p1, p2_reduced, nrow = 1, widths = c(0.3, 1))
-
-
-
-
-
-# step <- 2
-# 
-# # Use full matrix (impute from global)
-# topk_l1 <- lapply(1:n_iter, function(iter) {
-#   
-#   sample_ids <- sample(tf_ids, size = step, replace = FALSE)
-#   sample_avg <- rowMeans(tf_mat_imp[, sample_ids], na.rm = TRUE)
-#   
-#   topk_intersect(
-#     topk_sort(sample_avg, k = k),
-#     topk_sort(tf_avg, k = k)
-#   )
-#   
-# })
-# 
-# 
-# hist(unlist(topk_l1))
-# summary(unlist(topk_l1))
-
-
-
-
-# Impute from sampled vectors only
-# topk_l2 <- lapply(1:n_iter, function(iter) {
-# 
-#   sample_ids <- sample(tf_ids, size = step, replace = FALSE)
-#   sample_msr_mat <- msr_hg[, sample_ids]
-#   sample_tf_mat <- tf_mat[, sample_ids]
-#   sample_med <- median(sample_tf_mat, na.rm = TRUE)
-#   sample_tf_mat[sample_msr_mat == 0] <- sample_med
-# 
-#   # Average the aggr coexpr and rank (lower rank = positive correlation)
-#   sample_avg <- rowMeans(sample_tf_mat, na.rm = TRUE)
-# 
-#   topk_intersect(
-#     topk_sort(sample_avg, k = k),
-#     topk_sort(tf_avg, k = k)
-#   )
-# 
-# })
-# 
-# 
-# hist(unlist(topk_l2))
-# summary(unlist(topk_l2))
-
-
-
-
-# step_topk_l <- mclapply(steps, function(step) {
-#   
-#   topk_at_step <- lapply(1:n_iter, function(iter) {
-#     
-#     sample_ids <- sample(tf_ids, size = step, replace = FALSE)
-#     sample_avg <- rowMeans(tf_mat_imp[, sample_ids], na.rm = TRUE)
-#     
-#     topk_intersect(
-#       topk_sort(sample_avg, k = k),
-#       topk_sort(tf_avg, k = k)
-#     )
-#     
-#   })
-#   
-#   summary(unlist(topk_at_step))
-#   
-# }, mc.cores = ncore)
-
-
-
-
-# tf_mat <- prepare_tf_mat(agg_l = agg_tf_hg, tf = tf, msr_mat = msr_hg)
-# tf_ids <- colnames(tf_mat)
-# tf_avg <- rowMeans(tf_mat, na.rm = TRUE)
-# 
-# 
-# # Get the overlap of individual profiles with global aggregate
-# exp_topk <- expwise_topk(tf_mat = tf_mat, tf_avg = tf_avg, k = k)
-# 
-# 
-# # Count of samples from 2 to all experiments but one
-# steps <- 2:(length(tf_ids) - 1)
-# 
-# 
-# # Calculate the top k overlap of each steps samples compared to global
-# topk_summ <- topk_at_subsample_steps(tf_mat = tf_mat,
-#                                      tf_avg = tf_avg,
-#                                      tf_ids = tf_ids,
-#                                      steps = steps,
-#                                      n_iter = n_iter, 
-#                                      ncore = ncore)
-
-
-
-
-# tf_topk <- subsample_tf_topk(tf = tf, 
-#                              agg_l = agg_tf_hg,
-#                              msr_mat = msr_hg, 
-#                              k = k, 
-#                              ncore = ncore)
-
-
-
-# check_df <- data.frame(coexpr = tf_avg) %>% 
-#   rownames_to_column(var = "Symbol") %>%
-#   left_join(., rank_tf_hg[[tf]], by = "Symbol")
-  
-
-
-# med1 <- median(tf_mat, na.rm = TRUE)
-# med2 <- median(tf_mat[msr_mat == 0], na.rm = TRUE)
-# 
-# tf_mat1 <- tf_mat2 <- tf_mat
-# tf_mat1[msr_mat == 0] <- med1
-# tf_mat2[msr_mat == 0] <- med2
-# 
-# 
-# df <- data.frame(All_med = rowMeans(tf_mat1), 
-#                  NA_med = rowMeans(tf_mat2),
-#                  Comsr = comsr_hg[rownames(tf_mat), tf])
-# 
-# 
-# df$Diff <- df$All_med - df$NA_med
-# df$All_med_rank <- rank(-df$All_med)
-# df$NA_med_rank <- rank(-df$NA_med)
-# 
-# 
-# plot(df$All_med, df$NA_med)
-# plot(df$Diff, df$Comsr)
