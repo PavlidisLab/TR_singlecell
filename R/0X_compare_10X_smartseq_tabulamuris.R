@@ -84,3 +84,66 @@ if (!file.exists(file)) {
 
 stop()
 
+
+
+# 
+# ------------------------------------------------------------------------------
+
+
+mat_ss_log <- log2(mat_ss + 1)
+mat_10x_log <- log2(mat_10x + 1)
+
+
+avg_expr_mat <- function(mat, meta, cts, tfs) {
+  
+  avg_l <- lapply(cts, function(ct) {
+    
+    ct_ids <- filter(meta, Cell_type == ct)$ID
+    ct_mat <- mat[tfs, ct_ids]
+    rowMeans(ct_mat)
+    
+  })
+  
+  avg_mat <- as.matrix(do.call(cbind, avg_l))
+  colnames(avg_mat) <- common_cts
+  rownames(avg_mat) <- tfs
+  
+  return(avg_mat)
+}
+
+
+avg_ss <- avg_expr_mat(mat_ss_log, meta_ss, common_cts, tfs_mm$Symbol)
+avg_10x <- avg_expr_mat(mat_10x_log, meta_10x, common_cts, tfs_mm$Symbol)
+gc()
+
+
+all0_ss <- which(rowSums(avg_ss) == 0)
+all0_10x <- which(rowSums(avg_10x) == 0)
+keep <- setdiff(tfs_mm$Symbol, intersect(names(all0_ss), names(all0_10x)))
+
+
+avg_ss <- avg_ss[keep, ]
+avg_10x <- avg_10x[keep, ]
+
+
+avg_topk <- pair_colwise_topk(avg_ss, avg_10x, k = k, ncores = ncore)
+avg_scor <- pair_colwise_cor(avg_ss, avg_10x, cor_method = "spearman", ncores = ncore)
+
+
+avg_topk_shuffle <- unlist(lapply(1:10, function(iter) {
+  pair_shuffle_topk(avg_ss, avg_10x, k = k, ncores = ncore)
+}))
+
+
+plot(density(avg_topk_shuffle))
+abline(v = mean(avg_topk))
+
+
+colnames(avg_ss) <- paste0(common_cts, "_SS")
+colnames(avg_10x) <- paste0(common_cts, "_10x")
+all_topk_mat <- colwise_topk_intersect(cbind(avg_ss, avg_10x), k = k)
+all_topk_df <- mat_to_df(all_topk_mat)
+
+all_scor_mat <- cor(cbind(avg_ss, avg_10x), method = "spearman")
+all_scor_df <- mat_to_df(all_scor_mat)
+
