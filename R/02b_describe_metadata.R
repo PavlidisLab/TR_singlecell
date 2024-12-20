@@ -98,7 +98,7 @@ tf_med_count <- gene_msr_df %>%
 
 tf_wilx_count <- gene_msr_df %>% 
   group_by(Species) %>% 
-  do(W = wilcox.test(Count_msr ~ TF, data = ., paired = FALSE)) %>% 
+  do(W = wilcox.test(Count_msr ~ TF, data = .)) %>% 
   summarise(Species, Wilcox = W$p.value)
 
 
