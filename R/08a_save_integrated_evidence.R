@@ -10,7 +10,7 @@ source("R/utils/plot_functions.R")
 source("R/00_config.R")
 
 k <- 500
-force_resave <- TRUE
+force_resave <- FALSE
 
 # Protein coding genes 
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)

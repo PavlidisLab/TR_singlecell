@@ -9,8 +9,8 @@ source("R/utils/vector_comparison_functions.R")
 source("R/utils/functions.R")
 source("R/00_config.R")
 
-k <- 500
-force_resave <- TRUE
+k <- 200
+force_resave <- FALSE
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -22,7 +22,7 @@ ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 # Protein coding genes, TFs, and L/S ribo genes
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
-pc_ortho <- read.delim(pc_ortho_path)
+pc_ortho <- read.delim(pc_ortho_path, stringsAsFactors = FALSE)
 tfs_hg <- read.delim(tfs_hg_path, stringsAsFactors = FALSE)
 tfs_mm <- read.delim(tfs_mm_path, stringsAsFactors = FALSE)
 ribo_genes <- read.delim(ribo_path, stringsAsFactors = FALSE)

@@ -17,8 +17,6 @@ ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 # Protein coding genes
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
-pc_ortho <- read.delim(pc_ortho_path)
-
 
 
 # Get the average aggregate coexpression across all datasets, returned as a
@@ -66,6 +64,8 @@ if (!file.exists(avg_coexpr_mm_path) || force_resave) {
 }
 
 
+
+# For inspection
 
 topn <- 20
 
