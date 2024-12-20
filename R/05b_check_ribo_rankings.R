@@ -2,6 +2,7 @@
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
+library(pheatmap)
 source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 source("R/00_config.R")
@@ -122,4 +123,5 @@ pheatmap(ribo_mat_hg,
          cluster_cols = FALSE,
          color = c("white", "black"),
          na_col = "red",
-         border_color = NA)
+         border_color = NA,
+         filename = paste0(plot_dir), "ribo_topk_binary_mat.png")
