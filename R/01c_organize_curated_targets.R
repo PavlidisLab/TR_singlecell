@@ -77,7 +77,7 @@ lt_all <- lt_all %>%
 
 lt_all <-
   left_join(lt_all, lt_chu2021, by = "DTRI_ID", suffix = c("", ".y")) %>%
-  select(-c(ends_with(".y"), "DTRI_ID")) %>%
+  dplyr::select(-c(ends_with(".y"), "DTRI_ID")) %>%
   filter(TF_Symbol %in% tfs_hg$Symbol | TF_Symbol %in% tfs_mm$Symbol) %>%
   filter(Target_Symbol %in% pc_hg$Symbol | Target_Symbol %in% pc_mm$Symbol) %>%
   mutate(
@@ -152,7 +152,7 @@ lt_final <- lt_final %>%
   ) %>% 
   filter(!Rm) %>%
   filter(!(str_to_lower(TF_Symbol) == "tcf4" & str_to_lower(Target_Symbol) %in% rm_target)) %>% 
-  select(-Rm)
+  dplyr::select(-Rm)
 
 
 # Get an estimate of count of targets per TF, collapsing species/casing
