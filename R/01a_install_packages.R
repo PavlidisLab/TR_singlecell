@@ -52,5 +52,6 @@ BiocManager::install("GenomicRanges")
 BiocManager::install("limma")
 BiocManager::install("edgeR")
 BiocManager::install("ComplexHeatmap")
+BiocManager::install("biomaRt")
 
 devtools::install_github('PavlidisLab/ermineR')
