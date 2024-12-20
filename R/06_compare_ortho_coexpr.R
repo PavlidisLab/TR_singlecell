@@ -35,7 +35,7 @@ msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
 # Within species cross-dataset similarity lists
-topk_l <- readRDS(paste0("/space/scratch/amorin/R_objects/human_mouse_topk=", k, "_similarity_df.RDS"))
+topk_l <- readRDS(paste0(output_dir, "human_mouse_topk=", k, "_similarity_df.RDS"))
 
 
 

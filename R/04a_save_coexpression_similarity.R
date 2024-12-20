@@ -39,13 +39,12 @@ agg_ribo_hg <- load_or_generate_agg(path = agg_ribo_hg_path, ids = ids_hg, genes
 agg_ribo_mm <- load_or_generate_agg(path = agg_ribo_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = ribo_genes$Symbol_mm)
 
 # Output paths of similarity lists
-sim_null_hg_path <- paste0("/space/scratch/amorin/R_objects/TRsc/similarity_null_hg_k=", k, ".RDS")
-sim_null_mm_path <- paste0("/space/scratch/amorin/R_objects/TRsc/similarity_null_mm_k=", k, ".RDS")
-sim_tf_hg_path <- paste0("/space/scratch/amorin/R_objects/TRsc/similarity_TF_hg_k=", k, ".RDS")
-sim_tf_mm_path <- paste0("/space/scratch/amorin/R_objects/TRsc/similarity_TF_mm_k=", k, ".RDS")
-sim_ribo_hg_path <- paste0("/space/scratch/amorin/R_objects/TRsc/similarity_ribo_hg_k=", k, ".RDS")
-sim_ribo_mm_path <- paste0("/space/scratch/amorin/R_objects/TRsc/similarity_ribo_mm_k=", k, ".RDS")
-
+sim_tf_hg_path <- paste0(output_dir, "similarity_TF_hg_k=", k, ".RDS")
+sim_tf_mm_path <- paste0(output_dir, "similarity_TF_mm_k=", k, ".RDS")
+sim_null_hg_path <- paste0(output_dir, "similarity_null_hg_k=", k, ".RDS")
+sim_null_mm_path <- paste0(output_dir, "similarity_null_mm_k=", k, ".RDS")
+sim_ribo_hg_path <- paste0(output_dir, "similarity_ribo_hg_k=", k, ".RDS")
+sim_ribo_mm_path <- paste0(output_dir, "similarity_ribo_mm_k=", k, ".RDS")
 
 
 # For a given set of input genes and list of aggregate coexpression matrices,
