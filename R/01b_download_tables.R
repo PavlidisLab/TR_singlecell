@@ -209,14 +209,13 @@ write.table(ens_mm, sep = "\t", quote = FALSE, file = ens_mm_path)
 
 
 # 2) List of TFs http://bioinfo.life.hust.edu.cn/AnimalTFDB4/#/
-# NOTE: Analysis was carried out using V3; V4 has since been released.
-# https://guolab.wchscu.cn/AnimalTFDB4_static/download/TF_list_final/Homo_sapiens_TF
-# https://guolab.wchscu.cn/AnimalTFDB4_static/download/TF_list_final/Mus_musculus_TF
+# V3: http://bioinfo.life.hust.edu.cn/static/AnimalTFDB3/download/Homo_sapiens_TF
+# http://bioinfo.life.hust.edu.cn/static/AnimalTFDB3/download/Mus_musculus_TF
 # ------------------------------------------------------------------------------
 
 
-tfs_hg_url <- "http://bioinfo.life.hust.edu.cn/static/AnimalTFDB3/download/Homo_sapiens_TF"
-tfs_mm_url <- "http://bioinfo.life.hust.edu.cn/static/AnimalTFDB3/download/Mus_musculus_TF"
+tfs_hg_url <- "https://guolab.wchscu.cn/AnimalTFDB4_static/download/TF_list_final/Homo_sapiens_TF"
+tfs_mm_url <- "https://guolab.wchscu.cn/AnimalTFDB4_static/download/TF_list_final/Mus_musculus_TF"
 
 
 download_tfs <- function(tfs_url,
@@ -253,56 +252,61 @@ download_tfs(tfs_url = tfs_mm_url, tfs_path = tfs_mm_path, pc_path = ens_mm_path
 # ------------------------------------------------------------------------------
 
 
-diopt <- read.delim(diopt_path, stringsAsFactors = FALSE)
+format_diopt <- function(diopt, pc_hg, pc_mm) {
 
-# Protein coding genes
-pc_hg <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
-pc_mm <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
+  
+  diopt_filt <- filter(diopt,
+                       score >= 5 &
+                       human_symbol %in% pc_hg$Symbol &
+                       symbol2 %in% pc_mm$Symbol &
+                       ID_type2 == "MGI" &
+                       best_score == "Yes" &
+                       best_score_rev == "Yes")
+  
+  split_hg <- split(diopt_filt, diopt_filt$human_symbol)
+  split_mm <- split(diopt_filt, diopt_filt$symbol2)
+  
+  which_gt1_hg <- which(unlist(lapply(split_hg, nrow)) > 1)
+  which_gt1_mm <- which(unlist(lapply(split_mm, nrow)) > 1)
+  
+  diopt_filt <- filter(diopt_filt, 
+                       !(human_symbol) %in% names(which_gt1_hg) &
+                       !(symbol2) %in% names(which_gt1_mm))
+  
+  stopifnot(all(diopt_filt$human_symbol %in% pc_hg$Symbol))
+  stopifnot(all(diopt_filt$symbol2 %in% pc_mm$Symbol))
+  
+  stopifnot(identical(n_distinct(diopt_filt$symbol2), 
+                      n_distinct(diopt_filt$human_symbol)))
+  
+  # create a df with an ID/key column as not all symbols have an exact 1:1 naming match
+  
+  ortho_df <- data.frame(
+    Symbol_hg = diopt_filt$human_symbol,
+    Symbol_mm = diopt_filt$symbol2,
+    ID = paste(diopt_filt$human_symbol, diopt_filt$symbol2, sep = "_")
+  )
+  
+  stopifnot(identical(n_distinct(ortho_df$ID), nrow(ortho_df)))
+  
+  return(ortho_df)
+}
 
-symbol_hg <- unique(pc_hg$Symbol)
-symbol_mm <- unique(pc_mm$Symbol)
-
-diopt_filt <- filter(diopt,
-                     score >= 5 &
-                     human_symbol %in% pc_hg$Symbol &
-                     symbol2 %in% pc_mm$Symbol &
-                     ID_type2 == "MGI" &
-                     best_score == "Yes" &
-                     best_score_rev == "Yes")
-
-split_hg <- split(diopt_filt, diopt_filt$human_symbol)
-split_mm <- split(diopt_filt, diopt_filt$symbol2)
-
-which_gt1_hg <- which(unlist(lapply(split_hg, nrow)) > 1)
-which_gt1_mm <- which(unlist(lapply(split_mm, nrow)) > 1)
-
-diopt_filt <- filter(diopt_filt, 
-                        !(human_symbol) %in% names(which_gt1_hg) &
-                          !(symbol2) %in% names(which_gt1_mm))
-
-stopifnot(all(diopt_filt$human_symbol %in% pc_hg$Symbol))
-stopifnot(all(diopt_filt$symbol2 %in% pc_mm$Symbol))
-
-stopifnot(identical(n_distinct(diopt_filt$symbol2), 
-                    n_distinct(diopt_filt$human_symbol)))
-
-# create a df with an ID/key column as not all symbols have an exact 1:1 naming match
-
-symbols <- data.frame(
-  Symbol_hg = diopt_filt$human_symbol,
-  Symbol_mm = diopt_filt$symbol2,
-  ID = paste(diopt_filt$human_symbol, diopt_filt$symbol2, sep = "_")
-)
-
-stopifnot(identical(n_distinct(symbols$ID), nrow(symbols)))
 
 
 if (!file.exists(pc_ortho_path)) {
-  write.table(symbols,
+  
+  pc_hg <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
+  pc_mm <- read.delim(ref_mm_path, stringsAsFactors = FALSE)
+  diopt <- read.delim(diopt_path, stringsAsFactors = FALSE)
+  ortho_df <- format_diopt(diopt, pc_hg, pc_mm)
+
+  write.table(ortho_df,
               sep = "\t",
               quote = FALSE,
               file = pc_ortho_path)
 }
+
 
 
 # 4) L/S cytosolic ribosomal genes from HUGO
