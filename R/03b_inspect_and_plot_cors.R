@@ -28,13 +28,15 @@ gene1 <- "ASCL1"
 gene2 <- "DLL3"
 ids <- filter(sc_meta, Species == species)[["ID"]]
 
-cor_path <- file.path(plot_dir, "All_corplots", paste0(species, "_", gene1, "_", gene2, ".RDS"))
+corplot_dir <- file.path(plot_dir, "All_corplots")
+dir.create(corplot_dir, showWarnings = FALSE)
+cor_path <- file.path(corplot_dir, paste0(species, "_", gene1, "_", gene2, ".RDS"))
 
 
 # Generating list of correlations is slow.
 
 if (!file.exists(cor_path)) {
-  cor_l <- get_all_cor_l(ids = ids, gene1 = gene1, gene2)
+  cor_l <- get_all_cor_l(ids = ids, gene1 = gene1, gene2 = gene2)
   saveRDS(cor_l, cor_path)
 } else {
   cor_l <- readRDS(cor_path)
