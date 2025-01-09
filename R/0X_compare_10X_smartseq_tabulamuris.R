@@ -11,6 +11,7 @@ source("R/utils/functions.R")
 source("R/00_config.R")
 
 k <- 200
+agg_method = "allrank"
 
 
 # Table of assembled scRNA-seq datasets
@@ -21,7 +22,8 @@ pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 tfs_mm <- read.delim(tfs_mm_path, stringsAsFactors = FALSE)
 
 
-file <- "/space/scratch/amorin/R_objects/TRsc/GSE132042_10X_smartseq_comparison.RDS"
+file <- file.path("/space/scratch/amorin/TRsc_output/",
+                  paste0("GSE132042_10X_smartseq_comparison_", agg_method, ".RDS"))
 
 # Measurement matrices used for filtering when a gene was never expressed
 # msr_mm <- readRDS(msr_mat_mm_path)
@@ -61,7 +63,7 @@ if (!file.exists(file)) {
     meta = meta_ss,
     pc_df = pc_mm,
     cor_method = "pearson",
-    agg_method = "allrank"
+    agg_method = agg_method
   )
   
   agg_10x <- aggtools::aggr_coexpr_single_dataset(
@@ -69,7 +71,7 @@ if (!file.exists(file)) {
     meta = meta_10x,
     pc_df = pc_mm,
     cor_method = "pearson",
-    agg_method = "allrank"
+    agg_method = agg_method
   )
   
   agg_l <- list(Agg_SS = agg_ss, Agg_10x = agg_10x)
@@ -82,11 +84,9 @@ if (!file.exists(file)) {
   
 }
 
-stop()
 
 
-
-# 
+# Examining TF expression
 # ------------------------------------------------------------------------------
 
 
@@ -147,3 +147,89 @@ all_topk_df <- mat_to_df(all_topk_mat)
 all_scor_mat <- cor(cbind(avg_ss, avg_10x), method = "spearman")
 all_scor_df <- mat_to_df(all_scor_mat)
 
+
+
+# 
+# ------------------------------------------------------------------------------
+
+
+ggplot(common_counts, aes(x = log10(n_smartseqV2), y = log10(n_10XV2))) +
+  geom_point(shape = 21, size = 3) +
+  ylab("log10 Count of cells 10X V2") +
+  xlab("log10 Count of cells Smartseq2") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+
+
+
+agg_topk <- pair_colwise_topk(mat1 = agg_l$Agg_SS$Agg_mat, 
+                              mat2 = agg_l$Agg_10x$Agg_mat, 
+                              k = k, 
+                              ncores = ncore)
+
+
+# agg_shuffle_topk <- pair_shuffle_topk(mat1 = agg_l$Agg_SS$Agg_mat, 
+#                                       mat2 = agg_l$Agg_10x$Agg_mat, 
+#                                       k = k, 
+#                                       ncores = ncore)
+
+
+
+agg_shuffle_topk <- pair_shuffle_topk(mat1 = agg_l$Agg_SS$Agg_mat[, keep], 
+                                      mat2 = agg_l$Agg_10x$Agg_mat[, keep], 
+                                      k = k, 
+                                      ncores = ncore)
+
+
+plot(density(agg_shuffle_topk), col = "red")
+lines(density(agg_topk[keep]), col = "black")
+
+summary(agg_shuffle_topk)
+summary(agg_topk)
+summary(agg_topk[keep])
+
+wilcox.test(x = agg_shuffle_topk, y = agg_topk[keep])
+
+
+data.frame(
+  Topk = c(agg_topk[keep], agg_shuffle_topk),
+  Group = c(rep("TR", length(agg_topk[keep])), rep("Shuffled", length(agg_shuffle_topk)))
+) %>% 
+  ggplot(., aes(x = Topk, y = Group)) +
+  geom_boxplot() +
+  xlab("Top200") +
+  theme_classic() +
+  theme(text = element_text(size = 20),
+        axis.title.y = element_blank())
+
+
+mat1 <- agg_l$Agg_SS$Agg_mat[, keep]
+mat2 <- agg_l$Agg_10x$Agg_mat[, keep]
+
+mat1[is.na(mat1) | is.infinite(mat1)] <- 0
+mat2[is.na(mat2) | is.infinite(mat2)] <- 0
+
+
+
+
+agg_scor <- cor(mat1, 
+                mat2,
+                method = "spearman")
+
+
+agg_shuffle_scor <- pair_shuffle_cor(mat1 = mat1, 
+                                     mat2 = mat2, 
+                                     cor_method = "spearman",
+                                     ncores = ncore)
+
+plot(density(agg_shuffle_scor, na.rm = TRUE), xlim = c(-0.4, 1))
+lines(density(diag(agg_scor), na.rm = TRUE), col = "red")
+
+
+check_tf <- "Hmmr"
+df <- data.frame(Agg_10x = agg_l$Agg_SS$Agg_mat[, check_tf],
+                 Agg_SS = agg_l$Agg_10x$Agg_mat[, check_tf])
+
+plot(df$Agg_10x, df$Agg_SS)
