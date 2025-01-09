@@ -33,7 +33,7 @@ amat_dir <- "/space/scratch/amorin/TR_singlecell/"
 
 
 # Various outputs like .RDS files
-output_dir <- "/space/scratch/amorin/R_objects/TRsc_output/"
+output_dir <- "/space/scratch/amorin/TRsc_output/"
 
 
 
@@ -124,9 +124,9 @@ curated_all_path <- paste0(meta_dir, "Curated_targets_all_Sept2023.tsv")
 
 # Unibind summarized ChIP-seq data
 # TODO: re-assess unibind output
-bind_dat_path <- paste0(output_dir, "processed_unibind_data.RDS")
-bind_summary_path <- paste0(output_dir, "unibind_Permissive_bindscore_summary.RDS")
-bind_model_path <- paste0(output_dir, "unibind_bindscore_modelfit.RDS")
+bind_dat_path <- "/space/scratch/amorin/R_objects/processed_unibind_data.RDS"
+bind_summary_path <- "/space/scratch/amorin/R_objects/unibind_Permissive_bindscore_summary.RDS"
+bind_model_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_modelfit.RDS"
 
 
 # List of literature curation benchmark performances
