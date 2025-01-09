@@ -17,10 +17,12 @@ max_steps <- 10
 n_iters <- 100
 
 id <- "GSE180928"
-ct <- "Microglia"
+ct <- "Neuron"
 
 
-tfs <- read.delim(tfs_hg_path, stringsAsFactors = FALSE)
+# TODO: update!
+tfs <- read.delim("/space/grp/amorin/Metadata/AnimalTFDB_human_V3.tsv", stringsAsFactors = FALSE)
+# tfs <- read.delim(tfs_hg_path, stringsAsFactors = FALSE)
 
 
 dat <- load_dat_list(id)[[1]]
@@ -145,10 +147,10 @@ max_cells <- nrow(ct_mat)
 
 
 steps <- dynamic_steps(max_cells = max_cells, min_cells = min_cells)
+last_step <- paste0("Step = ", tail(steps, 1))
 
 
-
-file <- file.path("/space/scratch/amorin/R_objects/TRsc", 
+file <- file.path("/space/scratch/amorin/TRsc_output", 
                   paste("subsample_cor", id, ct, n_iters, "iters.RDS", sep = "_"))
 
 
@@ -174,12 +176,15 @@ if (!file.exists(file)) {
 
 
 
-topk_barplot <- function(summ_df) {
+topk_barplot <- function(summ_df, k = 200) {
   
-  ggplot(summ_df, aes(x = Symbol, y = Mean)) +
-    geom_crossbar(aes(x = Symbol, ymin = `1st Qu.`, ymax = `3rd Qu.`)) +
-    geom_point(aes(x = Symbol, y = Mean), shape = 21, colour = "firebrick") +
+  
+  ggplot(summ_df, aes(x = reorder(Symbol, Mean), y = Mean)) +
+    geom_crossbar(aes(x = reorder(Symbol, Mean), ymin = `1st Qu.`, ymax = `3rd Qu.`)) +
+    geom_point(aes(x = reorder(Symbol, Mean), y = Mean), shape = 21, colour = "lightblue") +
+    geom_hline(yintercept = (k * 0.8), linetype = "dashed", col = "firebrick", linewidth = 1.4) +
     ylab("Top200") +
+    xlab("TR") +
     theme_classic() +
     theme(text = element_text(size = 20),
           axis.text.x = element_blank(),
@@ -192,8 +197,12 @@ topk_barplot <- function(summ_df) {
 
 pl1 <- lapply(subsample_l, topk_barplot)
 
+pl1[[length(pl1)]] + ggtitle(last_step)
+
+
 
 # TODO: mean vs median
+# TODO: terrible names
 
 mean_df <- lapply(1:length(steps), function(x) {
   
@@ -206,8 +215,19 @@ mean_df <- lapply(1:length(steps), function(x) {
 
 
 
+
 ggplot(mean_df, aes(x = Topk, colour = Group)) +
-  geom_density()
+  geom_density() +
+  theme_classic()
+
+
+
+ggplot(mean_df, aes(x = Topk, y = Group)) +
+  geom_boxplot() +
+  geom_vline(xintercept = k * 0.8, linetype = "dashed", col = "red") +
+  theme_classic() +
+  theme(text = element_text(size = 20),
+        axis.title.y = element_blank())
 
 
 
@@ -226,6 +246,13 @@ colnames(mean_df) <- paste0("Step=", steps)
 mean_df <- mean_df[order(mean_df[, length(steps)]), ]
 
 
+
+
+# Count of TRs at max step that achieve recovery
+sum(mean_df[, ncol(mean_df)] >= (k * 0.8))
+
+
+
 # cols <- c('#f7f4f9','#e7e1ef','#d4b9da','#c994c7','#df65b0','#e7298a','#ce1256','#980043','#67001f')
 cols <- viridis::inferno(10)
 
@@ -233,7 +260,8 @@ pheatmap(mean_df,
          cluster_rows = FALSE,
          cluster_cols = FALSE,
          show_rownames = FALSE,
-         color = cols)
+         color = cols,
+         fontsize = 20)
 
 
 avg_expr <- colMeans(log2(ct_mat[, keep_tfs] + 1))
@@ -246,54 +274,60 @@ summary_df <- data.frame(Symbol = keep_tfs,
 
 
 cor(select_if(summary_df, is.numeric), method = "spearman")
-# plot(summary_df$Avg_expr, summary_df$Step.25600)
 
 
-##
 
-# sample_ids <- sample(ct_ids, steps[1], replace = FALSE)
-# ct_mat_sub <- ct_mat[sample_ids, ]
-# cor_mat_sub <- sparse_pcor(ct_mat_sub)
+
+# TODO: better way of using last col as var
+ggplot(summary_df, aes(x = Avg_expr, y = !!sym(tail(colnames(summary_df), 1)))) +
+  geom_point(shape = 21, size = 2.4) +
+  ylab("Average Top200") +
+  xlab("Average log2 CPM") +
+  ggtitle(last_step) +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+
+## Compare n_iter
+## TODO: update or remove
+
+
+# file_n10 <- file.path("/space/scratch/amorin/R_objects/TRsc", 
+#                       paste("subsample_cor", id, ct, 10, "iters.RDS", sep = "_"))
 # 
-# # NA cors to 0 to allow overlap and remove self cor
-# cor_mat_sub[is.na(cor_mat_sub)] <- 0  
-# diag(cor_mat) <- diag(cor_mat_sub) <- 0 
 # 
-# # Only consider TFs for overlap
-# topk <- pair_colwise_topk(mat1 = cor_mat[, keep_tfs], 
-#                           mat2 = cor_mat_sub[, keep_tfs], 
-#                           k = k, 
-#                           ncores = ncore)
-
-
-
-# topk_at_step <- lapply(steps, function(step) {
+# file_n100 <- file.path("/space/scratch/amorin/R_objects/TRsc", 
+#                       paste("subsample_cor", id, ct, 100, "iters.RDS", sep = "_"))
+# 
+# 
+# iter_n10 <- readRDS(file_n10)
+# iter_n100 <- readRDS(file_n100)
+# 
+# steps <- intersect(names(iter_n10), names(iter_n100))
+# 
+# 
+# tt1 <- lapply(steps, function(x) {
 #   
-#   message(paste("Step =", step, Sys.time()))
+#   df <- left_join(iter_n10[[x]], iter_n100[[x]], 
+#                   by = "Symbol", suffix = c("_n10", "_n100"))
 #   
-#   topk_l <- lapply(1:10, function(x) {
-#     
-#     sample_ids <- sample(ct_ids, step, replace = FALSE)
-#     ct_mat_sub <- ct_mat[sample_ids, ]
-#     cor_mat_sub <- sparse_pcor(ct_mat_sub)
-#     
-#     # NA cors to 0 to allow overlap and remove self cor
-#     cor_mat_sub[is.na(cor_mat_sub)] <- 0  
-#     diag(cor_mat) <- diag(cor_mat_sub) <- 0 
-#     
-#     # Only consider TFs for overlap
-#     topk <- pair_colwise_topk(mat1 = cor_mat[, keep_tfs], 
-#                               mat2 = cor_mat_sub[, keep_tfs], 
-#                               k = k, 
-#                               ncores = ncore)
-#     
-#     gc(verbose = FALSE)
-#     
-#     return(topk)
-#     
-#   })
+#   topk <- topk_intersect(
+#     slice_max(df, Mean_n10, n = k)$Symbol,
+#     slice_max(df, Mean_n100, n = k)$Symbol
+#   )
 #   
-#   generate_summ_df(topk_l)
+#   scor <- cor(df$Mean_n10, df$Mean_n100, method = "spearman")
 #   
-# })
-# names(topk_at_step) <- paste0("step_", steps)
+#   data.frame(Step = x, Scor = scor, Topk = topk)
+#   
+# }) %>% 
+#   do.call(rbind, .)
+# 
+# 
+# 
+# step <- steps[9]
+# df <- left_join(iter_n10[[step]], iter_n100[[step]], 
+#                 by = "Symbol", suffix = c("_n10", "_n100"))
+# 
+# plot(df$Mean_n10, df$Mean_n100)
