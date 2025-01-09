@@ -34,15 +34,6 @@ comsr_hg <- readRDS(comsr_mat_hg_path)
 # comsr_mm <- readRDS(comsr_mat_mm_path)
 
 
-# Loading the subset TF aggregate matrices
-agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, ids = ids_hg, genes = pc_hg$Symbol, sub_genes = tfs_hg$Symbol)
-# agg_tf_mm <- load_or_generate_agg(path = agg_tf_mm_path, ids = ids_mm, genes = pc_mm$Symbol, sub_genes = tfs_mm$Symbol)
-
-
-exps <- names(agg_tf_hg)
-
-
-
 #
 # ------------------------------------------------------------------------------
 
@@ -213,11 +204,17 @@ subsample_all_tfs <- function(agg_l, tfs, msr_mat, k, ncore) {
 # ------------------------------------------------------------------------------
 
 
-file_hg <- "/space/scratch/amorin/R_objects/TRsc/dataset_subsample_cor_hg.RDS"
+file_hg <- "/space/scratch/amorin/TRsc_output/dataset_subsample_cor_hg.RDS"
 
 
 if (!file.exists(file_hg)) {
   
+  agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, 
+                                    ids = ids_hg, 
+                                    genes = pc_hg$Symbol, 
+                                    sub_genes = tfs_hg$Symbol)
+  
+
   tf_l <- subsample_all_tfs(agg_l = agg_tf_hg,
                             tfs = tfs_hg$Symbol,
                             msr_mat = msr_hg, 
@@ -278,16 +275,32 @@ summ_rec <- summary(rec_df)
 
 # Check against average pairwise similarity of experiments
 
-pair_sim_l <- readRDS(paste0("/space/scratch/amorin/R_objects/human_mouse_topk=", k, "_similarity_df.RDS"))
+pair_sim_l <- readRDS(paste0("/space/scratch/amorin/TRsc_output/human_mouse_topk=", k, "_similarity_df.RDS"))
 
 
 rec_df <- left_join(rec_df, pair_sim_l$Human, by = "Symbol")
 
 
 # TODO: Note Pax4 -- higher mean and high proportion... n=16, not sure what this means
-plot(rec_df$Prop_total, rec_df$Mean)
+
+ggplot(rec_df, aes(x = Mean, y = Prop_total)) +
+  geom_point(shape = 21) +
+  ylab("Proportion recovery") +
+  xlab("Average pairwise Top200") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
 cor(rec_df$Prop_total, rec_df$Mean, method = "spearman", use = "pairwise.complete.obs")
 
+
+ggplot(rec_df, aes(x = Prop_total)) +
+  geom_histogram(bins = 100) +
+  ylab("Count TRs") +
+  xlab("Proportion of recovery") +
+  theme_classic() +
+  theme(text = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
 
 
 
@@ -304,8 +317,9 @@ rank_expwise_topk <- function(tf_l) {
     summ_df <- tf_l[[tf]]$Experiments
     
     summ_df %>% 
-      mutate(Rank = rank(-Topk),
-             RS = rank(Topk) / nrow(summ_df))
+      mutate(Rank = rank(-Topk, ties.method = "random"),
+             # RS = rank(Topk) / nrow(summ_df))
+             RS = rank(-Rank) / nrow(summ_df))
     
   })
   names(rank_l) <- tfs
@@ -316,19 +330,19 @@ rank_expwise_topk <- function(tf_l) {
 
 
 
-rankstandard_to_mat <- function(rank_l, exps) {
+rankstandard_to_mat <- function(rank_l, ids) {
   
   tfs <- names(rank_l)
-  exp_vec <- setNames(rep(0, length(exps)), exps)
+  exp_vec <- setNames(rep(0, length(ids)), ids)
   
   rs_l <- lapply(tfs, function(tf) {
     tf_rank <- rank_l[[tf]]
-    exp_vec[match(tf_rank$ID, exps)] <- tf_rank$RS
+    exp_vec[match(tf_rank$ID, ids)] <- tf_rank$RS
     exp_vec
   })
   
   rs_mat <- do.call(rbind, rs_l)
-  colnames(rs_mat) <- exps
+  colnames(rs_mat) <- ids
   rownames(rs_mat) <- tfs
   
   return(rs_mat)
@@ -365,13 +379,39 @@ rankstandard_to_mat <- function(rank_l, exps) {
 
 
 rank_l <- rank_expwise_topk(tf_l)
-rs_mat <- rankstandard_to_mat(rank_l, exps)
+rs_mat <- rankstandard_to_mat(rank_l, ids_hg)
+
+
+# Consider just raw TopK
+
+
+topk_to_mat <- function(tf_l, ids) {
+  
+  tfs <- names(tf_l)
+  exp_vec <- setNames(rep(0, length(ids)), ids)
+  
+  topk_l <- lapply(tfs, function(tf) {
+    tf_topk <- tf_l[[tf]]$Experiment
+    exp_vec[match(tf_topk$ID, ids)] <- tf_topk$Topk
+    exp_vec
+  })
+  
+  topk_mat <- do.call(rbind, topk_l)
+  colnames(topk_mat) <- ids
+  rownames(topk_mat) <- tfs
+  
+  return(topk_mat)
+}
+
+
+
+topk_mat <- topk_to_mat(tf_l, ids_hg)
 
 
 # Average rank standardized exp-wise top K overlap with global profile to see
 # which experiments most commonly aligned with global
 
-expwise_mean <- colMeans(rs_mat)
+expwise_mean <- sort(colMeans(rs_mat), decreasing = TRUE)
 
 
 
@@ -379,7 +419,7 @@ expwise_mean <- colMeans(rs_mat)
 # ------------------------------------------------------------------------------
 
 
-plot_tf <- "ASCL1"
+plot_tf <- "PAX6"
 
 
 pdf1 <- tf_l[[plot_tf]]$Experiments %>% 
@@ -432,3 +472,46 @@ p2_reduced <- p2 +
 
 
 egg::ggarrange(p1, p2_reduced, nrow = 1, widths = c(0.3, 1))
+
+
+heat_rs <- pheatmap::pheatmap(rs_mat,
+                              cluster_rows = FALSE,
+                              show_rownames = FALSE)
+
+
+cut_rs <- cutree(heat_rs$tree_col, k = 2)
+
+
+cut_df <- data.frame(Group = cut_rs) %>% 
+  rownames_to_column(var = "ID") %>% 
+  left_join(sc_meta, by = "ID") %>% 
+  mutate(Platform2 = str_replace_all(Platform, " ", ""),
+         Platform2 = ifelse(is.na(Platform2), "Mixed", Platform2),
+         Platform2 = ifelse(sapply(str_split(Platform2, ","), length) != 1, "Mixed", Platform2),
+         Is_10X = str_detect(Platform, "^10x.*"))
+
+
+
+boxplot(cut_df$N_genes ~ cut_df$Group)
+boxplot(log10(cut_df$N_cells) ~ cut_df$Group)
+boxplot(cut_df$N_celltypes ~ cut_df$Group)
+
+
+table(cut_df$Platform2, cut_df$Group)
+table(cut_df$Is_10X, cut_df$Group)
+fisher.test(table(cut_df$Is_10X, cut_df$Group))
+
+
+
+# hclust_rs <- hclust(d = rs_mat)
+# sil_avg_hg <- cluster::silhouette(cutree(hclust_avg_hg, k = 2), as.dist(1 - cor_avg_hg))
+# mean(sil_avg_hg[, "sil_width"])
+# plot(sil_avg_hg)
+
+
+pheatmap::pheatmap(t(data.frame(expwise_mean)), 
+                   cluster_rows = FALSE,
+                   cluster_cols = FALSE,
+                   show_rownames = FALSE,
+                   cellheight = 25,
+                   fontsize = 15)
