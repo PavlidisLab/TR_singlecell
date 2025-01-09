@@ -28,10 +28,10 @@ msr_mm <- readRDS(msr_mat_mm_path)
 # Lists of paired experiment similarities for TFs, ribo, and shuffled null
 sim_tf_hg <- readRDS(paste0(output_dir, "similarity_TF_hg_k=", k, ".RDS"))
 sim_tf_mm <- readRDS(paste0(output_dir, "similarity_TF_mm_k=", k, ".RDS"))
-sim_null <- readRDS(paste0(output_dir, "similarity_null_hg_k=", k, ".RDS"))
-sim_null <- readRDS(paste0(output_dir, "similarity_null_mm_k=", k, ".RDS"))
-sim_ribo <- readRDS(paste0(output_dir, "similarity_ribo_hg_k=", k, ".RDS"))
-sim_ribo <- readRDS(paste0(output_dir, "similarity_ribo_mm_k=", k, ".RDS"))
+sim_null_hg <- readRDS(paste0(output_dir, "similarity_null_hg_k=", k, ".RDS"))
+sim_null_mm <- readRDS(paste0(output_dir, "similarity_null_mm_k=", k, ".RDS"))
+sim_ribo_hg <- readRDS(paste0(output_dir, "similarity_ribo_hg_k=", k, ".RDS"))
+sim_ribo_mm <- readRDS(paste0(output_dir, "similarity_ribo_mm_k=", k, ".RDS"))
 
 
 # Export similarity summaries for downstream ortho comparison
