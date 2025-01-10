@@ -841,7 +841,7 @@ get_colwise_curated_auc_list <- function(tfs,
                                          ncores = 1,
                                          verbose = TRUE) {
   
-  tf_auc_l <- lapply(tfs, function(tf) {
+  tf_auc_l <- mclapply(tfs, function(tf) {
     
     if (verbose) message(paste(tf, Sys.time()))
     
@@ -858,8 +858,16 @@ get_colwise_curated_auc_list <- function(tfs,
       return(NA)
     }
     
-    # Prepare matrix of aggregate coexpr vectors and their average score
+    # Matrix of individual experiment coexpr profiles for given TR
     score_mat <- gene_vec_to_mat(agg_l, gene = tf, msr_mat = msr_mat)
+    score_mat[tf, ] <- NA  # prevent self cor from being #1 rank
+    
+    # When a TF-gene was not co-measured, impute to the median NA
+    msr_mat <- msr_mat[, colnames(score_mat)]
+    med <- median(score_mat, na.rm = TRUE)
+    score_mat[msr_mat == 0] <- med
+    
+    # Add average (same as global rankings) to matrix for comparison
     score_mat <- cbind(score_mat, Average = rowMeans(score_mat))
     
     # Calculating the AUC by using each column as a score
@@ -868,7 +876,7 @@ get_colwise_curated_auc_list <- function(tfs,
     # Summarize
     summarize_avg_and_individual_auc(auc_df, labels)
     
-  })
+  }, mc.cores = ncores)
   
   names(tf_auc_l) <- tfs
   tf_auc_l <- tf_auc_l[!is.na(tf_auc_l)]
