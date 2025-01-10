@@ -10,10 +10,6 @@ source("R/00_config.R")
 source("R/utils/functions.R")
 source("R/utils/vector_comparison_functions.R")
 
-n_samps <- 1000
-set.seed(5)
-force_resave <- FALSE
-
 
 # Protein coding genes 
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
@@ -25,7 +21,13 @@ tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% 
 # Curated low throughput targets
 curated <- read.delim(curated_all_path, stringsAsFactors = FALSE)
 
+# Aggregate GTEX coexpression matrix path
+agg_path <- "/space/scratch/amorin/TRsc_output/GTEX_aggregate_coexpr.RDS"
 
+
+
+# Download and load GTEX V10
+# ------------------------------------------------------------------------------
 
 gtex_expr_url <- "https://storage.googleapis.com/adult-gtex/bulk-gex/v10/rna-seq/GTEx_Analysis_v10_RNASeQCv2.4.2_gene_tpm.gct.gz"
 gtex_expr_path <- "/home/amorin/Data/Expression_files/GTEx/GTEx_Analysis_v10_RNASeQCv2.4.2_gene_tpm.gct.gz"
@@ -50,21 +52,19 @@ gtex_meta <- read.delim(gtex_meta_path)
 
 
 
-# Subset meta to IDs in expression table
+# Subset GTEX meta to IDs in expression table
 
 gtex_meta <- filter(gtex_meta, SAMPID %in% colnames(gtex))
 
 
-# Common protein coding genes
+# Common protein coding genes and TFs
 
 common_genes <- intersect(pc_hg$Symbol, gtex$Description)
+common_tfs <- intersect(tfs_hg$Symbol, gtex$Description)
 
 pc_hg <- pc_hg %>% 
   filter(Symbol %in% common_genes) %>% 
   arrange(match(Symbol, common_genes))
-
-
-
 
 
 # Format GTEX expression table into a sample x gene matrix
@@ -89,6 +89,8 @@ identical(pc_hg$Symbol, colnames(gtex_mat))
 
 
 
+# Aggregate coexpression matrices per tissue
+# ------------------------------------------------------------------------------
 
 
 aggregate_gtex_coexpr <- function(gtex_mat, gtex_meta, pc_df) {
@@ -124,8 +126,6 @@ aggregate_gtex_coexpr <- function(gtex_mat, gtex_meta, pc_df) {
 
 
 
-agg_path <- "/space/scratch/amorin/TRsc_output/GTEX_aggregate_coexpr.RDS"
-
 
 if (!file.exists(agg_path)) {
   
@@ -140,116 +140,67 @@ if (!file.exists(agg_path)) {
 
 
 
+# Literature curation benchmark
+# ------------------------------------------------------------------------------
 
 
-
+n_samps <- 1000
+set.seed(5)
 
 
 
 # Get ortho-matched symbols of TFs with available data, as well as all ortho
 # targets, which are used for null
-# ------------------------------------------------------------------------------
 
-
-# Human
 
 ortho_tf_hg <- pc_ortho %>% 
   filter(Symbol_mm %in% curated$TF_Symbol | Symbol_hg %in% curated$TF_Symbol) %>% 
-  filter(Symbol_hg %in% names(rank_tf_hg)) %>% 
+  filter(Symbol_hg %in% common_tfs) %>% 
   pull(Symbol_hg)
 
 ortho_target_hg <- pc_ortho %>% 
   filter(Symbol_mm %in% curated$Target_Symbol | Symbol_hg %in% curated$Target_Symbol) %>% 
-  filter(Symbol_hg %in% rownames(rank_tf_hg[[1]])) %>% 
+  filter(Symbol_hg %in% common_genes) %>% 
   pull(Symbol_hg)
 
 tf_hg <- union(
-  intersect(names(rank_tf_hg), str_to_upper(curated$TF_Symbol)),
+  intersect(common_tfs, str_to_upper(curated$TF_Symbol)),
   ortho_tf_hg)
 
 target_hg <- union(
-  intersect(rank_tf_hg[[1]]$Symbol, str_to_upper(curated$Target_Symbol)),
+  intersect(common_genes, str_to_upper(curated$Target_Symbol)),
   ortho_target_hg)
 
 
-# Mouse
 
-ortho_tf_mm <- pc_ortho %>% 
-  filter(Symbol_mm %in% curated$TF_Symbol | Symbol_hg %in% curated$TF_Symbol) %>% 
-  filter(Symbol_mm %in% names(rank_tf_mm)) %>% 
-  pull(Symbol_mm)
+# Split TF agg coexpr matrix into a list of dataframes for function call
 
-ortho_target_mm <- pc_ortho %>% 
-  filter(Symbol_mm %in% curated$Target_Symbol | Symbol_hg %in% curated$Target_Symbol) %>% 
-  filter(Symbol_mm %in% rownames(rank_tf_mm[[1]])) %>% 
-  pull(Symbol_mm)
-
-tf_mm <- union(
-  intersect(names(rank_tf_mm), str_to_title(curated$TF_Symbol)),
-  ortho_tf_mm)
-
-target_mm <- union(
-  intersect(rank_tf_mm[[1]]$Symbol, str_to_title(curated$Target_Symbol)),
-  ortho_target_mm)
+split_mat_to_list <- function(mat) {
+  
+  l <- asplit(mat, 2)
+  
+  l <- lapply(l, function(x) {
+    data.frame(Aggr_coexpr = x) %>% 
+      rownames_to_column(var = "Symbol") %>% 
+      arrange(desc(Aggr_coexpr))
+  })
+}
 
 
+agg_tf <- agg[, common_tfs]
+agg_l <- split_mat_to_list(agg_tf)
 
-# Aggregate coexpr rankings relative to single dataset profiles
-# ------------------------------------------------------------------------------
+
+gtex_auc_path <- "/space/scratch/amorin/TRsc_output/gtex_recover_curated_hg.RDS"
 
 
-# Human
 save_function_results(
-  path = avg_vs_ind_auc_hg_path,
-  fun = get_colwise_curated_auc_list,
-  args = list(
-    tfs = tf_hg,
-    agg_l = agg_tf_hg,
-    msr_mat = msr_hg,
-    curated_df = curated,
-    ortho_df = pc_ortho,
-    pc_df = pc_hg,
-    species = "Human",
-    ncores = ncore,
-    verbose = TRUE
-  ),
-  force_resave = force_resave
-)
-
-
-
-# Mouse
-save_function_results(
-  path = avg_vs_ind_auc_mm_path,
-  fun = get_colwise_curated_auc_list,
-  args = list(
-    tfs = tf_mm,
-    agg_l = agg_tf_mm,
-    msr_mat = msr_mm,
-    curated_df = curated,
-    ortho_df = pc_ortho,
-    pc_df = pc_mm,
-    species = "Mouse",
-    ncores = ncore,
-    verbose = TRUE
-  ),
-  force_resave = force_resave
-)
-
-
-
-# Positive coexpr (top of aggr coexpr rankings)
-# ------------------------------------------------------------------------------
-
-
-# Human
-save_function_results(
-  path = coexpr_auc_hg_path,
+  path = gtex_auc_path,
   fun = curated_obs_and_null_auc_list,
   args = list(
     tfs = tf_hg,
-    rank_l = rank_tf_hg,
-    score_col = "Avg_aggr_coexpr",
+    rank_l = agg_l,
+    score_col = "Aggr_coexpr",
     curated_df = curated,
     label_all = target_hg,
     ortho_df = pc_ortho,
@@ -259,23 +210,5 @@ save_function_results(
     ncores = ncore,
     verbose = TRUE
   ),
-  force_resave = force_resave
+  force_resave = FALSE
 )
-
-
-
-
-
-# tissue <- "Kidney"
-# 
-# 
-# gtex_meta_sub <- filter(gtex_meta, SMTS == tissue)
-# gtex_sub <- gtex_mat[gtex_meta_sub$SAMPID, ]
-# 
-# cmat <- WGCNA::cor(gtex_sub)
-# rmat <- aggtools::transform_correlation_mat(cmat, "allrank")
-# amat <- amat + rmat
-# rm(cmat, rmat, gtex_sub)
-# gc(verbose = FALSE)
-
-
