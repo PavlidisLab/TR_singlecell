@@ -171,7 +171,7 @@ save_function_results(
 
 
 
-# # Mouse
+# Mouse
 save_function_results(
   path = coexpr_auc_mm_path,
   fun = curated_obs_and_null_auc_list,
@@ -224,7 +224,7 @@ save_function_results(
     pc_df = pc_hg,
     species = "Human",
     n_samps = n_samps,
-    ncores = 8,
+    ncores = ncore,
     verbose = TRUE
   ),
   force_resave = force_resave
@@ -246,7 +246,7 @@ save_function_results(
     pc_df = pc_mm,
     species = "Mouse",
     n_samps = n_samps,
-    ncores = 8,
+    ncores = ncore,
     verbose = TRUE
   ),
   force_resave = force_resave
@@ -297,7 +297,7 @@ save_function_results(
     pc_df = pc_hg,
     species = "Human",
     n_samps = 1000,
-    ncores = 8,
+    ncores = ncore,
     verbose = TRUE
   ),
   force_resave = force_resave
@@ -319,7 +319,7 @@ save_function_results(
     pc_df = pc_mm,
     species = "Mouse",
     n_samps = 1000,
-    ncores = 8,
+    ncores = ncore,
     verbose = TRUE
   ),
   force_resave = force_resave
