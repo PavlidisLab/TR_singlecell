@@ -16,7 +16,7 @@ min_targets <- 5
 # Protein coding genes 
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
-pc_ortho <- read.delim(pc_ortho_path)
+pc_ortho <- read.delim(pc_ortho_path, stringsAsFactors = FALSE)
 
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
