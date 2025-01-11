@@ -22,7 +22,11 @@ tfs_hg <- filter(read.delim(tfs_hg_path, stringsAsFactors = FALSE), Symbol %in% 
 curated <- read.delim(curated_all_path, stringsAsFactors = FALSE)
 
 # Aggregate GTEX coexpression matrix path
-agg_path <- "/space/scratch/amorin/TRsc_output/GTEX_aggregate_coexpr.RDS"
+gtex_agg_path <- "/space/scratch/amorin/TRsc_output/GTEX_aggregate_coexpr.RDS"
+
+# GTEX AUC list of literature curation benchmark performance 
+gtex_auc_path <- "/space/scratch/amorin/TRsc_output/gtex_recover_curated_hg.RDS"
+
 
 
 
@@ -127,14 +131,14 @@ aggregate_gtex_coexpr <- function(gtex_mat, gtex_meta, pc_df) {
 
 
 
-if (!file.exists(agg_path)) {
+if (!file.exists(gtex_agg_path)) {
   
-  agg <- aggregate_gtex_coexpr(gtex_mat, gtex_meta, pc_hg)
-  saveRDS(agg, agg_path)
+  gtex_agg <- aggregate_gtex_coexpr(gtex_mat, gtex_meta, pc_hg)
+  saveRDS(gtex_agg, gtex_agg_path)
   
  } else {
    
-   agg <- readRDS(agg_path)
+   gtex_agg <- readRDS(gtex_agg_path)
   
 }
 
@@ -187,11 +191,10 @@ split_mat_to_list <- function(mat) {
 }
 
 
-agg_tf <- agg[, common_tfs]
-agg_l <- split_mat_to_list(agg_tf)
+gtex_agg_tf <- gtex_agg[, common_tfs]
+gtex_agg_l <- split_mat_to_list(gtex_agg_tf)
 
 
-gtex_auc_path <- "/space/scratch/amorin/TRsc_output/gtex_recover_curated_hg.RDS"
 
 
 save_function_results(
@@ -199,7 +202,7 @@ save_function_results(
   fun = curated_obs_and_null_auc_list,
   args = list(
     tfs = tf_hg,
-    rank_l = agg_l,
+    rank_l = gtex_agg_l,
     score_col = "Aggr_coexpr",
     curated_df = curated,
     label_all = target_hg,
@@ -212,3 +215,145 @@ save_function_results(
   ),
   force_resave = FALSE
 )
+
+
+
+
+gtex_auc <- readRDS(gtex_auc_path)
+gtex_auc_df <- do.call(rbind, lapply(gtex_auc, `[[`, "Perf_df"))
+
+
+# Aggregate single cell coexpr profiles versus individual dataset profiles
+avi_auc <- readRDS(avg_vs_ind_auc_hg_path)
+
+# Aggregate single cell coexpr profiles versus null 
+sc_auc <- readRDS(coexpr_auc_hg_path)
+sc_auc_df <- do.call(rbind, lapply(sc_auc, `[[`, "Perf_df"))
+
+
+all_auc_df <- left_join(
+  gtex_auc_df, sc_auc_df,
+  by = "Symbol",
+  suffix = c("_GTEX", "_SC")
+) %>% 
+  filter(N_targets_GTEX >= 5 & N_targets_SC >= 5)
+
+
+pdf1 <- data.frame(
+  Group = c(rep("SC", nrow(all_auc_df)), rep("GTEX", nrow(all_auc_df))),
+  AUROC = c(all_auc_df$AUROC_SC, all_auc_df$AUROC_GTEX),
+  AUPRC = c(all_auc_df$AUPRC_SC, all_auc_df$AUPRC_GTEX),
+  AUROC_quantile = c(all_auc_df$AUROC_quantile_SC, all_auc_df$AUROC_quantile_GTEX),
+  AUPRC_quantile = c(all_auc_df$AUPRC_quantile_SC, all_auc_df$AUPRC_quantile_GTEX)
+)
+
+
+ggplot(pdf1, aes(x = Group, y = AUROC)) +
+  geom_boxplot() +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+ggplot(pdf1, aes(x = Group, y = AUROC_quantile)) +
+  geom_boxplot() +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+
+ggplot(pdf1, aes(x = Group, y = AUPRC)) +
+  geom_boxplot() +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+ggplot(pdf1, aes(x = Group, y = AUPRC_quantile)) +
+  geom_boxplot() +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+
+plot(all_auc_df$N_targets_GTEX, all_auc_df$N_targets_SC)
+summary(all_auc_df$N_targets_GTEX - all_auc_df$N_targets_SC)
+
+
+plot(all_auc_df$AUROC_GTEX, all_auc_df$AUROC_SC)
+plot(all_auc_df$AUPRC_GTEX, all_auc_df$AUPRC_SC)
+cor(all_auc_df$AUROC_GTEX, all_auc_df$AUROC_SC)
+
+
+# GTEX as individual experiment relative to single cell individual experiments
+# TODO: common function and more graceful handling of N targets
+
+
+tt1 <- lapply(names(gtex_auc), function(tf) {
+  
+  rbind(
+    avi_auc[[tf]]$AUC_df,
+    data.frame(ID = "GTEX", gtex_auc[[tf]]$Perf_df[, c("AUROC", "AUPRC")])
+  )
+  
+})
+names(tt1) <- names(gtex_auc)
+
+
+
+tt2 <- lapply(tt1, function(x) {
+  
+  auroc_avg <- filter(x, ID == "Average")$AUROC
+  auprc_avg <- filter(x, ID == "Average")$AUPRC
+  
+  auroc_gtex <- filter(x, ID == "GTEX")$AUROC
+  auprc_gtex <- filter(x, ID == "GTEX")$AUPRC
+  
+  auc_df_rm <- filter(x, ID %!in% c("Average", "GTEX"))
+  
+  summary_df <- data.frame(
+    AUROC_quantile_Avg = ecdf(auc_df_rm$AUROC)(auroc_avg),
+    AUPRC_quantile_Avg = ecdf(auc_df_rm$AUPRC)(auprc_avg),
+    AUROC_quantile_GTEX = ecdf(auc_df_rm$AUROC)(auroc_gtex),
+    AUPRC_quantile_GTEX = ecdf(auc_df_rm$AUPRC)(auprc_gtex)
+  )
+  
+  
+})
+
+
+tt2 <- do.call(rbind, tt2) %>% 
+  rownames_to_column(var = "Symbol") %>% 
+  filter(Symbol %in% all_auc_df$Symbol)
+
+
+
+pdf2 <- data.frame(
+  Group = c(rep("SC", nrow(tt2)), rep("GTEX", nrow(tt2))),
+  AUROC_quantile = c(tt2$AUROC_quantile_Avg, tt2$AUROC_quantile_GTEX),
+  AUPRC_quantile = c(tt2$AUROC_quantile_Avg, tt2$AUPRC_quantile_GTEX)
+)
+
+
+
+ggplot(pdf2, aes(x = Group, y = AUROC_quantile)) +
+  geom_boxplot() +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+ggplot(pdf2, aes(x = Group, y = AUPRC_quantile)) +
+  geom_boxplot() +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+plot(density(tt2$AUROC_quantile_Avg), col = "red")
+lines(density(tt2$AUROC_quantile_GTEX))
+
+
+ggplot(tt2, aes(x = AUROC_quantile_Avg)) +
+  geom_histogram(bins = 100, colour = "slategrey", fill = "slategrey") +
+  geom_vline(xintercept = median(tt2$AUROC_quantile_Avg), col = "black") +
+  geom_vline(xintercept = median(tt2$AUROC_quantile_GTEX), col = "red") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
