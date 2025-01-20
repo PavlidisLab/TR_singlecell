@@ -541,7 +541,7 @@ p6 <-
   geom_text_repel(
     data = filter(pdf1, tf_label),
     aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg, label = Symbol, fontface = "italic"),
-    size = 5,
+    size = 6,
     nudge_y = 2,
     segment.size = 0.1,
     segment.color = "grey50",
@@ -549,7 +549,7 @@ p6 <-
   geom_text_repel(
     data = filter(pdf1, gene_label),
     aes(x = Topk_hg_in_mm, y = Topk_mm_in_hg, label = Symbol, fontface = "italic"),
-    size = 5,
+    size = 4,
     segment.size = 0.1,
     segment.color = "grey50") +
   ggtitle(paste0(check_tf, " ortholog retrieval")) +
@@ -565,7 +565,7 @@ p6 <-
 ggsave(p6, height = 7, width = 7, device = "png", dpi = 300,
        filename = file.path(plot_dir, paste0(check_tf, "_top", k, "_count_between_species.png")))
 
-  
+
 # Hist of topk counts for each species for check TF
 
 p7a <- plot_hist(pdf1, 
