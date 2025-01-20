@@ -18,9 +18,8 @@ pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
 pc_ortho <- read.delim(pc_ortho_path)
 
 # Saved list of the aggregate coexpression ranks
-rank_tf_hg <- readRDS(rank_tf_hg_path)
-rank_tf_mm <- readRDS(rank_tf_mm_path)
-rank_tf_ortho <- readRDS(rank_tf_mm_path)
+rank_coexpr_hg <- readRDS(rank_tf_hg_path)
+rank_coexpr_mm <- readRDS(rank_tf_mm_path)
 
 # Average bind scores
 bind_summary <- readRDS(bind_summary_path)
@@ -45,7 +44,7 @@ join_coexpr_bind <- function(coexpr_l, bind_mat) {
     
     join_df <- left_join(coexpr_l[[x]], bind_df, by = "Symbol") %>%
       mutate(
-        Rank_bind = rank(-Bind_score, ties.method = "min"),
+        Rank_bind = rank(-Bind_score, ties.method = "max"),   # Max to ensure unmeasured at bottom of ranks
         Rank_integrated = rank(Rank_aggr_coexpr * Rank_bind,
                                ties.method = "min",
                                na.last = "keep")
@@ -94,7 +93,6 @@ join_and_rank_ortho <- function(rank_hg, rank_mm, pc_ortho, ncores = 1) {
     df_ortho <- left_join(df_hg, df_mm,
                           by = "ID",
                           suffix = c("_hg", "_mm")) %>%
-      # filter(!is.na(Avg_aggr_coexpr_hg) & !is.na(Avg_aggr_coexpr_mm)) %>%
       dplyr::select(-ID) %>% 
       mutate(
         Rank_aggr_coexpr_hg = rank(-Avg_aggr_coexpr_hg, 
@@ -103,8 +101,8 @@ join_and_rank_ortho <- function(rank_hg, rank_mm, pc_ortho, ncores = 1) {
         Rank_aggr_coexpr_mm = rank(-Avg_aggr_coexpr_mm, 
                                    ties.method = "min",
                                    na.last = "keep"),
-        Rank_bind_hg = rank(-Bind_score_hg, ties.method = "min"),
-        Rank_bind_mm = rank(-Bind_score_mm, ties.method = "min"),
+        Rank_bind_hg = rank(-Bind_score_hg, ties.method = "max"),  # Max to ensure unmeasured at bottom of ranks
+        Rank_bind_mm = rank(-Bind_score_mm, ties.method = "max"),
         Rank_integrated = rank(
           log(Rank_aggr_coexpr_hg + Rank_aggr_coexpr_mm + Rank_bind_hg + Rank_bind_mm),
           ties.method = "min",
@@ -181,50 +179,52 @@ subset_tiered_evidence <- function(rank_ortho,
       k_coexpr_mm <- check_k(sort(df_ortho$Avg_aggr_coexpr_mm, decreasing = TRUE), k = k)
       k_bind_mm <- check_k(sort(df_ortho$Bind_score_mm, decreasing = TRUE), k = k)
       
+      # Ortho df with logical columns indicating whether gene made cutoff
       df_ortho <- mutate(df_ortho,
                          Cutoff_aggr_coexpr_hg = Rank_aggr_coexpr_hg <= k_coexpr_hg,
                          Cutoff_aggr_coexpr_mm = Rank_aggr_coexpr_mm <= k_coexpr_mm,
                          Cutoff_bind_hg = Rank_bind_hg <= k_bind_hg,
                          Cutoff_bind_mm = Rank_bind_mm <= k_bind_mm)
-      
-      # Stringent requires top k in all four of human and mouse coexpr and binding 
-      stringent <- df_ortho %>%  
+
+      # Stringent requires top k in all four of human and mouse coexpr and binding
+      stringent <- df_ortho %>%
         filter(
-          Cutoff_aggr_coexpr_hg & 
-          Cutoff_aggr_coexpr_mm & 
-          Cutoff_bind_hg & 
+          Cutoff_aggr_coexpr_hg &
+          Cutoff_aggr_coexpr_mm &
+          Cutoff_bind_hg &
           Cutoff_bind_mm
         ) %>%
         dplyr::select(-contains("Cutoff")) %>%
         arrange(Rank_integrated)
-      
+
       # Elevated requires evidence in 3/4 rankings
       elevated <- df_ortho %>%
         mutate(n = rowSums(.[grep("Cutoff", names(.))])) %>%
         filter(n == 3) %>%
         dplyr::select(-c(contains("Cutoff"), n)) %>%
         arrange(Rank_integrated)
-      
+
       # Species specific
       specific_hg <- filter(df_hg, Symbol %!in% c(stringent$Symbol_hg, elevated$Symbol_hg))
       specific_mm <- filter(df_mm, Symbol %!in% c(stringent$Symbol_mm, elevated$Symbol_mm))
-      
+
       # Mixed species requires evidence in one data type for each species
       mixed <- df_ortho %>%
         filter(
-          (Cutoff_aggr_coexpr_hg & Cutoff_bind_mm) | 
+          (Cutoff_aggr_coexpr_hg & Cutoff_bind_mm) |
           (Cutoff_aggr_coexpr_mm & Cutoff_bind_hg)
-        ) %>% 
+        ) %>%
         filter(
           Symbol_hg %!in% c(stringent$Symbol_hg, elevated$Symbol_hg, specific_hg$Symbol) &
           Symbol_mm %!in% specific_mm$Symbol
-        ) %>% 
-        select(-contains("Cutoff")) %>% 
+        ) %>%
+        select(-contains("Cutoff")) %>%
         arrange(Rank_integrated)
       
-    } 
-    
-    list(Stringent = stringent, 
+    }
+
+
+    list(Stringent = stringent,
          Elevated = elevated,
          Human = df_hg,
          Human_specific = specific_hg,
@@ -237,6 +237,7 @@ subset_tiered_evidence <- function(rank_ortho,
   names(tiered_l) <- tf_ortho$Symbol_hg
   return(tiered_l)
 }
+
 
 
 
@@ -276,7 +277,7 @@ save_function_results(
   path = rank_int_hg_path,
   fun = join_coexpr_bind,
   args = list(
-    coexpr_l = rank_tf_hg,
+    coexpr_l = rank_coexpr_hg,
     bind_mat = bind_summary$Human_TF
   ),
   force_resave = force_resave
@@ -289,7 +290,7 @@ save_function_results(
   path = rank_int_mm_path,
   fun = join_coexpr_bind,
   args = list(
-    coexpr_l = rank_tf_mm,
+    coexpr_l = rank_coexpr_mm,
     bind_mat = bind_summary$Mouse_TF
   ),
   force_resave = force_resave
@@ -297,16 +298,19 @@ save_function_results(
 
 
 
-# Ortho
-rank_hg <- readRDS(rank_int_hg_path)
-rank_mm <- readRDS(rank_int_mm_path)
+# Load the just-generated lists of the integrated rankings for ortho ranking
+rank_int_hg <- readRDS(rank_int_hg_path)
+rank_int_mm <- readRDS(rank_int_mm_path)
 
+
+
+# Ortho
 save_function_results(
   path = rank_int_ortho_path,
   fun = join_and_rank_ortho,
   args = list(
-    rank_hg = rank_hg,
-    rank_mm = rank_mm,
+    rank_hg = rank_int_hg,
+    rank_mm = rank_int_mm,
     pc_ortho = pc_ortho,
     ncores = ncore
   ),
@@ -314,17 +318,18 @@ save_function_results(
 )
 
 
+# Load the just-generated ortho ranking for creating tiered evidence
+rank_int_ortho <- readRDS(rank_int_ortho_path)
+
 
 # Tiered evidence
-rank_ortho <- readRDS(rank_int_ortho_path)
-
 save_function_results(
   path = tiered_evidence_path,
   fun = subset_tiered_evidence,
   args = list(
-    rank_ortho = rank_ortho,
-    rank_hg = rank_hg,
-    rank_mm = rank_mm,
+    rank_ortho = rank_int_ortho,
+    rank_hg = rank_int_hg,
+    rank_mm = rank_int_mm,
     pc_ortho = pc_ortho,
     k = k,
     ncores = ncore
