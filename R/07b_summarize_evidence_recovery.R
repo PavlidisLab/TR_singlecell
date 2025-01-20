@@ -593,10 +593,11 @@ p5 <-
   # geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = NA, colour = "firebrick") +
 
   # Squares with fill
-  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = 0.9, ymax = 1.05), fill = "forestgreen", colour = NA, alpha = 0.002) +
-  geom_rect(aes(xmin = -0.05, xmax = 0.1, ymin = 0.9, ymax = 1.05), fill = "grey", colour = NA, alpha = 0.006) +
-  geom_rect(aes(xmin = 0.9, xmax = 1.05, ymin = -0.05, ymax = 0.1), fill = "grey", colour = NA, alpha = 0.006) +
-  geom_rect(aes(xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5), fill = "firebrick", colour = NA, alpha = 0.002) +
+  annotate("rect", xmin = 0.9, xmax = 1.05, ymin = 0.9, ymax = 1.05, fill = "forestgreen", colour = NA, alpha = 0.6) +
+  annotate("rect", xmin = -0.05, xmax = 0.1, ymin = 0.9, ymax = 1.05, fill = "grey", colour = NA, alpha = 0.8) +
+  annotate("rect", xmin = 0.9, xmax = 1.05, ymin = -0.05, ymax = 0.1, fill = "grey", colour = NA, alpha = 0.8) +
+  annotate("rect", xmin = -0.05, xmax = 0.5, ymin = -0.05, ymax = 0.5, fill = "firebrick", colour = NA, alpha = 0.6) +
+  
 
   geom_point(shape = 21, size = 3.4) +
   xlab(paste("Coexpression", p5_stat, "quantile")) +
@@ -644,7 +645,7 @@ auc_vbplot <- function(agg_df, title) {
       rep("(-) Coexpression", length(agg_df$AUPRC_quantile_bind)),
       rep("(+) Coexpression", length(agg_df$AUROC_quantile_coexpr)),
       rep("Binding", length(agg_df$AUROC_quantile_bind)),
-      rep("(-) Coexpression", length(agg_df$AUROC_ratio_reverse_coexpr))
+      rep("(-) Coexpression", length(agg_df$AUROC_quantile_reverse_coexpr))
     )
   )
   
@@ -670,7 +671,7 @@ auc_vbplot <- function(agg_df, title) {
 
 
 p8a <- auc_vbplot(rev_coexpr_hg, "Human")
-p8b <- auc_vbplot(rev_coexpr_hg, "Mouse")
+p8b <- auc_vbplot(rev_coexpr_mm, "Mouse")
 
 ggsave(p8a, height = 9, width = 18, device = "png", dpi = 300,
        filename = file.path(paste0(plot_dir, "coexpr_vs_binding_quantile_vbplot_human.png")))
