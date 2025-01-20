@@ -331,8 +331,8 @@ overlap_scatter <- function(tf_l) {
 }
 
 
-p1a <- overlap_scatter(summ_tf_hg)
-p1b <- overlap_scatter(summ_tf_mm)
+p1a <- overlap_scatter(summ_sub_tf_hg)
+p1b <- overlap_scatter(summ_sub_tf_mm)
 
 
 
@@ -382,13 +382,13 @@ point_plot_similarity <- function(summary_df,
 
 
 
-p2a <- point_plot_similarity(summ_tf_hg$Topk,
+p2a <- point_plot_similarity(summ_sub_tf_hg$Topk,
                              null_df = summ_null_hg$Topk,
                              plot_title = "Human",
                              ylabel = expr("Mean Top"[!!k]))
 
 
-p2b <- point_plot_similarity(summ_tf_mm$Topk,
+p2b <- point_plot_similarity(summ_sub_tf_mm$Topk,
                              null_df = summ_null_mm$Topk,
                              plot_title = "Mouse",
                              ylabel = expr("Mean Top"[!!k]))
@@ -432,13 +432,13 @@ hist_mean <- function(summary_df, null_df, ribo_df, xlabel) {
 
 
 
-p3a <- hist_mean(summary_df = summ_tf_hg$Topk,
+p3a <- hist_mean(summary_df = summ_sub_tf_hg$Topk,
                  null_df = summ_null_hg$Topk,
                  ribo_df = summ_ribo_hg$Topk,
                  xlabel = expr("Mean Top"[!!k]))
 
 
-p3b <- hist_mean(summary_df = summ_tf_mm$Topk,
+p3b <- hist_mean(summary_df = summ_sub_tf_mm$Topk,
                  null_df = summ_null_mm$Topk,
                  ribo_df = summ_ribo_mm$Topk,
                  xlabel = expr("Mean Top"[!!k]))
@@ -467,13 +467,13 @@ strip_mean <- function(summary_df, null_df, ribo_df, ylabel) {
 }
   
   
-p4a <- strip_mean(summary_df = summ_tf_hg$Topk,
+p4a <- strip_mean(summary_df = summ_sub_tf_hg$Topk,
                   null_df = summ_null_hg$Topk,
                   ribo_df = summ_ribo_hg$Topk,
                   ylabel = expr("Mean Top"[!!k])) 
 
 
-p4b <- strip_mean(summary_df = summ_tf_mm$Topk,
+p4b <- strip_mean(summary_df = summ_sub_tf_mm$Topk,
                   null_df = summ_null_mm$Topk,
                   ribo_df = summ_ribo_mm$Topk,
                   ylabel = expr("Mean Top"[!!k]))
@@ -504,25 +504,25 @@ ggsave(p5, height = 9, width = 22, device = "png", dpi = 600,
 
 # Again for bottomk
 
-p6a <- point_plot_similarity(summ_tf_hg$Bottomk,
+p6a <- point_plot_similarity(summ_sub_tf_hg$Bottomk,
                              null_df = summ_null_hg$Bottomk,
                              plot_title = "Human",
                              ylabel = expr("Mean Bottom"[!!k]))
 
 
-p6b <- point_plot_similarity(summ_tf_mm$Bottomk,
+p6b <- point_plot_similarity(summ_sub_tf_mm$Bottomk,
                              null_df = summ_null_mm$Bottomk,
                              plot_title = "Mouse",
                              ylabel = expr("Mean Bottom"[!!k]))
 
 
-p7a <- hist_mean(summary_df = summ_tf_hg$Bottomk,
+p7a <- hist_mean(summary_df = summ_sub_tf_hg$Bottomk,
                  null_df = summ_null_hg$Bottomk,
                  ribo_df = summ_ribo_hg$Bottomk,
                  xlabel = expr("Mean Bottom"[!!k]))
 
 
-p7b <- hist_mean(summary_df = summ_tf_mm$Bottomk,
+p7b <- hist_mean(summary_df = summ_sub_tf_mm$Bottomk,
                  null_df = summ_null_mm$Bottomk,
                  ribo_df = summ_ribo_mm$Bottomk,
                  xlabel = expr("Mean Bottom"[!!k]))
