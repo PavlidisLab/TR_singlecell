@@ -33,6 +33,10 @@ msr_hg <- readRDS(msr_mat_hg_path)
 comsr_hg <- readRDS(comsr_mat_hg_path)
 # comsr_mm <- readRDS(comsr_mat_mm_path)
 
+# List of topk similarity metrics
+pair_sim_l <- readRDS(paste0("/space/scratch/amorin/TRsc_output/human_mouse_topk=", k, "_similarity_df.RDS"))
+
+
 
 #
 # ------------------------------------------------------------------------------
@@ -161,7 +165,7 @@ subsample_tf_topk <- function(tf, agg_l, msr_mat, k, ncore) {
                                        tf_ids = tf_ids,
                                        steps = steps,
                                        n_iter = n_iter, 
-                                       ncore = 4)
+                                       ncore = ncore)
   
   return(list(Experiments = exp_topk, 
               Steps = topk_summ))
@@ -184,7 +188,7 @@ subsample_all_tfs <- function(agg_l, tfs, msr_mat, k, ncore) {
                                    agg_l = agg_tf_hg,
                                    msr_mat = msr_hg, 
                                    k = k, 
-                                   ncore = ncore)
+                                   ncore = 1)
       }, 
       error = function(e) {
         NA
@@ -204,7 +208,8 @@ subsample_all_tfs <- function(agg_l, tfs, msr_mat, k, ncore) {
 # ------------------------------------------------------------------------------
 
 
-file_hg <- "/space/scratch/amorin/TRsc_output/dataset_subsample_cor_hg.RDS"
+# file_hg <- "/space/scratch/amorin/TRsc_output/dataset_subsample_cor_hg.RDS"
+file_hg <- "/space/scratch/amorin/TRsc_output/old_dataset_subsample_cor_hg.RDS"
 
 
 if (!file.exists(file_hg)) {
@@ -267,23 +272,48 @@ ndat_for_recovery <- function(tf_l, recover = 0.8) {
 
 
 
+# Check against average pairwise similarity of experiments
+
 rec_df <- ndat_for_recovery(tf_l)
 
 
-summ_rec <- summary(rec_df)
+
+# Exponential fits
+
+fit_exponential <- function(df, k = 200, b_init = 0.1) {
+  
+  tryCatch({
+    nls(Mean ~ a * (1 - exp(-b * N_step)), 
+        data = df, 
+        start = list(a = k, b = b_init))  # Initial guesses for parameters
+  }, error = function(e) NULL)
+  
+}
 
 
-# Check against average pairwise similarity of experiments
-
-pair_sim_l <- readRDS(paste0("/space/scratch/amorin/TRsc_output/human_mouse_topk=", k, "_similarity_df.RDS"))
+fits_l <- lapply(tf_l, function(x) fit_exponential(x$Steps))
 
 
-rec_df <- left_join(rec_df, pair_sim_l$Human, by = "Symbol")
+
+params_df <- lapply(fits_l, function(x) coef(x)["b"]) %>% 
+  do.call(rbind, .) %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "Symbol") %>% 
+  left_join(rec_df, by = "Symbol") %>% 
+  left_join(pair_sim_l$Human, by = "Symbol")
+
+
+cor(select_if(params_df, is.numeric), method = "spearman", use = "pairwise.complete.obs")
+
+
+plot(params_df$b, params_df$Prop_total)
+plot(params_df$b, params_df$Mean)
+plot(params_df$Prop_total, params_df$b)
 
 
 # TODO: Note Pax4 -- higher mean and high proportion... n=16, not sure what this means
 
-ggplot(rec_df, aes(x = Mean, y = Prop_total)) +
+ggplot(params_df, aes(x = Mean, y = Prop_total)) +
   geom_point(shape = 21) +
   ylab("Proportion recovery") +
   xlab("Average pairwise Top200") +
@@ -291,13 +321,30 @@ ggplot(rec_df, aes(x = Mean, y = Prop_total)) +
   theme(text = element_text(size = 20))
 
 
-cor(rec_df$Prop_total, rec_df$Mean, method = "spearman", use = "pairwise.complete.obs")
-
-
-ggplot(rec_df, aes(x = Prop_total)) +
+ggplot(params_df, aes(x = Prop_total)) +
   geom_histogram(bins = 100) +
   ylab("Count TRs") +
   xlab("Proportion of recovery") +
+  theme_classic() +
+  theme(text = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+ggplot(params_df, aes(x = 1 - Prop_total)) +
+  geom_histogram(bins = 100) +
+  ylab("Count TRs") +
+  xlab("1 - (Proportion of recovery)") +
+  theme_classic() +
+  theme(text = element_text(size = 20),
+        plot.margin = margin(c(10, 20, 10, 10)))
+
+
+
+
+ggplot(params_df, aes(x = b)) +
+  geom_histogram(bins = 100) +
+  ylab("Count TRs") +
+  xlab("Exponential coefficient") +
   theme_classic() +
   theme(text = element_text(size = 20),
         plot.margin = margin(c(10, 20, 10, 10)))
@@ -411,7 +458,9 @@ topk_mat <- topk_to_mat(tf_l, ids_hg)
 # Average rank standardized exp-wise top K overlap with global profile to see
 # which experiments most commonly aligned with global
 
-expwise_mean <- sort(colMeans(rs_mat), decreasing = TRUE)
+expwise_mean <- data.frame(
+  ID = colnames(rs_mat),
+  Mean_rank_topk = colMeans(rs_mat)) 
 
 
 
@@ -419,7 +468,7 @@ expwise_mean <- sort(colMeans(rs_mat), decreasing = TRUE)
 # ------------------------------------------------------------------------------
 
 
-plot_tf <- "PAX6"
+plot_tf <- "MXD1"
 
 
 pdf1 <- tf_l[[plot_tf]]$Experiments %>% 
@@ -435,14 +484,15 @@ p1 <-
               shape = 21, colour = "darkblue", width = 0.02, height = 0) +
   geom_label_repel(data = filter(pdf1, Label),
                   aes(x = Group, y = Topk, label = ID),
-                  nudge_x = 0.3, nudge_y = 5, size = 4) +
+                  nudge_x = 0.3, nudge_y = 5, size = 6) +
   ylim(c(0, k)) +
-  ylab("Top200") +
+  ylab(expr("Top"[!!k])) +
   xlab("Individual experiments") +
   ggtitle(plot_tf) +
   theme_classic() +
-  theme(text = element_text(size = 20),
-        axis.text.x = element_blank())
+  theme(text = element_text(size = 25),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
   
 
 
@@ -458,11 +508,11 @@ p2 <-
   geom_hline(yintercept = (k * 0.8), linetype = "dashed", colour = "black") +
   # geom_smooth() +
   ylim(c(0, k)) +
-  ylab("Top200") +
+  ylab(expr("Top"[!!k])) +
   xlab("Count of sampled experiments") +
   ggtitle(plot_tf) +
   theme_classic() +
-  theme(text = element_text(size = 20),
+  theme(text = element_text(size = 25),
         axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1))
 
 
@@ -485,6 +535,7 @@ cut_rs <- cutree(heat_rs$tree_col, k = 2)
 cut_df <- data.frame(Group = cut_rs) %>% 
   rownames_to_column(var = "ID") %>% 
   left_join(sc_meta, by = "ID") %>% 
+  left_join(expwise_mean, by = "ID") %>% 
   mutate(Platform2 = str_replace_all(Platform, " ", ""),
          Platform2 = ifelse(is.na(Platform2), "Mixed", Platform2),
          Platform2 = ifelse(sapply(str_split(Platform2, ","), length) != 1, "Mixed", Platform2),
@@ -503,13 +554,47 @@ fisher.test(table(cut_df$Is_10X, cut_df$Group))
 
 
 
-# hclust_rs <- hclust(d = rs_mat)
-# sil_avg_hg <- cluster::silhouette(cutree(hclust_avg_hg, k = 2), as.dist(1 - cor_avg_hg))
-# mean(sil_avg_hg[, "sil_width"])
-# plot(sil_avg_hg)
+# plot_scatter <- function()
+
+cor_ngenes <- round(cor(cut_df$Mean_rank_topk, cut_df$N_genes, method = "spearman"), 3)
+cor_ncells <- round(cor(cut_df$Mean_rank_topk, log10(cut_df$N_cells), method = "spearman"), 3)
+cor_ncts <- round(cor(cut_df$Mean_rank_topk, log10(cut_df$N_celltypes), method = "spearman"), 3)
 
 
-pheatmap::pheatmap(t(data.frame(expwise_mean)), 
+px1 <- ggplot(cut_df, aes(x = N_genes, y = Mean_rank_topk)) +
+  geom_point(shape = 21, size = 3) +
+  geom_smooth(method = "lm") +
+  # ggtitle(paste0("Spearman's correlation = ", cor_ngenes)) +
+  xlab("Count of genes") +
+  ylab("Aggreement with global") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+  
+
+px2 <- ggplot(cut_df, aes(x = log10(N_cells), y = Mean_rank_topk)) +
+  geom_point(shape = 21, size = 3) +
+  geom_smooth(method = "lm") +
+  # ggtitle(paste0("Spearman's correlation = ", cor_ncells)) +
+  xlab("Log10 count of cells") +
+  ylab("Aggreement with global") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+px3 <- ggplot(cut_df, aes(x = log10(N_celltypes), y = Mean_rank_topk)) +
+  geom_point(shape = 21, size = 3) +
+  geom_smooth(method = "lm") +
+  # ggtitle(paste0("Spearman's correlation = ", cor_ncts)) +
+  xlab("Log10 count of cell types") +
+  ylab("Aggreement with global") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
+
+
+egg::ggarrange(px1, px2, px3, nrow = 1)
+
+
+pheatmap::pheatmap(t(sort(expwise_mean$Mean_rank_topk)), 
                    cluster_rows = FALSE,
                    cluster_cols = FALSE,
                    show_rownames = FALSE,
