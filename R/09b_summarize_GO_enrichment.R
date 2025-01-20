@@ -234,6 +234,8 @@ p4 <-
 
 go_barplot <- function(df, topn = 10, title) {
   
+  if (is.null(topn)) topn <- 10
+  
   df %>% 
     mutate(Score = -log10(CorrectedMFPvalue)) %>% 
     slice_max(Score, n = topn) %>% 
@@ -256,12 +258,12 @@ go_barplot <- function(df, topn = 10, title) {
 
 
 
-generate_and_save_plot <- function(params) {
+generate_and_save_plot <- function(params, height = 7, width = 14) {
   
-  plot <- go_barplot(params$data, title = params$title)
+  plot <- go_barplot(params$data, topn = params$topn, title = params$title)
   
   ggsave(
-    plot, height = 7, width = 14, device = "png", dpi = 300,
+    plot, height = height, width = width, device = "png", dpi = 300,
     filename = file.path(plot_dir, params$filename)
   )
 }
@@ -271,7 +273,6 @@ generate_and_save_plot <- function(params) {
 plot_params <- list(
   list(data = go_coexpr_filt_hg$ASCL1, title = "ASCL1 human ranking", filename = "GO_ASCL1_human_coexpr.png"),
   list(data = go_coexpr_filt_mm$Ascl1, title = "ASCL1 mouse ranking", filename = "GO_ASCL1_mouse_coexpr.png"),
-  list(data = go_coexpr_filt_ortho$ASCL1, title = "ASCL1 orthologous ranking", filename = "GO_ASCL1_ortho_coexpr.png"),
   list(data = go_coexpr_filt_hg$OLIG1, title = "Human OLIG1", filename = "GO_OLIG1_human_coexpr.png"),
   list(data = go_coexpr_filt_mm$Irf8, title = "Mouse Irf8", filename = "GO_Irf8_mouse_coexpr.png"),
   list(data = go_coexpr_filt_hg$NEUROD6, title = "Human NEUROD6", filename = "GO_NEUROD6_human_coexpr.png"),
@@ -285,3 +286,14 @@ plot_params <- list(
 # Saving out
 
 invisible(lapply(plot_params, generate_and_save_plot))
+
+
+# Isolate/expand ASCL1 ortho
+generate_and_save_plot(
+  params = list(
+    data = go_coexpr_filt_ortho$ASCL1,
+    title = "ASCL1 orthologous ranking",
+    topn = 15,
+    filename = "GO_ASCL1_ortho_coexpr.png"
+  ), height = 7, width = 14
+)
