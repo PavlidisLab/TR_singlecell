@@ -71,6 +71,19 @@ names(summ_tier) <- tier_names
 
 
 
+# The Species-specific tier can include interactions for TRs that had ChIP-seq
+# in both species. Isolate counts for TRs with only ChIP-seq in one species
+
+n_intr_bind_in_one_species <- n_intr %>% 
+  filter(is.na(Stringent)) %>%   # removes TRs eligible for ortho (ChIP-seq in both species)
+  summarise(
+    N_human_TRs = sum(!is.na(Human)),
+    Max_human = slice_max(., Human, n = 1)$Symbol,
+    N_mouse_TRs = sum(!is.na(Mouse)),
+    Max_mouse = slice_max(., Mouse, n = 1)$Symbol
+  )
+
+
 # Genes can reoccur across different TFs reproducible interactions. Tally these
 # reoccurences, and group which TFs are affiliated with each unique gene
 # ------------------------------------------------------------------------------
