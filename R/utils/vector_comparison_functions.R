@@ -16,22 +16,23 @@ library(ROCR)
 # of vec_sort
 # vec_sort: named numeric vector assumed to be sorted
 # k: an integer
+# decreasing: logical of whether vec_sort sorted from high to low?
 # returns: an integer
 
 check_k <- function(vec_sort, k, decreasing = TRUE) {
   
   if (!decreasing) vec_sort <- -vec_sort
   
-  vec_rank <- rank(-vec_sort, ties.method = "min")
-  tally_ranks <- sort(table(vec_rank), decreasing = TRUE)
+  vec_rank <- rank(-vec_sort, ties.method = "min")[1:k]
+  rank_at_k <- vec_rank[k]
   
-  if (tally_ranks[1] > 1) {  # ties were found, check position relative to k
-    tie_start <- as.integer(names(head(tally_ranks)[1]))
-    k <- min(k, tie_start - 1)
+  if (rank_at_k < k) {  # min ties results in tied value at rank value under k
+     k <- rank_at_k - 1 # the value before the block of ties
   }
-  
+
   return(k)
 }
+
 
 
 
