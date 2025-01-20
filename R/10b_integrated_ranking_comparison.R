@@ -182,6 +182,7 @@ dplot <- function(plot_df, med_df, xlab, title) {
     geom_vline(data = med_df, 
                aes(xintercept = Med, colour = Group), 
                linetype = "dashed", size = 1.5) +
+    xlim(c(0, 1)) +
     xlab(xlab) +
     ylab("Density") +
     ggtitle(title) +
@@ -201,8 +202,8 @@ auroc_density_hg <- dplot(plot_df_hg, med_df_hg, "AUROC", "Human")
 auroc_density_mm <- dplot(plot_df_mm, med_df_mm, "AUROC", "Mouse")
 
 
-ggsave(auroc_density_mm, height = 6, width = 9, device = "png", dpi = 300,
-       filename = file.path(paste0(plot_dir, "auroc_integrated_density_mm.png")))
+ggsave(auroc_density_hg, height = 6, width = 9, device = "png", dpi = 300,
+       filename = file.path(paste0(plot_dir, "auroc_integrated_density_hg.png")))
 
 ggsave(auroc_density_mm, height = 6, width = 9, device = "png", dpi = 300,
        filename = file.path(paste0(plot_dir, "auroc_integrated_density_mm.png")))
