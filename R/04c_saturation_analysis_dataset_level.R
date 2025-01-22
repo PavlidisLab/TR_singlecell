@@ -1,5 +1,5 @@
 ## Perform an iterative subsampling procedure to see how many datasets on average
-## are required to recover 80% of the global/aggregate profiles
+## are required to recover the global/aggregate profiles by Topk overlap
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -13,6 +13,7 @@ source("R/00_config.R")
 
 k <- 200
 n_iter <- 100  # how many iterations per subsample step
+set.seed(5)
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
@@ -31,9 +32,6 @@ tfs_mm <- read.delim(tfs_mm_path, stringsAsFactors = FALSE)
 msr_hg <- readRDS(msr_mat_hg_path)
 msr_mm <- readRDS(msr_mat_mm_path)
 
-comsr_hg <- readRDS(comsr_mat_hg_path)
-comsr_mm <- readRDS(comsr_mat_mm_path)
-
 # List of topk similarity metrics
 pair_sim_l <- readRDS(paste0("/space/scratch/amorin/TRsc_output/human_mouse_topk=", k, "_similarity_df.RDS"))
 
@@ -47,44 +45,50 @@ file_mm <- "/space/scratch/amorin/TRsc_output/dataset_subsample_cor_mm.RDS"
 # ------------------------------------------------------------------------------
 
 
-# When a TF-gene was not co-measured, impute to the median value across profiles
+# Impute gene pairs that are not co-measured (and thus are NA -> 0 -> ties during
+# ranking) to the median value of the gene profile matrix, ensuring they have a 
+# middling value
 
-impute_na_to_med <- function(tf_mat, msr_mat) {
+impute_na_to_med <- function(gene_mat, msr_mat) {
   
-  ids <- colnames(tf_mat)
-  msr_mat <- msr_hg[, ids]
-  med <- median(tf_mat, na.rm = TRUE)
-  tf_mat[msr_mat == 0] <- med
+  med <- median(gene_mat, na.rm = TRUE)
+  gene_mat[msr_mat == 0] <- med
   
-  return(tf_mat)
+  return(gene_mat)
 }
 
 
 
-# Prepare a TF's coexpression profile across all datasets in which it is measured
+# Collect a gene's coexpression profile across all datasets in which it is 
+# measured into a single gene x dataset experiment with unmeasured/NA/tied
+# values imputed to the median of the whole matrix (gene profile matrix). Finally,
+# append a column of the average of the matrix
 
-prepare_tf_mat <- function(agg_l, tf, msr_mat) {
+prepare_gene_mat <- function(agg_l, gene, msr_mat) {
   
-  # Bind TF profiles into one matrix, set self to NA to prevent inflated overlap
-  tf_mat <- gene_vec_to_mat(agg_l, tf, msr_mat)
-  tf_mat[tf, ] <- NA
+  # Bind gene profiles into one matrix, set self to NA to prevent inflated overlap
+  gene_mat <- gene_vec_to_mat(agg_l, gene, msr_mat)
+  gene_mat[gene, ] <- NA
   
   # Impute non-measured TF-gene pairs (tied values) to global median
-  tf_ids <- colnames(tf_mat)
-  msr_mat <- msr_mat[, tf_ids]
-  tf_mat <- impute_na_to_med(tf_mat, msr_mat)
+  exp_ids <- colnames(gene_mat)
+  msr_mat <- msr_mat[, exp_ids]
+  gene_mat <- impute_na_to_med(gene_mat, msr_mat)
   
-  return(tf_mat)
+  # Add the average of the matrix as a column for downstream comparisons
+  gene_mat <- cbind(gene_mat, Avg = rowMeans(gene_mat, na.rm = TRUE))
+  
+  return(gene_mat)
 }
 
 
 
-# Get the Top K overlap between individual dataset profiles and the global profile
+# Get the Top K overlap between every individual dataset profiles and the global 
+# average, returned as a df
 
-expwise_topk <- function(tf_mat, tf_avg, k) {
+gen_expwise_topk_df <- function(gene_mat, k) {
   
-  tf_mat <- cbind(tf_mat, Avg = tf_avg)
-  topk_mat <- colwise_topk_intersect(tf_mat, k = k)
+  topk_mat <- colwise_topk_intersect(gene_mat, k = k)
   
   topk_df <- data.frame(
     Topk = topk_mat[setdiff(rownames(topk_mat), "Avg"), "Avg"]
@@ -95,11 +99,13 @@ expwise_topk <- function(tf_mat, tf_avg, k) {
 }
 
 
-# TODO:
 
-format_summary_df <- function(topk_l, steps) {
+# Organize the summary of topk overlap across iterations of each subsample step 
+# into a df
+
+format_summ_df_across_steps <- function(topk_step_l, steps) {
   
-  summ_df <- bind_rows(topk_l) %>% 
+  summ_df <- bind_rows(topk_step_l) %>% 
     as.matrix() %>%   # Needed for table -> integer data type
     as.data.frame() %>% 
     mutate(N_step = steps)
@@ -108,145 +114,117 @@ format_summary_df <- function(topk_l, steps) {
 }
 
 
-# TODO:
-# Sample procedure
-# NOTE: Sampling from the full imputed matrix. I tested imputing NAs from only
-# the sampled experiments, which did not make a difference, so using full for
-# simplicity!
+# Subsampling procedure: for each step in steps, perform n_iter times:
+# Sample n step experiments that measure the TF, then compare the top k overlap
+# of the profile generated from these sampled experiment to that of the global
+# profile. Summarize topK across all iterations per step, returning the result
+# as a list, where each list element is the topk summary at the given step
+
+# NOTE: Sampling from the full NA imputed TR profile matrix. I tested imputing 
+# NAs using the median from only the sampled experiments, which did not make a
+# difference, so using full for simplicity!
 
 
-topk_at_subsample_steps <- function(tf_mat, 
-                                    tf_avg,
-                                    tf_ids,
-                                    steps, 
-                                    n_iter, 
-                                    ncore) {
+
+# Helper to calculate overlap of one sample iteration
+
+calc_single_sample_overlap <- function(gene_mat, sample_ids, k) {
   
-  topk_l <- mclapply(steps, function(step) {
-    
-    topk_at_step <- lapply(1:n_iter, function(iter) {
-      
-      sample_ids <- sample(tf_ids, size = step, replace = FALSE)
-      sample_avg <- rowMeans(tf_mat[, sample_ids], na.rm = TRUE)
-      
-      topk_intersect(
-        topk_sort(sample_avg, k = k),
-        topk_sort(tf_avg, k = k)
-      )
-      
-    })
-    
-    summary(unlist(topk_at_step))
-    
-  }, mc.cores = ncore)
+  sample_avg <- rowMeans(gene_mat[, sample_ids], na.rm = TRUE)
+  gene_avg <- gene_mat[, "Avg"]
   
-  summ_df <- format_summary_df(topk_l, steps)
+  topk_intersect(
+    topk_sort(sample_avg, k = k),
+    topk_sort(gene_avg, k = k)
+  )
+}
+
+
+# Helper to calculate and summarize overlap across all iterations of a step
+
+calc_single_step_overlap <- function(gene_mat, exp_ids, k, step, n_iter) {
   
-  return(summ_df)
+  step_l <- lapply(1:n_iter, function(iter) {
+    sample_ids <- sample(exp_ids, size = step, replace = FALSE)
+    calc_single_sample_overlap(gene_mat, sample_ids, k)
+  })
+  summary(unlist(step_l))
 }
 
 
 
+# Helper to calculate and summarize overlap across all steps
 
-# TODO:
-# TODO: remember hard coded parallel
-
-subsample_tf_topk <- function(tf, agg_l, msr_mat, k, ncore) {
+summ_topk_overlap_across_steps <- function(gene_mat, exp_ids, k, steps, n_iter) {
   
-  # Prepare global collection of TF profiles and the global average
-  tf_mat <- prepare_tf_mat(agg_l = agg_tf_hg, tf = tf, msr_mat = msr_hg)
-  tf_avg <- rowMeans(tf_mat, na.rm = TRUE)
+  topk_summ_by_step <- lapply(steps, function(step) {
+    calc_single_step_overlap(gene_mat, exp_ids, k, step, n_iter)
+  })
+  
+  format_summ_df_across_steps(topk_summ_by_step, steps)
+}
+
+
+
+# For a given gene, prepare its gene profile matrix and then perform the topk
+# overlap procedure. Produces a list of two results: one is a dataframe of the
+# individual dataset overlap to the global average; the second is a list where
+# each element summarizes the topk overlap at increasing subsampling steps
+
+analyze_gene_topk_overlap <- function(agg_l, gene, msr_mat, k, n_iter) {
+  
+  # Collect gene profiles from aggregate list into one matrix
+  gene_mat <- prepare_gene_mat(agg_l, gene, msr_mat)
+
+  # Dataset measuring the gene, excluding the global average
+  exp_ids <- setdiff(colnames(gene_mat), "Avg")
+  
+  # Steps as the count of datasets to sample, from 2 to all experiments but one
+  steps <- 2:(length(exp_ids) - 1)
   
   # Get the overlap of individual profiles with global aggregate
-  exp_topk <- expwise_topk(tf_mat = tf_mat, tf_avg = tf_avg, k = k)
+  expwise_topk <- gen_expwise_topk_df(gene_mat, k)
+
+  # Calculate the top k overlap across subsample steps
+  steps_topk <- summ_topk_overlap_across_steps(gene_mat, exp_ids, k, steps, n_iter)
   
-  # Count of samples from 2 to all experiments but one
-  tf_ids <- colnames(tf_mat)
-  steps <- 2:(length(tf_ids) - 1)
-  
-  # Calculate the top k overlap of each steps samples compared to global
-  topk_summ <- topk_at_subsample_steps(tf_mat = tf_mat,
-                                       tf_avg = tf_avg,
-                                       tf_ids = tf_ids,
-                                       steps = steps,
-                                       n_iter = n_iter, 
-                                       ncore = ncore)
-  
-  return(list(Experiments = exp_topk, 
-              Steps = topk_summ))
-  
+  return(list(Experiments = expwise_topk, 
+              Steps = steps_topk))
 }
 
 
 
-# TODO:
-# TODO: where to put parallel
+# Perform analyze_gene_topk_overlap for every gene in gene_vec, returned as list
 
-subsample_all_tfs <- function(agg_l, tfs, msr_mat, k, ncore) {
+analyze_all_gene_topk_overlap <- function(agg_l, 
+                                          gene_vec, 
+                                          msr_mat, 
+                                          k, 
+                                          n_iter, 
+                                          ncore) {
   
-  tf_l <- mclapply(tfs, function(tf) {
+  gene_l <- mclapply(gene_vec, function(gene) {
     
-    message(tf, paste(Sys.time()))
+    message(paste(gene, Sys.time()))
     
     tryCatch({
-      tf_topk <- subsample_tf_topk(tf = tf, 
-                                   agg_l = agg_tf_hg,
-                                   msr_mat = msr_hg, 
-                                   k = k, 
-                                   ncore = 1)
-      }, 
-      error = function(e) {
-        NA
-      }
+      gene_topk <- analyze_gene_topk_overlap(agg_l, gene, msr_mat, k, n_iter)
+      }, error = function(e) NA
     )
   }, mc.cores = ncore)
   
-  names(tf_l) <- tfs
+  names(gene_l) <- gene_vec
   
-  return(tf_l)
-  
+  return(gene_l)
 }
 
 
 
-# 
-# ------------------------------------------------------------------------------
-
-
-
-
-if (!file.exists(file_hg)) {
-  
-  agg_tf_hg <- load_or_generate_agg(path = agg_tf_hg_path, 
-                                    ids = ids_hg, 
-                                    genes = pc_hg$Symbol, 
-                                    sub_genes = tfs_hg$Symbol)
-  
-
-  tf_l <- subsample_all_tfs(agg_l = agg_tf_hg,
-                            tfs = tfs_hg$Symbol,
-                            msr_mat = msr_hg, 
-                            k = k,
-                            ncore = ncore)
-  
-  saveRDS(tf_l, file_hg)
-  
-} else {
-  
-  tf_l <- readRDS(file_hg)
-  
-}
-
-
-
-tf_l <- tf_l[!is.na(tf_l)]
-
+# The following functions are for analyzing the output of the topk process
 
 
 
 # How many sampled datasets are required to reach 80% overlap on average?
-# ------------------------------------------------------------------------------
-
 
 ndat_for_recovery <- function(tf_l, recover = 0.8) {
   
@@ -275,13 +253,6 @@ ndat_for_recovery <- function(tf_l, recover = 0.8) {
 
 
 
-# Check against average pairwise similarity of experiments
-
-rec_df <- ndat_for_recovery(tf_l) %>% 
-  left_join(pair_sim_l$Human, by = "Symbol")
-
-
-
 # Exponential fits
 
 fit_exponential <- function(df, k = 200, b_init = 0.1) {
@@ -293,6 +264,144 @@ fit_exponential <- function(df, k = 200, b_init = 0.1) {
   }, error = function(e) NULL)
   
 }
+
+
+# Tally datasets that had the highest overlap with global
+
+rank_expwise_topk <- function(tf_l) {
+  
+  tfs <- names(tf_l)
+  
+  rank_l <- lapply(tfs, function(tf) {
+    
+    summ_df <- tf_l[[tf]]$Experiments
+    
+    summ_df %>% 
+      mutate(Rank = rank(-Topk, ties.method = "random"),
+             # RS = rank(Topk) / nrow(summ_df))
+             RS = rank(-Rank) / nrow(summ_df))
+    
+  })
+  names(rank_l) <- tfs
+  
+  return(rank_l)
+}
+
+
+
+rankstandard_to_mat <- function(rank_l, ids) {
+  
+  tfs <- names(rank_l)
+  exp_vec <- setNames(rep(0, length(ids)), ids)
+  
+  rs_l <- lapply(tfs, function(tf) {
+    tf_rank <- rank_l[[tf]]
+    exp_vec[match(tf_rank$ID, ids)] <- tf_rank$RS
+    exp_vec
+  })
+  
+  rs_mat <- do.call(rbind, rs_l)
+  colnames(rs_mat) <- ids
+  rownames(rs_mat) <- tfs
+  
+  return(rs_mat)
+}
+
+
+# Consider just raw TopK
+
+
+topk_to_mat <- function(tf_l, ids) {
+  
+  tfs <- names(tf_l)
+  exp_vec <- setNames(rep(0, length(ids)), ids)
+  
+  topk_l <- lapply(tfs, function(tf) {
+    tf_topk <- tf_l[[tf]]$Experiment
+    exp_vec[match(tf_topk$ID, ids)] <- tf_topk$Topk
+    exp_vec
+  })
+  
+  topk_mat <- do.call(rbind, topk_l)
+  colnames(topk_mat) <- ids
+  rownames(topk_mat) <- tfs
+  
+  return(topk_mat)
+}
+
+
+
+
+# Run/save/load
+# ------------------------------------------------------------------------------
+
+
+# Human
+if (!file.exists(file_hg)) {
+  
+  agg_tf_hg <- load_or_generate_agg(
+    path = agg_tf_hg_path,
+    ids = ids_hg,
+    genes = pc_hg$Symbol,
+    sub_genes = tfs_hg$Symbol
+  )
+  
+  hg_l <- analyze_all_gene_topk_overlap(
+    agg_l = agg_tf_hg,
+    gene_vec = tfs_hg$Symbol,
+    msr_mat = msr_hg,
+    k = k,
+    n_iter = n_iter,
+    ncore = ncore
+  )
+  
+  saveRDS(hg_l, file_hg)
+} 
+
+
+# Mouse
+if (!file.exists(file_mm)) {
+  
+  agg_tf_mm <- load_or_generate_agg(
+    path = agg_tf_mm_path,
+    ids = ids_mm,
+    genes = pc_mm$Symbol,
+    sub_genes = tfs_mm$Symbol
+  )
+  
+  mm_l <- analyze_all_gene_topk_overlap(
+    agg_l = agg_tf_mm,
+    gene_vec = tfs_mm$Symbol,
+    msr_mat = msr_mm,
+    k = k,
+    n_iter = n_iter,
+    ncore = ncore
+  )
+  
+  saveRDS(mm_l, file_mm)
+} 
+
+
+
+
+tf_l <- readRDS(file_hg)
+tf_l <- tf_l[!is.na(tf_l)]
+
+
+
+
+
+
+
+
+# Check against average pairwise similarity of experiments
+
+rec_df <- ndat_for_recovery(tf_l) %>% 
+  left_join(pair_sim_l$Human, by = "Symbol")
+
+
+
+
 
 
 
@@ -358,76 +467,6 @@ ggplot(params_df, aes(x = b)) +
 
 
 
-# Tally datasets that had the highest overlap with global
-# ------------------------------------------------------------------------------
-
-
-rank_expwise_topk <- function(tf_l) {
-  
-  tfs <- names(tf_l)
-  
-  rank_l <- lapply(tfs, function(tf) {
-    
-    summ_df <- tf_l[[tf]]$Experiments
-    
-    summ_df %>% 
-      mutate(Rank = rank(-Topk, ties.method = "random"),
-             # RS = rank(Topk) / nrow(summ_df))
-             RS = rank(-Rank) / nrow(summ_df))
-    
-  })
-  names(rank_l) <- tfs
-  
-  return(rank_l)
-}
-
-
-
-
-rankstandard_to_mat <- function(rank_l, ids) {
-  
-  tfs <- names(rank_l)
-  exp_vec <- setNames(rep(0, length(ids)), ids)
-  
-  rs_l <- lapply(tfs, function(tf) {
-    tf_rank <- rank_l[[tf]]
-    exp_vec[match(tf_rank$ID, ids)] <- tf_rank$RS
-    exp_vec
-  })
-  
-  rs_mat <- do.call(rbind, rs_l)
-  colnames(rs_mat) <- ids
-  rownames(rs_mat) <- tfs
-  
-  return(rs_mat)
-}
-
-
-
-
-#### Tallying #1
-# rank_expwise_topk <- function(tf_l) {
-#   
-#   tfs <- names(tf_l)
-#   
-#   rank_l <- lapply(tfs, function(tf) {
-#     
-#     summ_df <- tf_l[[tf]]$Experiments
-#     
-#     summ_df %>% 
-#       slice_max(Topk) %>% 
-#       pull(ID)
-#     
-#   })
-#   names(rank_l) <- tfs
-#   
-#   return(rank_l)
-# }
-# 
-# rank_l <- rank_expwise_topk(tf_l)
-# table(unlist(rank_l)) %>% view
-####
-
 
 
 
@@ -436,26 +475,7 @@ rank_l <- rank_expwise_topk(tf_l)
 rs_mat <- rankstandard_to_mat(rank_l, ids_hg)
 
 
-# Consider just raw TopK
 
-
-topk_to_mat <- function(tf_l, ids) {
-  
-  tfs <- names(tf_l)
-  exp_vec <- setNames(rep(0, length(ids)), ids)
-  
-  topk_l <- lapply(tfs, function(tf) {
-    tf_topk <- tf_l[[tf]]$Experiment
-    exp_vec[match(tf_topk$ID, ids)] <- tf_topk$Topk
-    exp_vec
-  })
-  
-  topk_mat <- do.call(rbind, topk_l)
-  colnames(topk_mat) <- ids
-  rownames(topk_mat) <- tfs
-  
-  return(topk_mat)
-}
 
 
 
