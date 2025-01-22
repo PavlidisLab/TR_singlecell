@@ -1,4 +1,5 @@
-## 
+## Perform an iterative subsampling procedure to see how many datasets on average
+## are required to recover 80% of the global/aggregate profiles
 ## -----------------------------------------------------------------------------
 
 library(tidyverse)
@@ -11,34 +12,38 @@ source("R/utils/functions.R")
 source("R/00_config.R")
 
 k <- 200
-n_iter <- 100
+n_iter <- 100  # how many iterations per subsample step
 
 # Table of assembled scRNA-seq datasets
 sc_meta <- read.delim(sc_meta_path, stringsAsFactors = FALSE)
 
 # IDs for scRNA-seq datasets
 ids_hg <- filter(sc_meta, Species == "Human")$ID
-# ids_mm <- filter(sc_meta, Species == "Mouse")$ID
+ids_mm <- filter(sc_meta, Species == "Mouse")$ID
 
 # Protein coding genes and TFs
 pc_hg <- read.delim(ens_hg_path, stringsAsFactors = FALSE)
 tfs_hg <- read.delim(tfs_hg_path, stringsAsFactors = FALSE)
-# pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
-# tfs_mm <- read.delim(tfs_mm_path, stringsAsFactors = FALSE)
+pc_mm <- read.delim(ens_mm_path, stringsAsFactors = FALSE)
+tfs_mm <- read.delim(tfs_mm_path, stringsAsFactors = FALSE)
 
 # Measurement matrices used for filtering when a gene was never expressed
 msr_hg <- readRDS(msr_mat_hg_path)
-# msr_mm <- readRDS(msr_mat_mm_path)
+msr_mm <- readRDS(msr_mat_mm_path)
 
 comsr_hg <- readRDS(comsr_mat_hg_path)
-# comsr_mm <- readRDS(comsr_mat_mm_path)
+comsr_mm <- readRDS(comsr_mat_mm_path)
 
 # List of topk similarity metrics
 pair_sim_l <- readRDS(paste0("/space/scratch/amorin/TRsc_output/human_mouse_topk=", k, "_similarity_df.RDS"))
 
+# TODO: name and config
+file_hg <- "/space/scratch/amorin/TRsc_output/dataset_subsample_cor_hg.RDS"
+file_mm <- "/space/scratch/amorin/TRsc_output/dataset_subsample_cor_mm.RDS"
 
 
-#
+
+# Functions
 # ------------------------------------------------------------------------------
 
 
@@ -208,8 +213,6 @@ subsample_all_tfs <- function(agg_l, tfs, msr_mat, k, ncore) {
 # ------------------------------------------------------------------------------
 
 
-# file_hg <- "/space/scratch/amorin/TRsc_output/dataset_subsample_cor_hg.RDS"
-file_hg <- "/space/scratch/amorin/TRsc_output/old_dataset_subsample_cor_hg.RDS"
 
 
 if (!file.exists(file_hg)) {
@@ -255,7 +258,7 @@ ndat_for_recovery <- function(tf_l, recover = 0.8) {
     
     min_step <- summ_df %>% 
       filter(Mean > (k * recover)) %>% 
-      slice_min(Mean, n = 1) %>% 
+      slice_min(Mean, n = 1, with_ties = FALSE) %>% 
       pull(N_step)
     
     data.frame(Min_step = min_step,
@@ -274,7 +277,8 @@ ndat_for_recovery <- function(tf_l, recover = 0.8) {
 
 # Check against average pairwise similarity of experiments
 
-rec_df <- ndat_for_recovery(tf_l)
+rec_df <- ndat_for_recovery(tf_l) %>% 
+  left_join(pair_sim_l$Human, by = "Symbol")
 
 
 
@@ -291,6 +295,7 @@ fit_exponential <- function(df, k = 200, b_init = 0.1) {
 }
 
 
+
 fits_l <- lapply(tf_l, function(x) fit_exponential(x$Steps))
 
 
@@ -299,8 +304,7 @@ params_df <- lapply(fits_l, function(x) coef(x)["b"]) %>%
   do.call(rbind, .) %>% 
   as.data.frame() %>% 
   rownames_to_column(var = "Symbol") %>% 
-  left_join(rec_df, by = "Symbol") %>% 
-  left_join(pair_sim_l$Human, by = "Symbol")
+  left_join(rec_df, by = "Symbol")
 
 
 cor(select_if(params_df, is.numeric), method = "spearman", use = "pairwise.complete.obs")
@@ -321,13 +325,18 @@ ggplot(params_df, aes(x = Mean, y = Prop_total)) +
   theme(text = element_text(size = 20))
 
 
-ggplot(params_df, aes(x = Prop_total)) +
-  geom_histogram(bins = 100) +
+pz <- ggplot(params_df, aes(x = Prop_total)) +
+  geom_histogram(bins = 100, col = "slategrey", fill = "slategrey") +
+  ggtitle("Human") +
   ylab("Count TRs") +
-  xlab("Proportion of recovery") +
+  xlab("Proportion of datasets needed for recovery") +
   theme_classic() +
-  theme(text = element_text(size = 20),
+  theme(text = element_text(size = 25),
         plot.margin = margin(c(10, 20, 10, 10)))
+
+
+ggsave(pz, height = 9, width = 9, device = "png", dpi = 300,
+    filename = file.path(plot_dir, "dataset_proportion_recovery_hist.png"))
 
 
 ggplot(params_df, aes(x = 1 - Prop_total)) +
@@ -339,12 +348,10 @@ ggplot(params_df, aes(x = 1 - Prop_total)) +
         plot.margin = margin(c(10, 20, 10, 10)))
 
 
-
-
 ggplot(params_df, aes(x = b)) +
   geom_histogram(bins = 100) +
   ylab("Count TRs") +
-  xlab("Exponential coefficient") +
+  xlab("Exponential coefficient (b)") +
   theme_classic() +
   theme(text = element_text(size = 20),
         plot.margin = margin(c(10, 20, 10, 10)))
@@ -460,7 +467,8 @@ topk_mat <- topk_to_mat(tf_l, ids_hg)
 
 expwise_mean <- data.frame(
   ID = colnames(rs_mat),
-  Mean_rank_topk = colMeans(rs_mat)) 
+  Mean_rank_topk = colMeans(rs_mat)) %>% 
+  arrange(Mean_rank_topk)
 
 
 
@@ -468,7 +476,7 @@ expwise_mean <- data.frame(
 # ------------------------------------------------------------------------------
 
 
-plot_tf <- "MXD1"
+plot_tf <- "NEUROD6"
 
 
 pdf1 <- tf_l[[plot_tf]]$Experiments %>% 
@@ -506,14 +514,14 @@ p2 <-
   geom_point(shape = 19, colour = "firebrick") +
   geom_vline(xintercept = min_step, linetype = "dashed", colour = "black") +
   geom_hline(yintercept = (k * 0.8), linetype = "dashed", colour = "black") +
-  # geom_smooth() +
   ylim(c(0, k)) +
   ylab(expr("Top"[!!k])) +
   xlab("Count of sampled experiments") +
   ggtitle(plot_tf) +
   theme_classic() +
   theme(text = element_text(size = 25),
-        axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1))
+        axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1),
+        plot.margin = margin(10, 20, 10, 10))
 
 
 p2_reduced <- p2 + 
@@ -521,7 +529,13 @@ p2_reduced <- p2 +
   ggtitle(NULL)
 
 
-egg::ggarrange(p1, p2_reduced, nrow = 1, widths = c(0.3, 1))
+py <- egg::ggarrange(p1, p2_reduced, nrow = 1, widths = c(0.3, 1))
+
+
+
+ggsave(py, height = 8, width = 16, device = "png", dpi = 300,
+    filename = file.path(plot_dir, paste0(plot_tf, "_dataset_saturation.png")))
+
 
 
 heat_rs <- pheatmap::pheatmap(rs_mat,
@@ -564,7 +578,7 @@ cor_ncts <- round(cor(cut_df$Mean_rank_topk, log10(cut_df$N_celltypes), method =
 px1 <- ggplot(cut_df, aes(x = N_genes, y = Mean_rank_topk)) +
   geom_point(shape = 21, size = 3) +
   geom_smooth(method = "lm") +
-  # ggtitle(paste0("Spearman's correlation = ", cor_ngenes)) +
+  ylim(c(0, 0.8)) +
   xlab("Count of genes") +
   ylab("Aggreement with global") +
   theme_classic() +
@@ -574,8 +588,8 @@ px1 <- ggplot(cut_df, aes(x = N_genes, y = Mean_rank_topk)) +
 px2 <- ggplot(cut_df, aes(x = log10(N_cells), y = Mean_rank_topk)) +
   geom_point(shape = 21, size = 3) +
   geom_smooth(method = "lm") +
-  # ggtitle(paste0("Spearman's correlation = ", cor_ncells)) +
-  xlab("Log10 count of cells") +
+  ylim(c(0, 0.8)) +
+  xlab(expr("Log"[10] ~ "count of cells")) +
   ylab("Aggreement with global") +
   theme_classic() +
   theme(text = element_text(size = 20))
@@ -584,19 +598,54 @@ px2 <- ggplot(cut_df, aes(x = log10(N_cells), y = Mean_rank_topk)) +
 px3 <- ggplot(cut_df, aes(x = log10(N_celltypes), y = Mean_rank_topk)) +
   geom_point(shape = 21, size = 3) +
   geom_smooth(method = "lm") +
-  # ggtitle(paste0("Spearman's correlation = ", cor_ncts)) +
-  xlab("Log10 count of cell types") +
+  ylim(c(0, 0.8)) +
+  xlab(expr("Log"[10] ~ "count of cell types")) +
   ylab("Aggreement with global") +
   theme_classic() +
   theme(text = element_text(size = 20))
 
 
-egg::ggarrange(px1, px2, px3, nrow = 1)
+
+px4 <- ggplot(cut_df, aes(x = Is_10X, y = Mean_rank_topk)) +
+  geom_boxplot(width = 0.2, fill = "slategrey") +
+  ylim(c(0, 0.8)) +
+  xlab("Contains cells from 10X platform") +
+  ylab("Aggreement with global") +
+  theme_classic() +
+  theme(text = element_text(size = 20))
 
 
-pheatmap::pheatmap(t(sort(expwise_mean$Mean_rank_topk)), 
+p3 <- egg::ggarrange(px1, 
+                     px2 + theme(axis.title.y = element_blank()), 
+                     px3 + theme(axis.title.y = element_blank()), 
+                     nrow = 1)
+
+
+ggsave(p3, height = 6, width = 18, device = "png", dpi = 300,
+    filename = file.path(plot_dir, "ind_dataset_avg_agree_with_global_scatter.png"))
+
+
+pheatmap::pheatmap(expwise_mean[, "Mean_rank_topk", drop = FALSE], 
+                   cluster_rows = FALSE,
+                   cluster_cols = FALSE,
+                   show_colnames = FALSE,
+                   cellheight = 12,
+                   cellwidth = 20,
+                   fontsize = 15,
+                   # color = colorRampPalette(c("#0571b0", "white", "#ca0020"))(100),
+                   color = colorRampPalette(c("white", "#ca0020"))(100),
+                   border_color = "black",
+                   filename = file.path(plot_dir, "ind_dataset_avg_agree_with_global.png"))
+
+
+pheatmap::pheatmap(t(expwise_mean[, "Mean_rank_topk", drop = FALSE]), 
                    cluster_rows = FALSE,
                    cluster_cols = FALSE,
                    show_rownames = FALSE,
-                   cellheight = 25,
-                   fontsize = 15)
+                   cellheight = 20,
+                   cellwidth = 12,
+                   fontsize = 15,
+                   # color = colorRampPalette(c("#0571b0", "white", "#ca0020"))(100),
+                   color = colorRampPalette(c("white", "#ca0020"))(100),
+                   border_color = "black",
+                   filename = file.path(plot_dir, "ind_dataset_avg_agree_with_global.png"))
