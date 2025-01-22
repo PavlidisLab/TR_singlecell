@@ -274,6 +274,7 @@ plot_params <- list(
   list(data = go_coexpr_filt_hg$ASCL1, title = "ASCL1 human ranking", filename = "GO_ASCL1_human_coexpr.png"),
   list(data = go_coexpr_filt_mm$Ascl1, title = "ASCL1 mouse ranking", filename = "GO_ASCL1_mouse_coexpr.png"),
   list(data = go_coexpr_filt_hg$OLIG1, title = "Human OLIG1", filename = "GO_OLIG1_human_coexpr.png"),
+  list(data = go_coexpr_filt_mm$Olig2, title = "Mouse OLIG2", filename = "GO_OLIG2_mouse_coexpr.png"),
   list(data = go_coexpr_filt_mm$Irf8, title = "Mouse Irf8", filename = "GO_Irf8_mouse_coexpr.png"),
   list(data = go_coexpr_filt_hg$NEUROD6, title = "Human NEUROD6", filename = "GO_NEUROD6_human_coexpr.png"),
   list(data = go_coexpr_filt_mm$Gata1, title = "Mouse Gata1", filename = "GO_Gata1_mouse_coexpr.png"),
