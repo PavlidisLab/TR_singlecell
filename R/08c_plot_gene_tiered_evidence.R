@@ -210,3 +210,18 @@ pheatmap(t(curated_vec),
          width = 14,
          filename = file.path(plot_dir, paste0(plot_tf, "_curation_heatmap_nolabel.png"))
 )
+
+
+
+# Saving a histogram of ASCL1 aggr coexpr values for schematic in Supp Fig1
+
+p_hist <- ggplot(rank_hg[[plot_tf]], aes(x = Avg_aggr_coexpr)) + 
+  geom_histogram(bins = 50, fill = "black", col = "black") +
+  ylab("Count of genes") +
+  xlab("Average coexpression profile") +
+  theme_classic() +
+  theme(text = element_text(size = 25))
+
+
+ggsave(p_hist, height = 6, width = 10, device = "png", dpi = 300, bg = "white",
+       filename = file.path(plot_dir, "demo_ASCL1_average_coexpr_profile.png"))
