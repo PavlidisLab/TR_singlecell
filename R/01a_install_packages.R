@@ -33,7 +33,8 @@ packages <- c(
   "qlcMatrix",
   "microbenchmark",
   "credentials",
-  "rJava"
+  "rJava",
+  "egg"
 )
 
 
