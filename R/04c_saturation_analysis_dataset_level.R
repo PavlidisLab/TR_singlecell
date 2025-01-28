@@ -491,22 +491,22 @@ plot_topk_ind <- function(gene, gene_l, k) {
   
   # Create a group label for the single experiment that had the best TopK
   plot_df <- gene_l[[gene]]$Experiments %>% 
-  mutate(Label = ID %in% slice_max(., Topk, n = 1)$ID,
+  mutate(Label = ID %in% slice_max(., Topk, n = 1, with_ties = FALSE)$ID,
          Group = factor(1, levels = 1))
   
   ggplot(plot_df, aes(y = Topk, x = Group)) +
     geom_boxplot(width = 0.1) +
     geom_jitter(aes(x = Group, y = Topk), 
-                shape = 21, colour = "darkblue", width = 0.02, height = 0) +
+                shape = 21, colour = "slategrey", width = 0.02, height = 0) +
     geom_label_repel(data = filter(plot_df, Label),
                      aes(x = Group, y = Topk, label = ID),
-                     nudge_x = 0.3, nudge_y = 5, size = 6) +
+                     nudge_x = -0.3, nudge_y = 5, size = 6) +
     ylim(c(0, k)) +
     ylab(expr("Top"[!!k])) +
     xlab("Individual experiments") +
     ggtitle(gene) +
     theme_classic() +
-    theme(text = element_text(size = 25),
+    theme(text = element_text(size = 30),
           axis.text.x = element_blank(),
           axis.ticks.x = element_blank())
 }
@@ -531,7 +531,7 @@ plot_topk_steps <- function(gene, gene_l, summ_df, k) {
     xlab("Count of sampled experiments") +
     ggtitle(gene) +
     theme_classic() +
-    theme(text = element_text(size = 25),
+    theme(text = element_text(size = 30),
           axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1),
           plot.margin = margin(10, 20, 10, 10))
 }
@@ -544,11 +544,11 @@ plot_topk_steps <- function(gene, gene_l, summ_df, k) {
 
 px1a <- plot_topk_ind("E2F8", hg_l, k)
 px1b <- plot_topk_steps("E2F8", hg_l, summ_topk_hg, k) + ylab(NULL) + ggtitle(NULL)
-px1 <- egg::ggarrange(px1a, px1b, nrow = 1, widths = c(0.3, 1))
+px1 <- egg::ggarrange(px1a, px1b, nrow = 1, widths = c(0.4, 1))
 
 px2a <- plot_topk_ind("PAX6", hg_l, k)
 px2b <- plot_topk_steps("PAX6", hg_l, summ_topk_hg, k) + ylab(NULL) + ggtitle(NULL)
-px2 <- egg::ggarrange(px2a, px2b, nrow = 1, widths = c(0.3, 1))
+px2 <- egg::ggarrange(px2a, px2b, nrow = 1, widths = c(0.4, 1))
 
 
 ggsave(px1, height = 8, width = 16, device = "png", dpi = 300,
@@ -580,8 +580,8 @@ plot_agree_scatter <- function(df, xvar, xlab) {
 plot_agree_boxplot <- function(df) {
   
   ggplot(df, aes(x = Has_10X, y = Global_agreement)) +
-  geom_boxplot(width = 0.2) +
-  geom_jitter(width = 0.1, shape = 21, size = 2.1, fill = "slategrey", alpha = 0.4) +
+  geom_boxplot(width = 0.2, fill = "slategrey", alpha = 0.4) +
+  geom_jitter(width = 0.1, shape = 21, size = 2.1, alpha = 0.6) +
   ylim(c(0, 0.8)) +
   xlab("Contains cells from 10X platform") +
   ylab("Aggreement with global") +
