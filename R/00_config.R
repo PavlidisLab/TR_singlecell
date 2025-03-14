@@ -110,7 +110,7 @@ curated_all_path <- paste0(meta_dir, "Curated_targets_all_Sept2023.tsv")
 # Unibind summarized ChIP-seq data
 # This lives on the Pavlab servers, and was generated via: 
 # https://github.com/PavlidisLab/Unibind_analysis/
-bind_summary_path <- "/space/scratch/amorin/R_objects/unibind_Permissive_bindscore_summary.RDS"
+bind_summary_path <- "/space/scratch/amorin/Unibind/unibind_Permissive_bindscore_summary.RDS"
 
 
 # List of literature curation benchmark performances
