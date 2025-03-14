@@ -12,6 +12,7 @@ source("R/00_config.R")
 
 k <- 200
 agg_method = "allrank"
+set.seed(5)
 
 
 # Table of assembled scRNA-seq datasets
@@ -87,11 +88,12 @@ if (!file.exists(file)) {
 
 
 # Examining TF expression
+# TODO: log2 enforces dense matrix which really blows this up. consider skipping
 # ------------------------------------------------------------------------------
 
 
-mat_ss_log <- log2(mat_ss + 1)
-mat_10x_log <- log2(mat_10x + 1)
+# mat_ss_log <- log2(mat_ss + 1)
+# mat_10x_log <- log2(mat_10x + 1)
 
 
 avg_expr_mat <- function(mat, meta, cts, tfs) {
@@ -112,40 +114,54 @@ avg_expr_mat <- function(mat, meta, cts, tfs) {
 }
 
 
-avg_ss <- avg_expr_mat(mat_ss_log, meta_ss, common_cts, tfs_mm$Symbol)
-avg_10x <- avg_expr_mat(mat_10x_log, meta_10x, common_cts, tfs_mm$Symbol)
-gc()
+# avg_ss <- avg_expr_mat(mat_ss_log, meta_ss, common_cts, tfs_mm$Symbol)
+# avg_10x <- avg_expr_mat(mat_10x_log, meta_10x, common_cts, tfs_mm$Symbol)
+# gc()
 
+
+avg_ss <- avg_expr_mat(mat_ss, meta_ss, common_cts, tfs_mm$Symbol)
+avg_10x <- avg_expr_mat(mat_10x, meta_10x, common_cts, tfs_mm$Symbol)
 
 all0_ss <- which(rowSums(avg_ss) == 0)
 all0_10x <- which(rowSums(avg_10x) == 0)
-keep <- setdiff(tfs_mm$Symbol, intersect(names(all0_ss), names(all0_10x)))
 
 
-avg_ss <- avg_ss[keep, ]
-avg_10x <- avg_10x[keep, ]
+# Only keep genes measured in at least 1 cell type in either dataset
+msr_10x <- length(common_cts) - diag(agg_l$Agg_10x$NA_mat)
+msr_ss <- length(common_cts) - diag(agg_l$Agg_SS$NA_mat)
+
+keep_10x <- names(msr_10x[msr_10x >= 1])
+keep_ss <- names(msr_ss[msr_ss >= 1])
+keep <- union(keep_10x, keep_ss)
+keep_tf <- intersect(keep, tfs_mm$Symbol)
 
 
-avg_topk <- pair_colwise_topk(avg_ss, avg_10x, k = k, ncores = ncore)
-avg_scor <- pair_colwise_cor(avg_ss, avg_10x, cor_method = "spearman", ncores = ncore)
 
-
-avg_topk_shuffle <- unlist(lapply(1:10, function(iter) {
-  pair_shuffle_topk(avg_ss, avg_10x, k = k, ncores = ncore)
-}))
-
-
-plot(density(avg_topk_shuffle))
-abline(v = mean(avg_topk))
-
-
-colnames(avg_ss) <- paste0(common_cts, "_SS")
-colnames(avg_10x) <- paste0(common_cts, "_10x")
-all_topk_mat <- colwise_topk_intersect(cbind(avg_ss, avg_10x), k = k)
-all_topk_df <- mat_to_df(all_topk_mat)
-
-all_scor_mat <- cor(cbind(avg_ss, avg_10x), method = "spearman")
-all_scor_df <- mat_to_df(all_scor_mat)
+# Looking at the overlap between average/pseudobulked expression profiles between cell types
+# avg_ss <- avg_ss[keep, ]
+# avg_10x <- avg_10x[keep, ]
+# 
+# 
+# avg_topk <- pair_colwise_topk(avg_ss, avg_10x, k = k, ncores = ncore)
+# avg_scor <- pair_colwise_cor(avg_ss, avg_10x, cor_method = "spearman", ncores = ncore)
+# 
+# 
+# avg_topk_shuffle <- unlist(lapply(1:10, function(iter) {
+#   pair_shuffle_topk(avg_ss, avg_10x, k = k, ncores = ncore)
+# }))
+# 
+# 
+# plot(density(avg_topk_shuffle))
+# abline(v = mean(avg_topk))
+# 
+# 
+# colnames(avg_ss) <- paste0(common_cts, "_SS")
+# colnames(avg_10x) <- paste0(common_cts, "_10x")
+# all_topk_mat <- colwise_topk_intersect(cbind(avg_ss, avg_10x), k = k)
+# all_topk_df <- mat_to_df(all_topk_mat)
+# 
+# all_scor_mat <- cor(cbind(avg_ss, avg_10x), method = "spearman")
+# all_scor_df <- mat_to_df(all_scor_mat)
 
 
 
@@ -161,48 +177,61 @@ ggplot(common_counts, aes(x = log10(n_smartseqV2), y = log10(n_10XV2))) +
   theme(text = element_text(size = 20))
 
 
+# Diag to 0 to prevent inflated overlaps compared to null
+mat1 <- agg_l$Agg_SS$Agg_mat[keep, keep]
+mat2 <- agg_l$Agg_10x$Agg_mat[keep, keep]
+
+diag(mat1) <- diag(mat2) <- 0
 
 
-
-agg_topk <- pair_colwise_topk(mat1 = agg_l$Agg_SS$Agg_mat, 
-                              mat2 = agg_l$Agg_10x$Agg_mat, 
+agg_topk <- pair_colwise_topk(mat1 = mat1, 
+                              mat2 = mat2, 
                               k = k, 
                               ncores = ncore)
 
 
-# agg_shuffle_topk <- pair_shuffle_topk(mat1 = agg_l$Agg_SS$Agg_mat, 
-#                                       mat2 = agg_l$Agg_10x$Agg_mat, 
-#                                       k = k, 
-#                                       ncores = ncore)
-
-
-
-agg_shuffle_topk <- pair_shuffle_topk(mat1 = agg_l$Agg_SS$Agg_mat[, keep], 
-                                      mat2 = agg_l$Agg_10x$Agg_mat[, keep], 
+# Using measured TRs as null comparison
+agg_shuffle_topk <- pair_shuffle_topk(mat1 = mat1[, keep_tf], 
+                                      mat2 = mat2[, keep_tf], 
                                       k = k, 
                                       ncores = ncore)
 
 
 plot(density(agg_shuffle_topk), col = "red")
-lines(density(agg_topk[keep]), col = "black")
+lines(density(agg_topk[keep_tf]), col = "black")
 
 summary(agg_shuffle_topk)
 summary(agg_topk)
-summary(agg_topk[keep])
-
-wilcox.test(x = agg_shuffle_topk, y = agg_topk[keep])
+summary(agg_topk[keep_tf])
 
 
-data.frame(
-  Topk = c(agg_topk[keep], agg_shuffle_topk),
-  Group = c(rep("TR", length(agg_topk[keep])), rep("Shuffled", length(agg_shuffle_topk)))
-) %>% 
-  ggplot(., aes(x = Topk, y = Group)) +
+topk_wilx <- wilcox.test(x = agg_shuffle_topk, y = agg_topk[keep_tf])
+
+stopifnot(topk_wilx$p.value < 2.2e-16)
+lab1 <- "GSE132042: 10X and Smartseq2 overlap"
+lab2 <- paste0("n=", length(keep_tf), " TRs  (Wilcoxon test p.value < 2.2e-16)")
+
+
+plot_df <- data.frame(
+  Topk = c(agg_topk[keep_tf], 
+           agg_shuffle_topk),
+  Group = c(rep("TR", length(agg_topk[keep_tf])), 
+            rep("Shuffled", length(agg_shuffle_topk))))
+
+
+px <- ggplot(plot_df, aes(x = Topk, y = Group)) +
   geom_boxplot() +
-  xlab("Top200") +
+  xlab(expr("Top"[!!k])) +
+  ggtitle(label = lab1, subtitle = lab2) +
   theme_classic() +
-  theme(text = element_text(size = 20),
+  theme(text = element_text(size = 15),
+        plot.subtitle = element_text(color = "firebrick"),
         axis.title.y = element_blank())
+
+
+
+ggsave(px, height = 2.5, width = 6, device = "png", dpi = 300,
+    filename = file.path(plot_dir, "GSE132042_platform_comparison.png"))
 
 
 mat1 <- agg_l$Agg_SS$Agg_mat[, keep]
@@ -224,11 +253,14 @@ agg_shuffle_scor <- pair_shuffle_cor(mat1 = mat1,
                                      cor_method = "spearman",
                                      ncores = ncore)
 
-plot(density(agg_shuffle_scor, na.rm = TRUE), xlim = c(-0.4, 1))
-lines(density(diag(agg_scor), na.rm = TRUE), col = "red")
+
+plot(density(diag(agg_scor), na.rm = TRUE), col = "red")
+lines(density(agg_shuffle_scor, na.rm = TRUE), xlim = c(-0.4, 1))
+
 
 
 check_tf <- "Hmmr"
+
 df <- data.frame(Agg_10x = agg_l$Agg_SS$Agg_mat[, check_tf],
                  Agg_SS = agg_l$Agg_10x$Agg_mat[, check_tf])
 

@@ -248,39 +248,14 @@ pdf1 <- data.frame(
 )
 
 
-ggplot(pdf1, aes(x = Group, y = AUROC)) +
-  geom_boxplot() +
+p1a <- ggplot(pdf1, aes(x = AUROC, y = Group)) +
+  geom_boxplot(fill = "slategrey", width = 0.4) +
+  ggtitle("Bulk versus single cell coexpression curation benchmark") +
   theme_classic() +
-  theme(text = element_text(size = 20))
+  theme(text = element_text(size = 20),
+        axis.title.x = element_blank())
 
 
-ggplot(pdf1, aes(x = Group, y = AUROC_quantile)) +
-  geom_boxplot() +
-  theme_classic() +
-  theme(text = element_text(size = 20))
-
-
-
-ggplot(pdf1, aes(x = Group, y = AUPRC)) +
-  geom_boxplot() +
-  theme_classic() +
-  theme(text = element_text(size = 20))
-
-
-ggplot(pdf1, aes(x = Group, y = AUPRC_quantile)) +
-  geom_boxplot() +
-  theme_classic() +
-  theme(text = element_text(size = 20))
-
-
-
-plot(all_auc_df$N_targets_GTEX, all_auc_df$N_targets_SC)
-summary(all_auc_df$N_targets_GTEX - all_auc_df$N_targets_SC)
-
-
-plot(all_auc_df$AUROC_GTEX, all_auc_df$AUROC_SC)
-plot(all_auc_df$AUPRC_GTEX, all_auc_df$AUPRC_SC)
-cor(all_auc_df$AUROC_GTEX, all_auc_df$AUROC_SC)
 
 
 # GTEX as individual experiment relative to single cell individual experiments
@@ -329,31 +304,15 @@ tt2 <- do.call(rbind, tt2) %>%
 pdf2 <- data.frame(
   Group = c(rep("SC", nrow(tt2)), rep("GTEX", nrow(tt2))),
   AUROC_quantile = c(tt2$AUROC_quantile_Avg, tt2$AUROC_quantile_GTEX),
-  AUPRC_quantile = c(tt2$AUROC_quantile_Avg, tt2$AUPRC_quantile_GTEX)
+  AUPRC_quantile = c(tt2$AUPRC_quantile_Avg, tt2$AUPRC_quantile_GTEX)
 )
 
 
 
-ggplot(pdf2, aes(x = Group, y = AUROC_quantile)) +
-  geom_boxplot() +
+ggplot(pdf2, aes(x = AUROC_quantile, y = Group)) +
+  geom_boxplot(fill = "slategrey", width = 0.4) +
+  ggtitle("Aggregate profile performance relative to individual profiles") +
+  ylab("AUROC Quantile") +
   theme_classic() +
-  theme(text = element_text(size = 20))
-
-
-ggplot(pdf2, aes(x = Group, y = AUPRC_quantile)) +
-  geom_boxplot() +
-  theme_classic() +
-  theme(text = element_text(size = 20))
-
-
-plot(density(tt2$AUROC_quantile_Avg), col = "red")
-lines(density(tt2$AUROC_quantile_GTEX))
-
-
-ggplot(tt2, aes(x = AUROC_quantile_Avg)) +
-  geom_histogram(bins = 100, colour = "slategrey", fill = "slategrey") +
-  geom_vline(xintercept = median(tt2$AUROC_quantile_Avg), col = "black") +
-  geom_vline(xintercept = median(tt2$AUROC_quantile_GTEX), col = "red") +
-  theme_classic() +
-  theme(text = element_text(size = 20))
-
+  theme(text = element_text(size = 20),
+        axis.title.x = element_blank())
