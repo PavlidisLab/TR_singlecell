@@ -2,17 +2,11 @@
 ## -----------------------------------------------------------------------------
 
 
-# TODO: centralize external dependencies (DIOPT input, curated, evidence, unibind)
-
-
 # Cores for parallel::
 ncore <- 8
 
 
-
-
 # Main directories
-# TODO: consider one total base
 # ---
 
 # Meta table dir (protein coding, TFs, ribo, curated targets, final experiments)
@@ -28,13 +22,13 @@ sc_dir <- "/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_pr
 
 
 # Location of processed single cell data and aggregate coexpression matrices
-# TODO: how much of pain for a more descriptive name
 amat_dir <- "/space/scratch/amorin/TR_singlecell/"
 
 
 # Various outputs like .RDS files
 output_dir <- "/space/scratch/amorin/TRsc_output/"
 
+# ---
 
 
 
@@ -61,21 +55,13 @@ tfs_mm_path <- paste0(meta_dir, "AnimalTFDB_mouse_V4.tsv")
 ribo_path <- paste0(meta_dir, "L_S_ribosomal_ortho_genes.tsv")
 
 
-# TR-target rankings from genomics evidence
-# TODO: better path
-evidence_path <- "/space/scratch/amorin/R_objects/ranked_target_list_Apr2022.RDS"
-
-
-
 # Gsheets ID for TRsc datasets, local copy of raw meta, and final
-# TODO: reconsider, esp. var name
-# TODO: supp fig #?
 gsheets_id <- "1SQx_rFdBNBwOEdChaHkbQY1vStcbuA3fF0CZk6YECEc"
 gsheets_meta_raw_path <- paste0(meta_dir, "gsheets_single_cell_dataset_meta_raw.tsv")
 sc_meta_path <- paste0(meta_dir, "single_cell_dataset_meta.tsv")
 
 
-# List of author-annotaed cell types per dataset
+# List of author-annotated cell types per dataset
 celltype_list_path <- paste0(output_dir, "celltype_list.RDS")
 
 
@@ -114,7 +100,6 @@ rank_int_ortho_path <- paste0(output_dir, "ranking_agg_integrated_TF_ortho.RDS")
 
 
 # Curated targets from on going curation and from Eric's 2021 paper
-# TODO: reconsider, esp. var name
 gsheets_curated <- "1rKu0inmJt67q50cz18ccmMARXd9E_LQNElsWW7tn5j8"
 pavlab_curation_path <- paste0(meta_dir, "pavlab_curation_sep2023.tsv")
 chu2021_records_path <- paste0(meta_dir, "Chu2021_records_DTRI.tsv")
@@ -123,10 +108,9 @@ curated_all_path <- paste0(meta_dir, "Curated_targets_all_Sept2023.tsv")
 
 
 # Unibind summarized ChIP-seq data
-# TODO: re-assess unibind output
-bind_dat_path <- "/space/scratch/amorin/R_objects/processed_unibind_data.RDS"
+# This lives on the Pavlab servers, and was generated via: 
+# https://github.com/PavlidisLab/Unibind_analysis/
 bind_summary_path <- "/space/scratch/amorin/R_objects/unibind_Permissive_bindscore_summary.RDS"
-bind_model_path <- "/space/scratch/amorin/R_objects/unibind_bindscore_modelfit.RDS"
 
 
 # List of literature curation benchmark performances
@@ -143,7 +127,6 @@ int_auc_mm_path <- paste0(output_dir, "integrated_recover_curated_mm.RDS")
 
 
 # Summary tables of literature curation benchmark performance
-# TODO: supp fig #?
 auc_table_hg_path <- paste0(output_dir, "curation_benchmark_summary_hg.tsv")
 auc_table_mm_path <- paste0(output_dir, "curation_benchmark_summary_mm.tsv")
 
