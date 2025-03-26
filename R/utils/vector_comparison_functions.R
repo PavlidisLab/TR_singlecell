@@ -10,16 +10,18 @@ library(ROCR)
 
 
 
-# Aggregate vectors are ranked with ties which causes clumping of NA==0 values,
-# and so selecting the top k elements may include uninformative NAs. This checks
-# for ties at the kth position, and if found, returns the first non-tied k index
-# of vec_sort
+# Aggregate vectors have NA values imputed to 0, and are ranked with ties 
+# causing clumping of these uninformative values. Selecting the TopK elements
+# may include these tied values. This checks for ties at the kth position, and 
+# if found, returns a new smaller k value that excludes these ties.
 # vec_sort: named numeric vector assumed to be sorted
 # k: an integer
 # decreasing: logical of whether vec_sort sorted from high to low?
 # returns: an integer
 
 check_k <- function(vec_sort, k, decreasing = TRUE) {
+  
+  stopifnot(k <= length(vec_sort))
   
   if (!decreasing) vec_sort <- -vec_sort
   
