@@ -64,17 +64,22 @@ topk_intersect <- function(vec1, vec2) length(intersect(vec1, vec2))
 
 
   
-# Binarize matrix such that top k and bottom k is 1, everything else 0
-# Speed of name overlap versus logical gt/lt scores was basically identical
-# TODO: 
+# Binarize matrix such that top k and bottom k *of each column* is 1, else 0.
+# Used for downstream Jaccard similarity calculations.
+# mat: numeric matrix with named elements
+# k: an integer specifying how many top and bottom elements to select
+# check_k_arg: logical; if TRUE, adjust k to avoid ties at the cutoff
+# return: a binary matrix where the top k and bottom k elements in each column 
+# are 1, all others are 0.
 
 binarize_topk_btmk <- function(mat, k, check_k_arg = TRUE) {
   
   bin_mat <- apply(mat, 2, function(vec) {
     
+    # sort values in decreasing order, preserving names
     vec_sort <- sort(vec, decreasing = TRUE)
   
-    # Check if ties are encountered before k in either direction
+    # check if k needs adjustment due to ties at the cutoff
     if (check_k_arg) {
       k_upper <- check_k(vec_sort, k = k)
       k_lower <- check_k(vec_sort, k = k, decreasing = FALSE)
@@ -82,12 +87,15 @@ binarize_topk_btmk <- function(mat, k, check_k_arg = TRUE) {
       k_upper <- k_lower <- k
     }
     
-    # k_lower is relative to lowest value as k=1, flip so relative to dec. sort
+    # Convert k_lower from "relative to ascending order" to "relative to descending order"
+    # Since vec_sort is in decreasing order, we need to count from the end
     k_lower <- length(vec_sort) - (k_lower - 1)
     
-    # Get the top and bottom genes and return binary vector of their presence
+    # Select the top-k and bottom-k elements based on adjusted indices
     topk <- names(vec_sort[1:k_upper])
     btmk <- names(vec_sort[k_lower:length(vec_sort)])
+    
+    # Generate a binary vector indicating presence in top k or bottom k
     bin_vec <- ifelse(names(vec) %in% c(topk, btmk), 1, 0)
     names(bin_vec) <- names(vec)
     
