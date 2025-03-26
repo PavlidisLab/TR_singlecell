@@ -38,11 +38,11 @@ check_k <- function(vec_sort, k, decreasing = TRUE) {
 
 
 
-# Sort (bigger = more important) the numeric vec and return the names of the top
-# k elements. 
+# Sort vec and return the names of the Top k elements. 
 # vec: named numeric vector
 # k: an integer
 # check_k_arg: logical controls whether check_k() will be used
+# decreasing: logical of whether higher values are more important
 # return: a character vector of the names of the top k elements of vec
 
 topk_sort <- function(vec, k, check_k_arg = TRUE, decreasing = TRUE) {
