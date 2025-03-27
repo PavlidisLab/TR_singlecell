@@ -2,8 +2,6 @@
 ## ranked vectors
 
 # TODO: consider removal of self gene (and k+1) # rank_vec <- rank_vec[names(rank_vec) != gene]
-# TODO: topk_intersect() is just length of intersect, either rename or include topk sort
-# TODO: binarize top/bottom k needs to use check k arg
 
 source("R/utils/functions.R")
 library(ROCR)
@@ -90,7 +88,47 @@ length_intersect <- function(topk_vec1, topk_vec2) {
 
 
 
+
+# Compute the top-k intersection matrix for all pairs of columns in a matrix.
+# mat: a named numeric matrix
+# k: an integer specifying how many top elements to select.
+# check_k_arg: logical; if TRUE, adjust k to avoid ties at the cutoff
+# decreasing: logical; if TRUE, selects the highest k values, else lowest
+# returns: an ncol(mat) * ncol(mat) integer matrix of top k overlap of mat's columns 
+
+colwise_topk_intersect <- function(mat, 
+                                   k, 
+                                   check_k_arg = TRUE,
+                                   decreasing = TRUE) {
   
+  # Convert matrix into a list of numeric vectors
+  col_list <- asplit(mat, 2)
+  
+  # Pre-subset the top k elements for each column
+  topk_list <- lapply(col_list, function(x) {
+    topk_sort(x, k = k, check_k_arg = check_k_arg, decreasing = decreasing)
+  })
+  
+  # Compute pairwise intersection sizes of top k elements
+  topk_mat <- outer(topk_list, topk_list, Vectorize(length_intersect))
+  
+  return(topk_mat)
+}
+
+
+
+
+# Wrapper to WGCNA's correlation -- defaults to calculating Spearman's cor
+# between each pair of columns in mat
+
+colwise_cor <- function(mat, cor_method = "spearman", ncores = 1) {
+  cor_mat <- WGCNA::cor(x = mat, method = cor_method, nThreads = ncores)
+  return(cor_mat)
+}
+
+
+
+
 # Binarize matrix such that top k and bottom k *of each column* is 1, else 0.
 # Used for downstream Jaccard similarity calculations.
 # mat: numeric matrix with named elements
@@ -134,54 +172,35 @@ binarize_topk_btmk <- function(mat, k, check_k_arg = TRUE) {
 
 
 
+# Compute the pairwise Jaccard similarity between all columns of a matrix. This
+# measures the proportion of shared top/bottom k elements between columns. 
+# mat: numeric matrix with named elements.
+# k: an integer specifying how many top and bottom elements to consider.
+# check_k_arg: logical; if TRUE, adjust k to avoid ties at the cutoff.
+# return: an ncol(mat) x ncol(mat) symmetric matrix of Jaccard similarities.
+# Uses `outer()` instead of a nested loop for efficiency.
+# https://stackoverflow.com/a/66594545 
 
-# Return a matrix of the size of the top k intersect between all columns of mat
-# mat: a named numeric matrix
-# k: an integer
-# check_k_arg: logical controls whether check_k() will be used
-# returns: an ncol(mat) * ncol(mat) integer matrix of top k overlap of mat's columns 
-
-colwise_topk_intersect <- function(mat, 
-                                   k, 
-                                   check_k_arg = TRUE,
-                                   decreasing = TRUE) {
-  
-  col_list <- asplit(mat, 2)
-  
-  topk_list <- lapply(col_list, function(x) {
-    topk_sort(x, k = k, check_k_arg = check_k_arg, decreasing = decreasing)
-  })
-  
-  topk_mat <- outer(topk_list, topk_list, Vectorize(topk_intersect))
-  
-  return(topk_mat)
-}
-
-
-
-# TODO:
-
-colwise_cor <- function(mat, cor_method = "spearman", ncores = 1) {
-  cor_mat <- WGCNA::cor(x = mat, method = cor_method, nThreads = ncores)
-  return(cor_mat)
-}
-
-
-# TODO:
-# https://stackoverflow.com/a/66594545 Jaccard; outer faster than nested loop 
 
 colwise_jaccard <- function(mat, k, check_k_arg = TRUE) {
   
+  # Jaccard similarity function for binary vectors
   jaccard <- function(vec1, vec2) {
     sum(vec1 & vec2, na.rm = TRUE) / sum(vec1 | vec2, na.rm = TRUE)
   }
   
+  # Convert matrix to a binary matrix where top/bottom k elements are 1
   bin_mat <- binarize_topk_btmk(mat, k = k, check_k_arg = check_k_arg)
+  
+  # Convert columns to a list of binary vectors
   col_list <- asplit(bin_mat, 2)
+  
+  # Compute pairwise Jaccard similarities
   jacc_mat <- outer(col_list, col_list, Vectorize(jaccard))
   
   return(jacc_mat)
 }
+
 
 
 
