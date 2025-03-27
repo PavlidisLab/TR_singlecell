@@ -16,7 +16,7 @@ library(ROCR)
 # if found, returns a new smaller k value that excludes these ties.
 # vec_sort: named numeric vector assumed to be sorted
 # k: an integer
-# decreasing: logical of whether vec_sort sorted from high to low?
+# decreasing: logical; if TRUE, selects the highest k values, else lowest
 # returns: an integer
 
 check_k <- function(vec_sort, k, decreasing = TRUE) {
@@ -42,7 +42,7 @@ check_k <- function(vec_sort, k, decreasing = TRUE) {
 # vec: named numeric vector
 # k: an integer
 # check_k_arg: logical controls whether check_k() will be used
-# decreasing: logical of whether higher values are more important
+# decreasing: logical; if TRUE, selects the highest k values, else lowest
 # return: a character vector of the names of the top k elements of vec
 
 topk_sort <- function(vec, k, check_k_arg = TRUE, decreasing = TRUE) {
@@ -57,10 +57,37 @@ topk_sort <- function(vec, k, check_k_arg = TRUE, decreasing = TRUE) {
 
 
 
-# Return the length of the intersect of vec1 and vec2
-# TODO: This is poorly named or should also perform sorting
+# Return the size of the intersect of the top k named elements of vec1 and vec2
+# vec1: named numeric vector
+# vec2: named numeric vector
+# k: an integer specifying how many top elements to select
+# check_k_arg: logical; if TRUE, adjust k to avoid ties at the cutoff
+# decreasing: logical; if TRUE, selects the highest k values, else lowest
+# return: an integer of the size of the top K overlap
 
-topk_intersect <- function(vec1, vec2) length(intersect(vec1, vec2))
+topk_intersect <- function(vec1, 
+                           vec2, 
+                           k, 
+                           check_k_arg = TRUE, 
+                           decreasing = TRUE) {
+  
+  vec_sort1 <- topk_sort(vec1, k, check_k_arg, decreasing)
+  vec_sort2 <- topk_sort(vec2, k, check_k_arg, decreasing)
+  topk <- length(intersect(vec_sort1, vec_sort2))
+  
+  return(topk)
+}
+
+
+
+
+# This helper is used to get length of vectors already subset for top k, 
+# to avoid redundant sorting when calculated over all pairs of columns
+
+length_intersect <- function(topk_vec1, topk_vec2) {
+  length(intersect(topk_vec1, topk_vec2))
+}
+
 
 
   
