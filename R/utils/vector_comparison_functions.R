@@ -89,6 +89,55 @@ length_intersect <- function(topk_vec1, topk_vec2) {
 
 
 
+# Binarize matrix such that top k and bottom k *of each column* is 1, else 0.
+# Used for downstream Jaccard similarity calculations.
+# mat: numeric matrix with named elements
+# k: an integer specifying how many top and bottom elements to select
+# check_k_arg: logical; if TRUE, adjust k to avoid ties at the cutoff
+# return: a binary matrix where the top k and bottom k elements in each column 
+# are 1, all others are 0.
+
+binarize_topk_btmk <- function(mat, k, check_k_arg = TRUE) {
+  
+  bin_mat <- apply(mat, 2, function(vec) {
+    
+    # sort values in decreasing order, preserving names
+    vec_sort <- sort(vec, decreasing = TRUE)
+  
+    # check if k needs adjustment due to ties at the cutoff
+    if (check_k_arg) {
+      k_upper <- check_k(vec_sort, k = k)
+      k_lower <- check_k(vec_sort, k = k, decreasing = FALSE)
+    } else {
+      k_upper <- k_lower <- k
+    }
+    
+    # Convert k_lower from "relative to ascending order" to "relative to descending order"
+    # Since vec_sort is in decreasing order, we need to count from the end
+    k_lower <- length(vec_sort) - (k_lower - 1)
+    
+    # Select the top-k and bottom-k elements based on adjusted indices
+    topk <- names(vec_sort[1:k_upper])
+    btmk <- names(vec_sort[k_lower:length(vec_sort)])
+    
+    # Generate a binary vector indicating presence in top k or bottom k
+    bin_vec <- ifelse(names(vec) %in% c(topk, btmk), 1, 0)
+    names(bin_vec) <- names(vec)
+    bin_vec
+    
+  })
+  
+  return(bin_mat)
+}
+
+
+
+# The following functions are used to generate measures of similarity between
+# columns of a matrix
+# ------------------------------------------------------------------------------
+
+
+
 # Compute the top-k intersection matrix for all pairs of columns in a matrix.
 # mat: a named numeric matrix
 # k: an integer specifying how many top elements to select.
@@ -129,49 +178,6 @@ colwise_cor <- function(mat, cor_method = "spearman", ncores = 1) {
 
 
 
-# Binarize matrix such that top k and bottom k *of each column* is 1, else 0.
-# Used for downstream Jaccard similarity calculations.
-# mat: numeric matrix with named elements
-# k: an integer specifying how many top and bottom elements to select
-# check_k_arg: logical; if TRUE, adjust k to avoid ties at the cutoff
-# return: a binary matrix where the top k and bottom k elements in each column 
-# are 1, all others are 0.
-
-binarize_topk_btmk <- function(mat, k, check_k_arg = TRUE) {
-  
-  bin_mat <- apply(mat, 2, function(vec) {
-    
-    # sort values in decreasing order, preserving names
-    vec_sort <- sort(vec, decreasing = TRUE)
-  
-    # check if k needs adjustment due to ties at the cutoff
-    if (check_k_arg) {
-      k_upper <- check_k(vec_sort, k = k)
-      k_lower <- check_k(vec_sort, k = k, decreasing = FALSE)
-    } else {
-      k_upper <- k_lower <- k
-    }
-    
-    # Convert k_lower from "relative to ascending order" to "relative to descending order"
-    # Since vec_sort is in decreasing order, we need to count from the end
-    k_lower <- length(vec_sort) - (k_lower - 1)
-    
-    # Select the top-k and bottom-k elements based on adjusted indices
-    topk <- names(vec_sort[1:k_upper])
-    btmk <- names(vec_sort[k_lower:length(vec_sort)])
-    
-    # Generate a binary vector indicating presence in top k or bottom k
-    bin_vec <- ifelse(names(vec) %in% c(topk, btmk), 1, 0)
-    names(bin_vec) <- names(vec)
-    
-    return(bin_vec)
-  })
-  
-  return(bin_mat)
-}
-
-
-
 # Compute the pairwise Jaccard similarity between all columns of a matrix. This
 # measures the proportion of shared top/bottom k elements between columns. 
 # mat: numeric matrix with named elements.
@@ -180,7 +186,6 @@ binarize_topk_btmk <- function(mat, k, check_k_arg = TRUE) {
 # return: an ncol(mat) x ncol(mat) symmetric matrix of Jaccard similarities.
 # Uses `outer()` instead of a nested loop for efficiency.
 # https://stackoverflow.com/a/66594545 
-
 
 colwise_jaccard <- function(mat, k, check_k_arg = TRUE) {
   
@@ -204,26 +209,58 @@ colwise_jaccard <- function(mat, k, check_k_arg = TRUE) {
 
 
 
+# Compute AUROC or AUPRC scores for all column pairs in a matrix.
+# Uses one column as scores and the top k elements of another column as labels.
+# mat: numeric matrix with named elements.
+# k: an integer specifying how many top elements to select as labels.
+# measure: one of "AUROC" or "AUPRC".
+# check_k_arg: logical; if TRUE, adjust k to avoid ties at the cutoff
+# decreasing: logical; if TRUE, selects the highest k values, else lowest
+# return: a symmetric matrix where entry [i, j] contains the AUC score when using 
+# column i as scores and column j as the binary label vector.
+# Performance note:
 # Nested loop faster than outer(): skipping diagonal outweighs vectorized
-# TODO: doc
 
-colwise_topk_auprc <- function(mat, k) {
+colwise_topk_auc <- function(mat, 
+                             k, 
+                             measure, 
+                             check_k_arg = TRUE, 
+                             decreasing = TRUE) {
   
-  auprc_mat <- matrix(1, nrow = ncol(mat), ncol = ncol(mat))
-  colnames(auprc_mat) <- rownames(auprc_mat) <- colnames(mat)
+  stopifnot(measure %in% c("AUROC", "AUPRC"))
   
-  for (i in 1:nrow(auprc_mat)) {
-    for (j in 1:ncol(auprc_mat)) {
-      if (i == j) next
-      scores <- sort(mat[, i], decreasing = TRUE)
-      labels <- topk_sort(mat[, j], k)
-      auprc_mat[i, j] <- vec_auprc(scores, labels)
+  # Init result matrix
+  auc_mat <- matrix(1, nrow = ncol(mat), ncol = ncol(mat))
+  colnames(auc_mat) <- rownames(auc_mat) <- colnames(mat)
+  
+  # Pre-sort scores and top k labels
+  sorted_scores <- lapply(seq_len(ncol(mat)), function(i) {
+     sort(mat[, i], decreasing = decreasing)
+  })
+  
+  topk_labels <- lapply(seq_len(ncol(mat)), function(j) {
+    topk_sort(mat[, j], k, check_k_arg, decreasing)
+  })
+  
+  # Nested loop for AUC comparison
+  for (i in 1:nrow(auc_mat)) {
+    for (j in 1:ncol(auc_mat)) {
+      if (i == j) next  # Skip diagonal (perfect retrieval = 1)
+      
+      score_vec <- sorted_scores[[i]]
+      label_vec <- (names(score_vec) %in% topk_labels[[j]]) * 1  # Binary vector
+      auc_mat[i, j] <- get_auc(score_vec, label_vec, measure)[[1]]
     }
   }
   
-  return(auprc_mat)
+  return(auc_mat)
 }
 
+
+
+
+
+# 
 
 
 
@@ -409,6 +446,7 @@ query_gene_rank_auprc <- function(query_vec,
   
   return(list(Rank = rank_ix, List = rank_auprc))
 }
+
 
 
 
