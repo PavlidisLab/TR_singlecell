@@ -1,7 +1,5 @@
-## Current house of functions dedicated to calculating similarity between
-## ranked vectors
-
-# TODO: consider removal of self gene (and k+1) # rank_vec <- rank_vec[names(rank_vec) != gene]
+## House functions dedicated to calculating similarity and AUC performance 
+## between vectors and matrices
 
 source("R/utils/functions.R")
 library(ROCR)
@@ -13,7 +11,7 @@ library(ROCR)
 # may include these tied values. This checks for ties at the kth position, and 
 # if found, returns a new smaller k value that excludes these ties.
 # vec_sort: named numeric vector assumed to be sorted
-# k: an integer
+# k: an integer specifying how many top elements to select
 # decreasing: logical; if TRUE, selects the highest k values, else lowest
 # returns: an integer
 
@@ -38,7 +36,7 @@ check_k <- function(vec_sort, k, decreasing = TRUE) {
 
 # Sort vec and return the names of the Top k elements. 
 # vec: named numeric vector
-# k: an integer
+# k: an integer specifying how many top elements to select
 # check_k_arg: logical controls whether check_k() will be used
 # decreasing: logical; if TRUE, selects the highest k values, else lowest
 # return: a character vector of the names of the top k elements of vec
@@ -259,8 +257,12 @@ colwise_topk_auc <- function(mat,
 
 
 
+# The following functions are used to generate measures of similarity between
+# index-matched columns between pairs of matrices. This means that the result 
+# is just a vector of similarities, instead of a matrix from taking every pair
+# of columns between the two matrices. 
+# ------------------------------------------------------------------------------
 
-# 
 
 
 
@@ -280,15 +282,33 @@ pair_colwise_cor <- function(mat1, mat2, cor_method = "spearman", ncores = 1) {
 
 
 
-# TODO:
+# Compute the top k intersection between matched columns of two matrices
+# mat1: numeric matrix with named elements.
+# mat2: numeric matrix with named elements.
+# k: an integer specifying how many top elements to select
+# check_k_arg: logical; if TRUE, adjust k to avoid ties at the cutoff
+# decreasing: logical; if TRUE, selects the highest k values, else lowest
+# ncores: integer specifying the number of cores for parallel execution.
+# return: a named numeric vector where each element corresponds to the number 
+# of overlapping top k elements between the two columns.
 
-pair_colwise_topk <- function(mat1, mat2, k = 200, ncores = 1) {
+pair_colwise_topk <- function(mat1, 
+                              mat2, 
+                              k, 
+                              check_k_arg = TRUE,
+                              decreasing = TRUE,
+                              ncores = 1) {
   
   stopifnot(identical(colnames(mat1), colnames(mat2)))
   
   topk_l <- mclapply(1:ncol(mat1), function(x) {
-    topk_intersect(topk_sort(vec = mat1[, x], k = k),
-                   topk_sort(vec = mat2[, x], k = k))
+    
+    topk_intersect(vec1 = mat1[, x],
+                   vec2 = mat2[, x],
+                   k = k,
+                   check_k_arg,
+                   decreasing)
+    
   }, mc.cores = ncores)
   
   names(topk_l) <- colnames(mat1)
