@@ -265,20 +265,32 @@ colwise_topk_auc <- function(mat,
 
 
 
-
-# TODO:
+# Compute the correlation between matched columns of two matrices.
+# mat1: numeric matrix with named elements.
+# mat2: numeric matrix with named elements.
+# cor_method: correlation method fed into WGCNA::cor
+# ncores: integer specifying the number of cores for parallel execution.
+# return: a named numeric vector where each element corresponds to the number 
+# of overlapping top k elements between the two columns.
 
 pair_colwise_cor <- function(mat1, mat2, cor_method = "spearman", ncores = 1) {
   
   stopifnot(identical(colnames(mat1), colnames(mat2)))
   
   cor_l <- mclapply(1:ncol(mat1), function(x) {
-    cor(mat1[, x], mat2[, x], method = cor_method, use = "pairwise.complete.obs")
+    
+    WGCNA::cor(
+      mat1[, x], 
+      mat2[, x], 
+      method = cor_method, 
+      use = "pairwise.complete.obs")
+    
   }, mc.cores = ncores)
   
   names(cor_l) <- colnames(mat1)
   return(unlist(cor_l))
 }
+
 
 
 
