@@ -279,11 +279,10 @@ pair_colwise_cor <- function(mat1, mat2, cor_method = "spearman", ncores = 1) {
   
   cor_l <- mclapply(1:ncol(mat1), function(x) {
     
-    WGCNA::cor(
-      mat1[, x], 
-      mat2[, x], 
-      method = cor_method, 
-      use = "pairwise.complete.obs")
+    WGCNA::cor(mat1[, x], 
+               mat2[, x], 
+               method = cor_method, 
+               use = "pairwise.complete.obs")
     
   }, mc.cores = ncores)
   
@@ -318,8 +317,8 @@ pair_colwise_topk <- function(mat1,
     topk_intersect(vec1 = mat1[, x],
                    vec2 = mat2[, x],
                    k = k,
-                   check_k_arg,
-                   decreasing)
+                   check_k_arg = check_k_arg,
+                   decreasing = decreasing)
     
   }, mc.cores = ncores)
   
@@ -329,17 +328,28 @@ pair_colwise_topk <- function(mat1,
 
 
 
-# TODO:
+
+# Calculate the correlation between shuffled columns of two matrices (for null)
+# mat1: numeric matrix with named elements.
+# mat2: numeric matrix with named elements.
+# cor_method: correlation method fed into WGCNA::cor
+# ncores: integer specifying the number of cores for parallel execution.
+# return: a named numeric vector where each element corresponds to the number 
+# of overlapping top k elements between the two columns.
 
 pair_shuffle_cor <- function(mat1, mat2, cor_method = "spearman", ncores = 1) {
   
   stopifnot(identical(colnames(mat1), colnames(mat2)))
-  sample1 <- sample(1:ncol(mat1), ncol(mat1), replace = TRUE)
-  sample2 <- sample(1:ncol(mat2), ncol(mat2), replace = TRUE)
+  sample1 <- sample(ncol(mat1))
+  sample2 <- sample(ncol(mat2))
   
   cor_l <- mclapply(1:ncol(mat1), function(x) {
-    cor(mat1[, sample1[x]], mat2[, sample2[x]], 
-        method = cor_method, use = "pairwise.complete.obs")
+    
+    WGCNA::cor(mat1[, sample1[x]], 
+               mat2[, sample2[x]], 
+               method = cor_method, 
+               use = "pairwise.complete.obs")
+    
   }, mc.cores = ncores)
   
   return(unlist(cor_l))
@@ -347,18 +357,36 @@ pair_shuffle_cor <- function(mat1, mat2, cor_method = "spearman", ncores = 1) {
 
 
 
-# TODO:
 
-pair_shuffle_topk <- function(mat1, mat2, k = 200, ncores = 1) {
+# Compute the top k intersection between shuffled columns of two matrices (for null)
+# mat1: numeric matrix with named elements.
+# mat2: numeric matrix with named elements.
+# k: an integer specifying how many top elements to select
+# check_k_arg: logical; if TRUE, adjust k to avoid ties at the cutoff
+# decreasing: logical; if TRUE, selects the highest k values, else lowest
+# ncores: integer specifying the number of cores for parallel execution.
+# return: a named numeric vector where each element corresponds to the number 
+# of overlapping top k elements between the two columns.
+
+pair_shuffle_topk <- function(mat1, 
+                              mat2, 
+                              k, 
+                              check_k_arg = TRUE,
+                              decreasing = TRUE,
+                              ncores = 1) {
   
   stopifnot(identical(colnames(mat1), colnames(mat2)))
-  sample1 <- sample(1:ncol(mat1), ncol(mat1), replace = TRUE)
-  sample2 <- sample(1:ncol(mat2), ncol(mat2), replace = TRUE)
-  
+  sample1 <- sample(ncol(mat1))
+  sample2 <- sample(ncol(mat2))
   
   topk_l <- mclapply(1:ncol(mat1), function(x) {
-    topk_intersect(topk_sort(vec = mat1[, sample1[x]], k = k),
-                   topk_sort(vec = mat2[, sample2[x]], k = k))
+    
+    topk_intersect(vec1 = mat1[, sample1[x]],
+                   vec2 = mat2[, sample2[x]],
+                   k = k,
+                   check_k_arg = check_k_arg,
+                   decreasing = decreasing)
+    
   }, mc.cores = ncores)
   
   return(unlist(topk_l))
