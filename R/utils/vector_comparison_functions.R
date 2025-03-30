@@ -396,18 +396,21 @@ pair_shuffle_topk <- function(mat1,
 
 
 
-# Functions using ROCR:: for measuring ranked performance
-# TODO: consider just returning both; null as df instead of nested list
+# Functions using ROCR:: for generating AUCs for ranked/scored vectors using
+# binary gene vectors corresponding to curated targets as labels
 # ------------------------------------------------------------------------------
 
 
 
-# This uses the ROCR package to a data.frame of precision and recall (PR), TPR
-# and FPR (ROC), or both, calculated at each step of score/label vec
-# score_vec is a numeric vector of scores where higher values == more important
-# label_vec is a binary vector of equal length to score_vec where 1/TRUE == pos
-# measure is one of "AUROC", "AUPRC", "both"
-# returns a list
+# Compute and return a data frame of performance metrics (ROC/TPR+FPR or PR) at
+# each step of the provided score vector using the ROCR package.
+# score_vec: numeric vector of scores where higher values indicate higher importance.
+# label_vec: binary numeric vector (0/1) of the same length as score_vec, where 1 = positive.
+# measure: One of "ROC", "PR", or "both", specifying the desired performance metric.
+# return: A data frame containing the requested performance metrics at each score threshold.
+#          - If measure == "ROC", returns columns TPR (True Positive Rate) and FPR (False Positive Rate).
+#          - If measure == "PR", returns columns Precision and Recall.
+#          - If measure == "both", returns all four columns.
 
 get_performance_df <- function(score_vec,
                                label_vec,
@@ -433,8 +436,8 @@ get_performance_df <- function(score_vec,
     
     pr <- ROCR::performance(pred, measure = "prec", x.measure = "rec")
     
-    perf <- data.frame(Precision = unlist(perf@y.values),
-                       Recall = unlist(perf@x.values))
+    perf <- data.frame(Precision = unlist(pr@y.values),
+                       Recall = unlist(pr@x.values))
     
   } else {
     
