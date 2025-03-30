@@ -85,7 +85,6 @@ agg_ribo_mm_path <- paste0(output_dir, "agg_mat_ribo_list_mm.RDS")
 
 
 # List of summarized aggregate coexpression rankings
-# TODO: consider coexpr in var name
 rank_tf_hg_path <- paste0(output_dir, "ranking_agg_coexpr_TF_hg.RDS")
 rank_tf_mm_path <- paste0(output_dir, "ranking_agg_coexpr_TF_mm.RDS")
 rank_tf_ortho_path <- paste0(output_dir, "ranking_agg_coexpr_TF_ortho.RDS")
