@@ -501,8 +501,15 @@ get_auc <- function(score_vec,
 
 
 
-# Retrieve curated targets for the given TF, casting wide enough to capture
-# genes with 1:1 orthologous matches between mouse and human
+# Retrieve curated target genes for the given TF, considering orthologs and 
+# species-specific naming conventions.
+# tf: Transcription factor symbol (string)
+# curated_df: df of curated TF-target interactions (columns: TF_Symbol, Target_Symbol)
+# ortho_df: df of 1:1 orthologs (columns: Symbol_hg, Symbol_mm)
+# pc_df: species-specific df of protein-coding genes (column: Symbol)
+# species: target species ("Human" or "Mouse")
+# remove_self: logical; if TRUE, removes self-targeting TFs
+# return: A character vector of curated target gene symbols for the given TF.
 
 get_curated_labels <- function(tf,
                                curated_df,
@@ -513,43 +520,37 @@ get_curated_labels <- function(tf,
   
   stopifnot(species %in% c("Human", "Mouse"))
   
-  # Get all valid orthologous symbols for input TF
-  ortho_tf <- filter(ortho_df, 
-                     Symbol_hg == str_to_upper(tf) | 
-                     Symbol_mm == str_to_title(tf))
+  # Standardize TF symbol case
+  tf_upper <- str_to_upper(tf)
+  tf_title <- str_to_title(tf)
   
-  tf <- union(
+  # Find all valid orthologous TF symbols
+  ortho_tf <- filter(ortho_df, Symbol_hg == tf_upper | Symbol_mm == tf_title)
+  
+  # Collect all possible TF names (original + orthologs)
+  tf_names <- union(
     filter(pc_df, Symbol == tf)$Symbol,
     c(ortho_tf$Symbol_hg, ortho_tf$Symbol_mm)
   )
   
-  # Extract all target genes matching any of the ortho TF symbols
+  # Extract all target genes matching any TF symbol
   labels <- curated_df %>%
-    filter(str_to_upper(TF_Symbol) %in% str_to_upper(tf)) %>%
+    filter(str_to_upper(TF_Symbol) %in% str_to_upper(tf_names)) %>%
     distinct(Target_Symbol) %>%
     pull(Target_Symbol)
   
-  # Remove the TF if it is also its own target
-  if (remove_self) labels <- setdiff(str_to_upper(labels), str_to_upper(tf))
-
-  # For labels, get the correct species symbol if it exists
+  # Remove self-targeting TFs
+  if (remove_self) {
+    labels <- setdiff(str_to_upper(labels), str_to_upper(tf_names))
+  }
+  
+  # Convert labels to the correct species
   if (species == "Human") {
-    
-    ortho_labels <- 
-      filter(pc_ortho, Symbol_hg %in% str_to_upper(labels))$Symbol_hg
-    
-    labels <- union(
-      ortho_labels,
-      filter(pc_df, Symbol %in% str_to_upper(labels))$Symbol)
-
-  } else {
-    
-    ortho_labels <- 
-      filter(pc_ortho, Symbol_mm %in% str_to_title(labels))$Symbol_mm
-    
-    labels <- union(
-      ortho_labels,
-      filter(pc_df, Symbol %in% str_to_title(labels))$Symbol)
+    ortho_labels <- filter(ortho_df, Symbol_hg %in% str_to_upper(labels))$Symbol_hg
+    labels <- union(ortho_labels, filter(pc_df, Symbol %in% str_to_upper(labels))$Symbol)
+  } else {  # Mouse
+    ortho_labels <- filter(ortho_df, Symbol_mm %in% str_to_title(labels))$Symbol_mm
+    labels <- union(ortho_labels, filter(pc_df, Symbol %in% str_to_title(labels))$Symbol)
   }
   
   return(labels)
