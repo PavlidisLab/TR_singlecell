@@ -397,7 +397,9 @@ pair_shuffle_topk <- function(mat1,
 
 
 # Functions using ROCR:: for generating AUCs for ranked/scored vectors using
-# binary gene vectors corresponding to curated targets as labels
+# binary gene vectors corresponding to curated targets as labels.
+# NOTE: It was silly to specify which measure (ROC/AUROC or PR/AUPRC) to use, 
+# since I always called both.
 # ------------------------------------------------------------------------------
 
 
@@ -455,12 +457,15 @@ get_performance_df <- function(score_vec,
 
 
 
-# This uses the ROCR package to return the area under the PR curve (AUPRC),
-# the area under ROC (AUROC), or both.
-# score_vec is a numeric vector of scores where higher values == more important
-# label_vec is a binary vector of equal length to score_vec where 1/TRUE == pos
-# measure is one of "AUROC", "AUPRC", "both"
-# returns a list
+
+# Compute the Area Under the Curve (AUC) for ROC (AUROC) and/or Precision-Recall 
+# (AUPRC) curves using ROCR package.
+# score_vec: numeric vector of scores where higher values indicate higher importance.
+# label_vec: binary numeric vector (0/1) of the same length as score_vec, where 1 = positive.
+# measure: one of "AUROC", "AUPRC", or "both", specifying the desired metric.
+# return: named list containing:
+#          - AUROC (if measure == "AUROC" or "both")
+#          - AUPRC (if measure == "AUPRC" or "both")
 
 get_auc <- function(score_vec,
                     label_vec,
@@ -492,6 +497,7 @@ get_auc <- function(score_vec,
   
   return(perf)
 }
+
 
 
 
