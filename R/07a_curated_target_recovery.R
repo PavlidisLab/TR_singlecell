@@ -108,7 +108,7 @@ target_mm <- union(
 # Human
 save_function_results(
   path = avg_vs_ind_auc_hg_path,
-  fun = get_colwise_curated_auc_list,
+  fun = compare_avg_to_individual_auc_list,
   args = list(
     tfs = tf_hg,
     agg_l = agg_tf_hg,
@@ -128,7 +128,7 @@ save_function_results(
 # Mouse
 save_function_results(
   path = avg_vs_ind_auc_mm_path,
-  fun = get_colwise_curated_auc_list,
+  fun = compare_avg_to_individual_auc_list,
   args = list(
     tfs = tf_mm,
     agg_l = agg_tf_mm,
