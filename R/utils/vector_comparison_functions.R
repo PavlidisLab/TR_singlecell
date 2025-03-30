@@ -558,7 +558,15 @@ get_curated_labels <- function(tf,
 
 
 
-# TODO:
+
+# Generate null AUC distributions by randomly sampling target labels.
+# score_vec: named numeric vector of scores, where higher values indicate importance.
+# label_all: character vector of all possible target labels to sample from.
+# measure: string specifying the performance metric to compute ("AUROC", "AUPRC", or "both").
+# n_target: integer specifying the number of targets to sample per iteration.
+# n_samps: integer specifying the number of random samples to generate.
+# ncores: integer specifying the number of CPU cores for parallel execution.
+# return: list of length n_samps, where each element is the AUC result for one iteration.
 
 get_null_performance <- function(score_vec,
                                  label_all,
@@ -568,7 +576,7 @@ get_null_performance <- function(score_vec,
                                  ncores = 1) {
   
   stopifnot(is.numeric(score_vec),
-            length(label_all %in% names(score_vec)) > 0,
+            any(label_all %in% names(score_vec)),
             measure %in% c("AUROC", "AUPRC", "both"))
   
   null_perf <- mclapply(1:n_samps, function(x) {
@@ -585,7 +593,17 @@ get_null_performance <- function(score_vec,
 
 
 
-# TODO:
+# Summarize observed AUC for a given TF and compare it to a null distribution.
+# tf: Transcription factor symbol (string)
+# score_vec: named numeric vector of scores, where higher values indicate more importance.
+# label_vec: binary numeric vector of the same length as score_vec, where 1 represents a positive label.
+# label_all: character vector of all possible target labels to sample from.
+# n_samps: integer specifying the number of random samples to generate.
+# ncores: integer specifying the number of CPU cores for parallel execution.
+# return: A list with two elements:
+# - Perf_df: A data frame containing the observed AUC values, their quantiles from the null distribution,
+#   and the difference between observed and null median values for both AUPRC and AUROC.
+# - Null: A list containing the null distribution results, with each element being the AUC result for one iteration.
 
 summarize_obs_and_null_auc <- function(tf,
                                        score_vec,
@@ -625,7 +643,21 @@ summarize_obs_and_null_auc <- function(tf,
 
 
 
-# TODO:
+# Compute observed and null AUC summary for a given TF.
+# tf: Transcription factor symbol (string)
+# rank_df: data frame containing ranking information for genes, with at least two columns: 
+#          "Symbol" for gene identifiers and the column specified by `score_col` for the scores.
+# score_col: the name of the column in `rank_df` that contains the ranking scores (e.g., importance scores).
+# curated_df: data frame containing curated gene targets for various TFs, with at least two columns: 
+#             "TF_Symbol" and "Target_Symbol".
+# label_all: character vector of all possible target labels to sample from.
+# ortho_df: df of 1:1 orthologs (columns: Symbol_hg, Symbol_mm)
+# pc_df: species-specific df of protein-coding genes (column: Symbol)
+# species: The species in which the TF and target genes are being studied. Can be "Human" or "Mouse".
+# n_samps: integer specifying the number of random samples to generate.
+# ncores: integer specifying the number of CPU cores for parallel execution.
+# return: a list containing a data frame summarizing the AUCs, and a list of
+# the null AUC values
 
 curated_obs_and_null_auc <- function(tf,
                                      rank_df,
@@ -641,7 +673,6 @@ curated_obs_and_null_auc <- function(tf,
   stopifnot(species %in% c("Mouse", "Human"))
   
   # Extract the ranking/scores for the given TF, removing the TF itself
-  
   rank <- rank_df %>%
     filter(Symbol != tf) %>%
     arrange(desc(!!sym(score_col)))
@@ -649,7 +680,6 @@ curated_obs_and_null_auc <- function(tf,
   score_vec <- setNames(rank[[score_col]], rank$Symbol)
     
   # Extract the labels for the given TF, removing the TF itself as a target
-    
   labels <- get_curated_labels(tf = tf,
                                curated_df = curated_df,
                                ortho_df = ortho_df,
