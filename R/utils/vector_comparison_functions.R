@@ -461,7 +461,7 @@ get_performance_df <- function(score_vec,
 # Compute the Area Under the Curve (AUC) for ROC (AUROC) and/or Precision-Recall 
 # (AUPRC) curves using ROCR package.
 # score_vec: numeric vector of scores where higher values indicate higher importance.
-# label_vec: binary numeric vector (0/1) of the same length as score_vec, where 1 = positive.
+# label_vec: binary numeric vector (integer or logical) of the same length as score_vec, where 1/TRUE = positive.
 # measure: one of "AUROC", "AUPRC", or "both", specifying the desired metric.
 # return: named list containing:
 #          - AUROC (if measure == "AUROC" or "both")
@@ -653,7 +653,7 @@ summarize_obs_and_null_auc <- function(tf,
 # label_all: character vector of all possible target labels to sample from.
 # ortho_df: df of 1:1 orthologs (columns: Symbol_hg, Symbol_mm)
 # pc_df: species-specific df of protein-coding genes (column: Symbol)
-# species: The species in which the TF and target genes are being studied. Can be "Human" or "Mouse".
+# species: target species ("Human" or "Mouse")
 # n_samps: integer specifying the number of random samples to generate.
 # ncores: integer specifying the number of CPU cores for parallel execution.
 # return: a list containing a data frame summarizing the AUCs, and a list of
@@ -758,13 +758,50 @@ curated_obs_and_null_auc_list <- function(tfs,
 
 
 
+# Calculates AUCs for each column (treated as a score vector) in score_mat 
+# given the provided labels and organize into a data frame
+# score_mat: gene by ID (experiment + aggregate) numeric matrix of scores
+# labels: character vector of the curated gene symbols to be used as positive labels
+# ncores: integer specifying the number of CPU cores for parallel execution.
+# return: a data frame of the AUCs for each ID
 
-
-# TODO: The names of this and the actual implementation seem to swap intent
-# TODO:
-
-summarize_avg_and_individual_auc <- function(auc_df, labels) {
+get_colwise_auc <- function(score_mat,
+                            labels,
+                            ncores = 1) {
   
+  # Isolate and order each column as a score vector and create binary label vector
+  auc_l <- mclapply(colnames(score_mat), function(x) {
+    
+    score_vec <- sort(score_mat[, x], decreasing = TRUE)
+    label_vec <- names(score_vec) %in% labels
+    get_auc(score_vec = score_vec, label_vec = label_vec, measure = "both")
+    
+  }, mc.cores = ncores)
+  
+  # Extract all AUCs into a data frame
+  auc_df <- data.frame(
+    ID = colnames(score_mat),
+    AUROC = vapply(auc_l, `[[`, "AUROC", FUN.VALUE = numeric(1)),
+    AUPRC = vapply(auc_l, `[[`, "AUPRC", FUN.VALUE = numeric(1)),
+    row.names = NULL)
+  
+  return(auc_df)
+}
+
+
+
+
+# This helper takes in a data frame of AUC values from individual experiments
+# as well as the AUC from averaging/aggregating experiments, and returns a 
+# dataframe summarizing the quantile of the aggregated AUC relative to the 
+# individual AUCs
+# auc_df: data frame of the average and individual AUCs
+# labels: the curated targets used for the comparison
+# return: data frame summarizing the aggregate AUC relative to individual AUCs
+
+compare_avg_to_individual_auc <- function(auc_df, labels) {
+  
+  # Isolate the AUCs of the individual and aggregate comparisons
   auroc_avg <- filter(auc_df, ID == "Average")$AUROC
   auprc_avg <- filter(auc_df, ID == "Average")$AUPRC
   auc_df_no_avg <- filter(auc_df, ID != "Average")
@@ -782,18 +819,31 @@ summarize_avg_and_individual_auc <- function(auc_df, labels) {
 
 
 
+# This function calculates the AUC of a TF's aggregate ranking relative to all
+# of the individual experiment AUCs that compose the aggregate. This is 
+# summarized as the quantile of the aggregate AUC relative to the distribution
+# of individual AUCs.
+# tfs: character vector of transcription factors
+# agg_l: list where each element is a gene x experiment matrix of a TF's aggregate coexpression profiles
+# msr_mat: binary matrix tracking gene measurement across experiments
+# curated_df: data frame containing curated gene targets for various TFs, with at least two columns: 
+#             "TF_Symbol" and "Target_Symbol".
+# ortho_df: df of 1:1 orthologs (columns: Symbol_hg, Symbol_mm)
+# pc_df: species-specific df of protein-coding genes (column: Symbol)
+# species: target species ("Human" or "Mouse")
+# ncores: integer specifying the number of CPU cores for parallel execution.
+# return: a list of TF-named data frames, where each summarizes the aggregate
+# AUC relative to the individual experiment AUC
 
-# TODO:
-
-get_colwise_curated_auc_list <- function(tfs,
-                                         agg_l,
-                                         msr_mat,
-                                         curated_df,
-                                         ortho_df,
-                                         pc_df,
-                                         species,
-                                         ncores = 1,
-                                         verbose = TRUE) {
+compare_avg_to_individual_auc_list <- function(tfs,
+                                               agg_l,
+                                               msr_mat,
+                                               curated_df,
+                                               ortho_df,
+                                               pc_df,
+                                               species,
+                                               ncores = 1,
+                                               verbose = TRUE) {
   
   tf_auc_l <- mclapply(tfs, function(tf) {
     
@@ -802,7 +852,7 @@ get_colwise_curated_auc_list <- function(tfs,
     # Prepare curated labels, removing the TF itself if it is a target
     labels <- get_curated_labels(tf = tf,
                                  curated_df = curated_df,
-                                 ortho_df,
+                                 ortho_df = ortho_df,
                                  pc_df = pc_df,
                                  species = species,
                                  remove_self = TRUE)
@@ -812,23 +862,23 @@ get_colwise_curated_auc_list <- function(tfs,
       return(NA)
     }
     
-    # Matrix of individual experiment coexpr profiles for given TR
+    # Matrix of individual experiment scores for given TR
     score_mat <- gene_vec_to_mat(agg_l, gene = tf, msr_mat = msr_mat)
     score_mat[tf, ] <- NA  # prevent self cor from being #1 rank
     
-    # When a TF-gene was not co-measured, impute to the median NA
+    # When a TF-gene was not co-measured, impute to the median value
     msr_mat <- msr_mat[, colnames(score_mat)]
     med <- median(score_mat, na.rm = TRUE)
     score_mat[msr_mat == 0] <- med
     
-    # Add average (same as global rankings) to matrix for comparison
+    # Add average (same as global rankings/aggregate) to matrix
     score_mat <- cbind(score_mat, Average = rowMeans(score_mat))
     
     # Calculating the AUC by using each column as a score
     auc_df <- get_colwise_auc(score_mat, labels = labels, ncores = ncores)
     
     # Summarize
-    summarize_avg_and_individual_auc(auc_df, labels)
+    compare_avg_to_individual_auc(auc_df, labels)
     
   }, mc.cores = ncores)
   
