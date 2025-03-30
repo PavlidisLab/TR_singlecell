@@ -99,7 +99,7 @@ calc_overlap_mat <- function(ortho_l, k, reverse = FALSE, ncores = 1) {
   
   for (i in 1:nrow(overlap_mat)) {
     for (j in 1:ncol(overlap_mat)) {
-      overlap_mat[i, j] <- topk_intersect(topk_l[[i]]$Human, topk_l[[j]]$Mouse)
+      overlap_mat[i, j] <- length_intersect(topk_l[[i]]$Human, topk_l[[j]]$Mouse)
     }
   }
   
@@ -146,7 +146,7 @@ calc_null_overlap <- function(ortho_l, k, reverse = FALSE, ncores = 1) {
   
   # Helper to get size of overlap between mouse and human for sampled TFs
   calc_topk <- function(k, sample_tfs) {
-    topk_intersect(
+    length_intersect(
       slice_max(ortho_l[[sample_tfs[1]]], Avg_aggr_coexpr_hg, n = k)$Symbol_hg,
       slice_max(ortho_l[[sample_tfs[2]]], Avg_aggr_coexpr_mm, n = k)$Symbol_hg
     )

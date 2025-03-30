@@ -134,11 +134,7 @@ calc_single_sample_overlap <- function(gene_mat, sample_ids, k) {
   
   sample_avg <- rowMeans(gene_mat[, sample_ids], na.rm = TRUE)
   gene_avg <- gene_mat[, "Avg"]
-  
-  topk_intersect(
-    topk_sort(sample_avg, k = k),
-    topk_sort(gene_avg, k = k)
-  )
+  topk_intersect(vec1 = sample_avg, vec2 = gene_avg, k = k)
 }
 
 
