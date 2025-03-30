@@ -759,31 +759,6 @@ curated_obs_and_null_auc_list <- function(tfs,
 
 
 
-# TODO:
-
-get_colwise_auc <- function(score_mat,
-                            labels,
-                            ncores = 1) {
-  
-  auc_l <- mclapply(colnames(score_mat), function(x) {
-    
-    score_vec <- sort(score_mat[, x], decreasing = TRUE)
-    label_vec <- names(score_vec) %in% labels
-    get_auc(score_vec = score_vec, label_vec = label_vec, measure = "both")
-    
-  }, mc.cores = ncores)
-  
-  auc_df <- data.frame(
-    ID = colnames(score_mat),
-    AUROC = vapply(auc_l, `[[`, "AUROC", FUN.VALUE = numeric(1)),
-    AUPRC = vapply(auc_l, `[[`, "AUPRC", FUN.VALUE = numeric(1)),
-    row.names = NULL)
-  
-  return(auc_df)
-}
-
-
-
 
 # TODO: The names of this and the actual implementation seem to swap intent
 # TODO:
@@ -861,25 +836,4 @@ get_colwise_curated_auc_list <- function(tfs,
   tf_auc_l <- tf_auc_l[!is.na(tf_auc_l)]
   
   return(tf_auc_l)
-}
-
-
-
-# TODO:
-
-get_colwise_performance_df <- function(score_mat, labels, ncores = 1) {
-  
-  perf_df_l <- mclapply(colnames(score_mat), function(x) {
-    
-    score_vec <- sort(score_mat[, x], decreasing = TRUE)
-    label_vec <- names(score_vec) %in% labels
-    perf_df <- get_performance_df(score_vec, label_vec, measure = "both")
-    perf_df$ID <- x
-    return(perf_df)
-    
-  }, mc.cores = ncores)
-  
-  perf_df_all <- do.call(rbind, perf_df_l)
-  
-  return(perf_df_all)
 }
