@@ -710,7 +710,11 @@ curated_obs_and_null_auc <- function(tf,
   
 
 
-# TODO:
+# Call curated_obs_and_null_auc() over a list of TF ranked tables
+# tfs: character vector of transcription factors
+# rank_l: named list of ranked TF data frames
+# return: list of curated_obs_and_null_auc() outputs for all TFs that had valid
+# curated targets, with TFs with no targets removed
 
 curated_obs_and_null_auc_list <- function(tfs,
                                           rank_l,
@@ -751,46 +755,6 @@ curated_obs_and_null_auc_list <- function(tfs,
   return(auc_l)
 }
   
-
-
-
-# TODO: 
-
-save_curated_auc_list <- function(path,
-                                  tfs,
-                                  rank_l,
-                                  score_col,
-                                  curated_df,
-                                  label_all,
-                                  ortho_df,
-                                  pc_df,
-                                  species,
-                                  n_samps = 1000,
-                                  ncores = 1,
-                                  verbose = TRUE,
-                                  force_resave = FALSE)  {
-  
-  if (!file.exists(path) || force_resave) {
-    
-    auc_l <- curated_obs_and_null_auc_list(
-      tfs = tfs,
-      rank_l = rank_l,
-      score_col = score_col,
-      curated_df = curated_df,
-      label_all = label_all,
-      ortho_df = ortho_df,
-      pc_df = pc_df,
-      species = species,
-      n_samps = n_samps,
-      ncores = ncores,
-      verbose = verbose)
-    
-    saveRDS(auc_l, path)
-  
-  }
-    
-  return(invisible(NULL))
-}
 
 
 
