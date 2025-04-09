@@ -9,6 +9,8 @@ source("R/utils/functions.R")
 source("R/utils/plot_functions.R")
 
 id <- "GSE180928"
+cor_method <- "pearson"
+agg_method <- "FZ"
 
 sc_dir <- file.path("/cosmos/data/downloaded-data/sc_datasets_w_supplementary_files/lab_projects_datasets/alex_sc_requests/human/has_celltype_metadata", id)
 dat_path <- file.path(sc_dir, paste0(id, "_filtered_cell_counts.csv"))
@@ -88,8 +90,8 @@ if (!file.exists(amat_path)) {
     mat = mat, 
     meta = meta,
     pc_df = pc,
-    cor_method = "pearson",
-    agg_method = "FZ"
+    cor_method = cor_method,
+    agg_method = agg_method
   )
 
   
