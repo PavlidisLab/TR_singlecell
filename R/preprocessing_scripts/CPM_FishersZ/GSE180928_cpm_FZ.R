@@ -18,7 +18,7 @@ meta_path <- file.path(sc_dir, paste0(id, "_metadata.csv"))
 out_dir <- file.path(amat_dir, id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta_CPM.RDS"))
 amat_path <- file.path(out_dir, paste0(id, "_FZ_mat_CPM.tsv"))
-namat_path <- file.path(out_dir, paste0(id, "_NA_mat.tsv"))
+namat_path <- file.path(out_dir, paste0(id, "_NA_mat_CPM.tsv"))
 
 
 pc <- read.delim(ref_hg_path, stringsAsFactors = FALSE)
