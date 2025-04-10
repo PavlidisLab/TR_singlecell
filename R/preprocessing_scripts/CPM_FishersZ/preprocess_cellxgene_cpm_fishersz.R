@@ -22,8 +22,8 @@ dat_dir <- file.path(sc_dir, id)
 dat_path <- list.files(dat_dir, pattern = "^.*_seurat.*.RDS", full.names = TRUE)
 out_dir <- file.path(amat_dir, id)
 processed_path <- file.path(out_dir, paste0(id, "_clean_mat_and_meta_CPM.RDS"))
-amat_path <- file.path(out_dir, paste0(id, "_FZ_CPM.tsv"))
-namat_path <- file.path(out_dir, paste0(id, "_NA_mat.tsv"))
+amat_path <- file.path(out_dir, paste0(id, "_FZ_mat_CPM.tsv"))
+namat_path <- file.path(out_dir, paste0(id, "_NA_mat_CPM.tsv"))
 
 
 # Protein coding gene table (all CxG are ENSEMBL)
@@ -53,16 +53,13 @@ if (!file.exists(processed_path) || force_resave) {
   stopifnot(typeof(mat@i) == "integer")
   
   
-  # Ready metadata and ensure cells are not duplicated across collections 
+  # Ready metadata
   change_colnames <- c(Cell_type = "cell_type", Old_ID = "ID")
   
   meta <- dat[[]] %>% 
     dplyr::rename(any_of(change_colnames)) %>% 
     rownames_to_column(var = "ID") %>% 
-    filter(is_primary_data)
-  
-  mat <- mat[, meta$ID]
-  meta <- add_count_info(meta, mat)
+    add_count_info(mat = mat)
   
   
   # QC plots
