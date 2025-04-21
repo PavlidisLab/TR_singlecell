@@ -1,6 +1,5 @@
 ## Identifying Reproducible Transcription Regulator Coexpression Patterns with Single Cell Transcriptomics
-[https://www.biorxiv.org/content/10.1101/2024.02.15.580581v3]
-TODO: update when PLOS CB link is live!
+<https://doi.org/10.1371/journal.pcbi.1012962>
 
 This project looks to identify which gene partners are most commonly coexpressed
 with each TR in human and mouse, across a large corpus of single cell RNA-seq
